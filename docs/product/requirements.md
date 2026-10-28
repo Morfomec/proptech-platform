@@ -1,97 +1,71 @@
 # Product Requirements Document (PRD)
 
 ## 1. Product Overview
-The platform is a residential rental solution that bridges rental discovery and property management within a single unified system. It combines:
-1. **A Rental Marketplace**: Enabling prospective tenants to browse, search, and submit applications for rental units.
-2. **A Property Management System**: Allowing property owners to manage properties, individual units, tenancies, agreed rents, and track rent charges and payments.
-3. **An AI Assistant**: Assisting owners by generating editable rental listing descriptions to streamline the listing creation process.
+A residential rental platform uniting discovery and property management:
+1. **Rental Marketplace**: Tenants search listings and submit applications.
+2. **Property Management**: Owners manage properties, units, tenancies, rent charges, and payments.
+3. **AI Assistant**: Generates editable listing description drafts for owners.
 
-The platform is designed as a modular monolith (Django REST Framework backend, PostgreSQL database, and React + TypeScript frontend) to start lean while establishing a clean foundation for future growth.
+**Architecture**: Modular monolith with Django + Django REST Framework, PostgreSQL, and React + TypeScript.
 
 ---
 
 ## 2. Problem Statement
-The residential rental process is frequently fragmented across disconnected tools. Landlords and property owners often use one platform to advertise listings, separate communication channels to collect applications, and spreadsheets or manual records to manage tenancies and track rent payments. Crafting compelling listing copy is also time-consuming. Prospective tenants face disjointed application experiences without a centralized way to track their application status or view their tenancy and payment records.
+Rental workflows are fragmented across separate listing sites, communication tools, and spreadsheets. Creating listings is tedious, application tracking is disjointed, and recording rent is largely manual.
 
 ---
 
 ## 3. Target Users
-- **Property Owners (Landlords / Managers)**: Individuals managing residential properties and rental units who need to market vacancies, screen applicants, and manage ongoing tenancies.
-- **Tenants (Applicants / Residents)**: Individuals seeking residential rental housing, applying for units, and tracking their tenancies and payment histories.
-- **Platform Administrators**: Internal operators responsible for platform oversight, user management, and system governance.
+- **Owner**: Manages properties, units, listings, applications, tenancies, and rent records.
+- **Tenant**: Searches listings, submits applications, and tracks tenancies and rent history.
+- **Admin**: Oversees platform operations via Django Admin.
 
 ---
 
 ## 4. MVP Features
-
-### 4.1 Authentication & Role-Based Access Control
-- Secure user registration, login, and session management.
-- Role-based authorization enforcing permissions across Owner, Tenant, and Admin roles.
-
-### 4.2 Property & Unit Management
-- Ability for owners to add, view, update, and manage properties.
-- Management of individual rental units associated with properties (e.g., unit details, specs, and status).
-
-### 4.3 Rental Listings & Discovery
-- Creation and editing of rental listings linked to specific units.
-- Listing lifecycle management: draft, publish, and unpublish listings.
-- Public search and browse capabilities for tenants to view active listings with relevant details.
-
-### 4.4 AI-Generated Listing Descriptions
-- AI-assisted draft generation for rental listing descriptions based on unit and property attributes.
-- Full editing capability for owners to review and adjust AI-generated copy before publishing.
-- Flexible AI integration layer allowing provider selection to remain modular.
-
-### 4.5 Rental Applications
-- Tenants can submit rental applications for published listings.
-- Owners can review incoming applications and update status (e.g., approve or reject applicants).
-- Tenants can track the status of their submitted applications.
-
-### 4.6 Tenancy Management
-- Creation of tenancy agreements upon applicant approval, defining tenancy terms and agreed rent.
-- Overview of active tenancy information accessible to both the owner and the assigned tenant.
-
-### 4.7 Rent Charges & Payment Records
-- Owners can generate rent charges for active tenancies.
-- Owners can log and record manual rent payments.
-- Tenants can view their rent charges, balance, and historical payment records.
+1. **Authentication & Authorization**: Role-based access control for Owner, Tenant, and Admin.
+2. **Property & Unit Management**: Add, update, and manage properties and rental units.
+3. **Listing Management & Discovery**: Create, edit, publish, and unpublish listings; public search and browse for tenants.
+4. **AI Listing Descriptions**: Generate draft descriptions from unit attributes; owner edits before publishing.
+5. **Rental Applications**: Tenants apply to listings; owners review, approve, or reject.
+6. **Tenancy Management**: Create tenancies from approved applications with agreed rent and dates.
+7. **Rent & Payment Tracking**: Record rent charges and log manual payments; view payment history and balances.
 
 ---
 
 ## 5. User Roles and Permissions
 
-| Role | Key Permissions & Capabilities |
+| Role | Permissions |
 | :--- | :--- |
-| **Owner** | • Create and manage properties and rental units.<br>• Create, edit, publish, and unpublish listings.<br>• Generate and edit AI listing descriptions.<br>• Review applications and approve or reject applicants.<br>• Create and manage tenancies and agreed rent terms.<br>• Issue rent charges and record manual payments received. |
-| **Tenant** | • Browse, search, and view published listing details.<br>• Submit rental applications.<br>• View application status and active tenancy details.<br>• View rent charges, dues, and payment history. |
-| **Admin** | • Superuser platform oversight and management.<br>• Access restricted to Django Admin interface for operational governance. |
+| **Owner** | Manage properties, units, and listings; generate/edit AI copy; review/approve applications; manage tenancies; issue charges and record manual payments. |
+| **Tenant** | Browse and search listings; submit applications; view application status; view tenancy details, rent charges, and payment records. |
+| **Admin** | Full system oversight and administration via Django Admin. |
 
 ---
 
 ## 6. Out of Scope (MVP)
-The following capabilities are deliberately excluded from the MVP scope:
-- **Online Payment Processing**: No direct gateway integrations (e.g., Stripe, PayPal); payments are recorded manually.
-- **Identity Verification & Background Checks**: No third-party KYC or credit scoring integrations.
-- **In-App Messaging / Chat**: No direct real-time communication tools between owners and tenants.
-- **Advanced AI Matching & Recommendations**: No automated tenant-property scoring algorithms.
-- **Trust & Reputation Scoring**: No rating or review systems.
-- **Complex Organization & Multi-Seat Management**: No multi-member team hierarchy or enterprise permissions.
+- Online payment processing (manual payment logging only)
+- Identity verification and background checks
+- In-app messaging and chat
+- Advanced AI matching and recommendation algorithms
+- Trust and reputation scoring
+- Multi-seat organization management
 
 ---
 
 ## 7. Success Criteria
-1. **End-to-End Workflow Completion**: An owner can list a unit with an AI-generated description, receive a tenant application, approve it, establish a tenancy, and record rent charges/payments.
-2. **Accurate Role Segregation**: Tenant and Owner views and data access are strictly partitioned by authorization rules.
-3. **Editorial Control Over AI**: 100% of AI-generated listing copy can be reviewed and edited prior to publication.
-4. **Reliable Financial Tracking**: All rent charges and recorded manual payments accurately reflect on tenant and owner dashboards.
-5. **Clean Architectural Baseline**: REST API is completely specified via OpenAPI documentation, supporting the React frontend on top of a modular Django backend.
+1. **End-to-End Flow**: Owner lists unit with AI copy, approves tenant application, creates tenancy, and logs rent payment.
+2. **Role Isolation**: Strict access controls separating Owner, Tenant, and Admin views and data.
+3. **Editable AI Output**: All AI-generated text is editable prior to publishing.
+4. **Accurate Ledgers**: Rent charges and recorded payments reflect accurately for both owner and tenant.
+5. **Documented REST API**: Backend API fully specified with OpenAPI for the React frontend.
 
 ---
 
 ## 8. Future Expansion
-- Integrated digital payment gateways for automated rent collection and disbursements.
-- Built-in tenant screening, identity verification, and credit check integrations.
-- In-platform messaging and maintenance request tracking.
-- Advanced tenant-to-property matching algorithms and recommendation engines.
-- Multi-user property management organizations, role delegation, and portfolio reporting.
-- Native mobile applications for on-the-go property management and tenant portals.
+- Payment gateway integration (automated rent collection)
+- Tenant screening and identity verification
+- In-app messaging and maintenance requests
+- AI-based tenant matching
+- Multi-user organization management
+- Mobile applications
