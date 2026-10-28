@@ -62,7 +62,7 @@ graph LR
 
 ### 3.2 Internal Module Communication
 - Backend modules communicate in-process using explicit **service-layer interfaces and direct Python function calls**.
-- Modules strictly adhere to the domain responsibilities and table ownership rules defined in [`docs/module-boundaries.md`](file:///home/shifil/Desktop/Brototype/Paper%207/proptech-platform/docs/module-boundaries.md).
+- Modules strictly adhere to the domain responsibilities and table ownership rules defined in [`docs/module-boundaries.md`](module-boundaries.md).
 - Cross-boundary mutations must go through service functions rather than direct foreign model writes.
 - Workflows spanning multiple related database changes execute inside **database transactions (`transaction.atomic()`)** to maintain strict ACID consistency.
 
@@ -71,7 +71,7 @@ graph LR
 - Provider-specific configuration, prompt templates, and HTTP transport logic remain fully isolated inside the `ai_assistant` module.
 - Input data (unit and property specs) is validated prior to external dispatch.
 - External API calls enforce timeouts and graceful error handling; if the AI service fails or times out, the system returns a safe fallback so property and listing operations are never blocked.
-- *Detailed prompt templates, validation rules, and error handling are documented in [`docs/ai-integration.md`](file:///home/shifil/Desktop/Brototype/Paper%207/proptech-platform/docs/ai-integration.md).*
+- *Detailed prompt templates, validation rules, and error handling are documented in [`docs/ai-integration.md`](ai-integration.md).*
 
 ### 3.4 Events and Asynchronous Processing
 - Core business milestones are conceptualized as domain events:
