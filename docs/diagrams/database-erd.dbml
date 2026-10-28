@@ -34,10 +34,10 @@ Table users {
   updated_at timestamptz [not null, default: `now()`]
 
   // IMPLEMENTATION NOTE:
-  // Use a Django custom user model based on AbstractUser.
-  // Configure email-based authentication and remove the username
-  // field if email is the sole login identifier.
-  // Normalize email addresses and enforce case-insensitive uniqueness.
+  // Subclass AbstractBaseUser and PermissionsMixin for the custom user model.
+  // This cleanly eliminates the username field, using email as the sole USERNAME_FIELD.
+  // Enforce normalized email with case-insensitive uniqueness in the manager and serializer.
+  // Django's PermissionsMixin provides groups and user_permissions join tables automatically.
 }
 
 Table user_profiles {
@@ -79,7 +79,7 @@ Table properties {
   district varchar(100) [not null]
   state varchar(100) [not null]
 
-  pin_code char(6) [not null]
+  pin_code varchar(10) [not null]
   country_code char(2) [not null, default: 'IN']
 
   status varchar(20) [not null, default: 'draft']
@@ -93,7 +93,9 @@ Table properties {
   }
 
   // IMPLEMENTATION NOTE:
-  // Validate PIN code format and permitted property/status values.
+  // pin_code uses varchar(10) to support variable-length postal formats without padding.
+  // When country_code = 'IN', validate the 6-digit Indian PIN format (^[1-9][0-9]{5}$)
+  // via a Django model validator or serializer rather than a rigid database column constraint.
 }
 
 Ref: properties.owner_id > users.id
@@ -109,7 +111,7 @@ Table units {
 
   floor_number integer
   bedrooms smallint [not null, default: 0]
-  bathrooms smallint [not null, default: 1]
+  bathrooms numeric(3,1) [not null, default: 1.0]
 
   area_sqft numeric(10,2)
 
@@ -159,10 +161,11 @@ Table property_images {
     (property_id, display_order)
   }
 
-  // IMPLEMENTATION NOTE:
-  // PostgreSQL partial unique index:
-  // UNIQUE(property_id) WHERE is_primary = TRUE
-  // This permits at most one primary image per property.
+  // IMPLEMENTATION REQUIREMENT (PostgreSQL / Django):
+  // DBML index syntax cannot enforce partial conditions (WHERE clauses).
+  // Implement as a PostgreSQL partial unique index via Django Meta.constraints:
+  // UniqueConstraint(fields=['property_id'], condition=Q(is_primary=True), name='uq_property_single_primary_image')
+  // This guarantees at most one primary image per property.
 }
 
 Ref: property_images.property_id > properties.id
@@ -204,20 +207,16 @@ Table listings {
     (review_status, status)
   }
 
-  // IMPLEMENTATION NOTE:
-  // monthly_rent >= 0
-  // security_deposit >= 0 when supplied
+  // IMPLEMENTATION REQUIREMENT (PostgreSQL / Django):
+  // Check constraints: monthly_rent >= 0, security_deposit >= 0.
   //
-  // PostgreSQL partial unique index:
-  // UNIQUE(unit_id)
-  // WHERE status IN ('draft', 'published', 'paused')
+  // DBML index syntax cannot enforce partial conditions (WHERE clauses).
+  // Implement as a PostgreSQL partial unique index via Django Meta.constraints:
+  // UniqueConstraint(fields=['unit_id'], condition=Q(status__in=['draft', 'published', 'paused']), name='uq_unit_single_open_listing')
   //
-  // This allows at most one open listing per unit.
-  // Closed listings do not block a new listing.
-  //
+  // This permits at most one open listing per unit. Closed listings do not block new listings.
   // Listing publication and approval are separate concerns.
-  // Only listings permitted by the configured approval policy
-  // may appear in public search results.
+  // Only listings permitted by the configured approval policy may appear in public search results.
 }
 
 Ref: listings.unit_id > units.id
@@ -241,10 +240,11 @@ Table listing_images {
     (listing_id, display_order)
   }
 
-  // IMPLEMENTATION NOTE:
-  // PostgreSQL partial unique index:
-  // UNIQUE(listing_id) WHERE is_primary = TRUE
-  // This permits at most one primary image per listing.
+  // IMPLEMENTATION REQUIREMENT (PostgreSQL / Django):
+  // DBML index syntax cannot enforce partial conditions (WHERE clauses).
+  // Implement as a PostgreSQL partial unique index via Django Meta.constraints:
+  // UniqueConstraint(fields=['listing_id'], condition=Q(is_primary=True), name='uq_listing_single_primary_image')
+  // This guarantees at most one primary image per listing.
 }
 
 Ref: listing_images.listing_id > listings.id
@@ -423,6 +423,7 @@ Table rent_charges {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
+    (id, tenancy_id) [unique]
     (tenancy_id, charge_type, billing_period_start) [unique]
     (status, due_date)
     (tenancy_id, due_date)
@@ -432,9 +433,12 @@ Table rent_charges {
   // CHECK amount > 0
   // CHECK billing_period_end >= billing_period_start
   //
-  // The unique index allows different charge types in the same
-  // billing period while preventing duplicate charges of the same
-  // type for the same tenancy and billing-period start.
+  // (id, tenancy_id) [unique] enables composite foreign key referential integrity
+  // from payment_allocations.(rent_charge_id, tenancy_id).
+  //
+  // The (tenancy_id, charge_type, billing_period_start) unique index allows
+  // different charge types in the same billing period while preventing duplicate charges
+  // of the same type for the same tenancy and billing-period start.
   //
   // Validate permitted charge types and statuses.
   // Derive unpaid/partially_paid/paid status from valid allocations.
@@ -475,19 +479,15 @@ Table payments {
     (id, tenancy_id) [unique]
   }
 
-  // IMPLEMENTATION NOTE:
+  // IMPLEMENTATION REQUIREMENT (PostgreSQL / Django):
   // CHECK amount > 0
   // Validate permitted payment methods and statuses.
+  // Only successful/completed payments count toward settled balances.
   //
-  // Only successful/completed payments should count toward balances.
-  //
-  // Consider a PostgreSQL partial unique index on
-  // (payment_method, transaction_reference)
-  // WHERE transaction_reference IS NOT NULL
-  // AND btrim(transaction_reference) <> ''.
-  //
-  // Confirm the reference uniqueness scope for the payment sources
-  // you support before enabling that constraint.
+  // DBML index syntax cannot enforce partial conditions (WHERE clauses).
+  // Implement a partial unique index via Django Meta.constraints:
+  // UniqueConstraint(fields=['transaction_reference'], condition=Q(transaction_reference__isnull=False) & ~Q(transaction_reference=''), name='uq_payment_transaction_reference')
+  // This prevents recording duplicate transaction reference IDs for non-cash receipts.
 }
 
 Ref: payments.tenancy_id > tenancies.id
