@@ -172,6 +172,68 @@ Ref: property_images.property_id > properties.id
 
 
 // ============================================================
+// 2A. AMENITIES
+// ============================================================
+// Amenities are catalogued once, then linked separately to a property
+// (shared/building amenities) or a unit (amenities inside that unit).
+
+Table amenities {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  name varchar(100) [not null, unique]
+  category varchar(50) [not null]
+  description varchar(255)
+  is_active boolean [not null, default: true]
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (category, is_active)
+  }
+
+  // IMPLEMENTATION NOTE:
+  // Keep category values controlled in application code (for example,
+  // building, safety, recreation, appliance, or accessibility).
+  // Do not store property-specific availability or claims on this catalogue row.
+}
+
+Table property_amenities {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  property_id uuid [not null]
+  amenity_id uuid [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (property_id, amenity_id) [unique]
+    (amenity_id)
+  }
+}
+
+Ref: property_amenities.property_id > properties.id
+Ref: property_amenities.amenity_id > amenities.id
+
+Table unit_amenities {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  unit_id uuid [not null]
+  amenity_id uuid [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (unit_id, amenity_id) [unique]
+    (amenity_id)
+  }
+}
+
+Ref: unit_amenities.unit_id > units.id
+Ref: unit_amenities.amenity_id > amenities.id
+
+
+// ============================================================
 // 3. LISTINGS
 // ============================================================
 
@@ -654,3 +716,56 @@ Table documents {
 }
 
 Ref: documents.uploaded_by_id > users.id
+
+// ============================================================
+// 12. RENTAL AGREEMENTS
+// ============================================================
+// MVP scope: track an agreement record and its uploaded document.
+// Electronic signatures, signatory events, and template clause builders are out of scope.
+
+Table rental_agreements {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  tenancy_id uuid [not null]
+  document_id uuid [unique]
+  version smallint [not null, default: 1]
+
+  status varchar(20) [not null, default: 'draft']
+
+  // Snapshot the agreed terms so an old agreement does not change if tenancy data changes.
+  start_date date [not null]
+  end_date date
+  monthly_rent numeric(12,2) [not null]
+  security_deposit numeric(12,2) [not null, default: 0]
+  rent_due_day smallint [not null, default: 1]
+
+  created_by_id uuid [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (tenancy_id, version) [unique]
+    (tenancy_id, status)
+    (created_by_id, created_at)
+  }
+
+  // IMPLEMENTATION NOTE:
+  // document_id is nullable while an agreement is a draft; when supplied,
+  // it points to the uploaded agreement file in documents.
+  // Set documents.document_type to an agreed value such as 'rental_agreement'.
+  // Validate the uploaded file type, size, access, and tenancy ownership.
+  // Snapshot terms from the tenancy when the agreement is created; subsequent
+  // tenancy edits must not silently alter an existing agreement version.
+  // Enforce version >= 1, monthly_rent >= 0, security_deposit >= 0,
+  // rent_due_day BETWEEN 1 AND 28, and end_date IS NULL OR end_date >= start_date.
+  // Use controlled status values such as draft, active, expired, cancelled.
+  // A transition to active should be an explicit authorized action after the
+  // agreement has been finalized outside this MVP workflow.
+  // If only one active agreement per tenancy is allowed, add a PostgreSQL
+  // partial unique constraint on tenancy_id where status = 'active'.
+}
+
+Ref: rental_agreements.tenancy_id > tenancies.id
+Ref: rental_agreements.document_id - documents.id
+Ref: rental_agreements.created_by_id > users.id
