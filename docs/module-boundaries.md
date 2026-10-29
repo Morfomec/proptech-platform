@@ -49,9 +49,9 @@ The system is partitioned into nine distinct modules:
 | Module | Core Responsibility | Data Owned (Tables) | Must Not Handle | Depends On |
 | :--- | :--- | :--- | :--- | :--- |
 | **`accounts`** | User authentication, identity, profiles, and role-based access control (RBAC). | `users`, `user_profiles` | Property, lease, or financial operations. | *None (Foundational)* |
-| **`properties`** | Physical property details, unit configurations, and owner associations. | `properties`, `units`, `property_images`, `saved_properties` | Rental listings, pricing terms, tenant applications. | `accounts` |
+| **`properties`** | Physical property details, unit configurations, and owner associations. | `properties`, `units`, `property_images`, `saved_properties`, `amenities`, `property_amenities`, `unit_amenities` | Rental listings, pricing terms, tenant applications. | `accounts` |
 | **`listings`** | Public marketing listings, rental terms, availability, and marketplace search. | `listings`, `listing_images` | Physical unit specs (owned by `properties`) or lease execution. | `properties`, `accounts`, `ai_assistant` |
-| **`leasing`** | Rental application workflow, applicant reviews, tenancy agreements, and lease terms. | `applications`, `application_status_history`, `tenancies` | Rent charge calculation or manual payment collection. | `listings`, `properties`, `accounts` |
+| **`leasing`** | Rental application workflow, applicant reviews, tenancy agreements, and lease terms. | `applications`, `application_status_history`, `tenancies`, `rental_agreements` | Rent charge calculation or manual payment collection. | `listings`, `properties`, `accounts` |
 | **`rent`** | Rent charge generation, manual payment logging, payment allocations, and balances. | `rent_charges`, `payments`, `payment_allocations` | Lease contract lifecycle or external payment gateways. | `leasing`, `accounts` |
 | **`ai_assistant`** | Listing description draft generation isolating external AI provider integration. | *Stateless (No persistent tables)* | Listing persistence or publication approval. | *None (External API adapter)* |
 | **`notifications`** | In-app user notifications, delivery records, and read/unread status tracking. | `notifications` | Business logic triggers or external SMS/Push gateways. | `accounts` |

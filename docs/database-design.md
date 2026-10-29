@@ -19,13 +19,13 @@ The PropTech platform uses **PostgreSQL** as its relational database. The databa
 | Area | Tables | Purpose |
 |---|---|---|
 | Accounts | `users`, `user_profiles` | Users, authentication and profiles |
-| Properties | `properties`, `units`, `property_images`, `saved_properties` | Property details, units, images and saved properties |
+| Properties | `properties`, `units`, `property_images`, `saved_properties`, `amenities`, `property_amenities`, `unit_amenities` | Property details, units, images, saved properties, and shared/unit amenities |
 | Listings | `listings`, `listing_images` | Rental listings and their images |
-| Leasing | `applications`, `application_status_history`, `tenancies` | Applications, status history and tenancies |
+| Leasing | `applications`, `application_status_history`, `tenancies`, `rental_agreements` | Applications, status history, tenancies, and rental agreement terms |
 | Rent | `rent_charges`, `payments`, `payment_allocations` | Rent due, recorded payments and payment allocation |
 | Supporting | `notifications`, `audit_logs`, `documents` | Notifications, audit history and document metadata |
 
-The database design contains 17 tables across these areas. The ownership and responsibilities of each module are described in [Module Boundaries](module-boundaries.md).
+The database design contains 21 tables across these areas. The ownership and responsibilities of each module are described in [Module Boundaries](module-boundaries.md).
 
 ## Key Relationships
 
