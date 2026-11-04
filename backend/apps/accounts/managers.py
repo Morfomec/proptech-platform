@@ -15,6 +15,11 @@ class UserManager(BaseUserManager):
 
         email = self.normalize_email(email)
 
+        if extra_fields.get("is_platform_admin") and not extra_fields.get("is_superuser"):
+            raise ValueError(
+                "Normal users cannot be granted platform administrator privileges."
+            )
+
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -25,11 +30,18 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
+        extra_fields.setdefault("is_platform_admin", True)
+
+        if extra_fields.get("is_active") is not True:
+            raise ValueError("Superuser must have is_active=True.")
 
         if extra_fields.get("is_staff") is not True:
             raise ValueError("Superuser must have is_staff=True.")
 
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
+
+        if extra_fields.get("is_platform_admin") is not True:
+            raise ValueError("Superuser must have is_platform_admin=True.")
 
         return self.create_user(email, password, **extra_fields)

@@ -1,0 +1,22 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Verify your email address</h2>
+
+<p>Hello {{ first_name|default:"there" }},</p>
+
+<p>Thank you for signing up for the PropTech Platform. Please click the link below to verify your email address and activate your account:</p>
+
+<p style="margin: 20px 0;">
+    <a href="{{ verification_url }}" style="background-color: #0284c7; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">Verify Email</a>
+</p>
+
+<p>Or copy and paste this URL into your browser:</p>
+<p style="word-break: break-all; color: #64748b;">{{ verification_url }}</p>
+
+<p>This verification link will expire in 24 hours.</p>
+
+<p>If you did not create an account, you can safely ignore this email.</p>
+
+<p>Thank you,<br>PropTech Platform Team</p>
+{% endblock %}

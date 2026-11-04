@@ -17,8 +17,20 @@ class CustomUserAdmin(UserAdmin):
         "email",
         "first_name",
         "last_name",
+        "is_tenant",
+        "is_owner",
+        "is_platform_admin",
         "is_active",
         "is_staff",
+    )
+
+    list_filter = (
+        "is_tenant",
+        "is_owner",
+        "is_platform_admin",
+        "is_active",
+        "is_staff",
+        "is_superuser",
     )
 
     search_fields = ("email", "first_name", "last_name")
@@ -28,6 +40,16 @@ class CustomUserAdmin(UserAdmin):
         (
             "Personal information",
             {"fields": ("first_name", "last_name", "email_verified_at")},
+        ),
+        (
+            "Capabilities",
+            {
+                "fields": (
+                    "is_tenant",
+                    "is_owner",
+                    "is_platform_admin",
+                ),
+            },
         ),
         (
             "Permissions",
@@ -54,7 +76,14 @@ class CustomUserAdmin(UserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "password1", "password2"),
+                "fields": (
+                    "email",
+                    "password1",
+                    "password2",
+                    "is_tenant",
+                    "is_owner",
+                    "is_platform_admin",
+                ),
             },
         ),
     )
