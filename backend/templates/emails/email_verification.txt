@@ -1,0 +1,12 @@
+Hello {{ first_name|default:"there" }},
+
+Thank you for signing up for the PropTech Platform. Please visit the link below to verify your email address and activate your account:
+
+{{ verification_url }}
+
+This verification link will expire in 24 hours.
+
+If you did not create an account, you can safely ignore this email.
+
+Thank you,
+PropTech Platform Team

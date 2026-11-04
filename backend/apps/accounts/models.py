@@ -22,8 +22,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=150, blank=True, default="")
     last_name = models.CharField(max_length=150, blank=True, default="")
 
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
+
+    is_tenant = models.BooleanField(default=True)
+    is_owner = models.BooleanField(default=False)
+    is_platform_admin = models.BooleanField(default=False)
 
     email_verified_at = models.DateTimeField(null=True, blank=True)
 
@@ -129,3 +133,63 @@ class SocialAccount(models.Model):
 
     def __str__(self):
         return f"{self.provider}: {self.user.email}"
+
+
+class EmailVerificationToken(models.Model):
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="email_verification",
+    )
+
+    token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+    )
+
+    expires_at = models.DateTimeField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "email_verification_tokens"
+
+    def __str__(self):
+        return f"Email verification for {self.user.email}"
+
+
+class PasswordResetToken(models.Model):
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="password_reset_token",
+    )
+
+    token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+    )
+
+    expires_at = models.DateTimeField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "password_reset_tokens"
+
+    def __str__(self):
+        return f"Password reset token for {self.user.email}"

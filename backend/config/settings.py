@@ -2,6 +2,7 @@
 Django settings for PropTech Platform.
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -49,6 +50,7 @@ INSTALLED_APPS = [
 
     # Third-party
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "drf_spectacular",
 
@@ -186,6 +188,29 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
 
     "EXCEPTION_HANDLER": "apps.core.exceptions.custom_exception_handler",
+
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+
+    "DEFAULT_THROTTLE_RATES": {
+        "registration": env(
+            "THROTTLE_RATE_REGISTRATION",
+            default="5/minute",
+        ),
+        "email_verification": env(
+            "THROTTLE_RATE_EMAIL_VERIFICATION",
+            default="10/minute",
+        ),
+        "resend_email_verification": env(
+            "THROTTLE_RATE_RESEND_VERIFICATION",
+            default="3/hour",
+        ),
+        "password_reset_request": env(
+            "THROTTLE_RATE_PASSWORD_RESET_REQUEST",
+            default="3/hour",
+        ),
+    },
 }
 
 
@@ -193,9 +218,13 @@ REST_FRAMEWORK = {
 # JWT AUTHENTICATION
 # ============================================================
 
-# SimpleJWT defaults are used for now.
-# Token lifetime and rotation policies can be configured
-# when we implement the authentication module.
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": False,
+}
 
 
 # ============================================================
@@ -212,12 +241,17 @@ SPECTACULAR_SETTINGS = {
 
 
 # ============================================================
-# CORS
+# CORS & FRONTEND
 # ============================================================
 
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
     default=["http://localhost:5173"],
+)
+
+FRONTEND_URL = env(
+    "FRONTEND_URL",
+    default="http://localhost:5173" if DEBUG else "",
 )
 
 CSRF_TRUSTED_ORIGINS = env.list(

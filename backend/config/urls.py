@@ -16,7 +16,7 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -26,6 +26,9 @@ from drf_spectacular.views import (
 urlpatterns = [
     # Django Admin
     path("admin/", admin.site.urls),
+
+    # Authentication & Accounts API
+    path("api/v1/auth/", include("apps.accounts.urls")),
 
     # OpenAPI Schema
     path(
