@@ -1,0 +1,8 @@
+Hello {{ first_name }},
+
+Welcome to PropTech Platform!
+
+Your account has been created successfully.
+
+Thank you,
+PropTech Platform Team

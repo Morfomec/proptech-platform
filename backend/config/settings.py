@@ -54,6 +54,7 @@ INSTALLED_APPS = [
 
     # Local applications
     "apps.accounts.apps.AccountsConfig",
+    "apps.core.apps.CoreConfig",
 ]
 
 
@@ -93,7 +94,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -180,10 +181,11 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 
     "DEFAULT_PAGINATION_CLASS": (
-        "rest_framework.pagination.PageNumberPagination"
+    "apps.core.pagination.StandardResultsSetPagination"
     ),
-
     "PAGE_SIZE": 20,
+
+    "EXCEPTION_HANDLER": "apps.core.exceptions.custom_exception_handler",
 }
 
 
