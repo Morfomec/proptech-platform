@@ -1,12 +1,14 @@
 // ============================================================
-// PROPTECH PLATFORM — CONSOLIDATED ERD
+// PROPTECH PLATFORM — CONSOLIDATED ERD (VERSION 02)
+// Model: Property-Centric MVP
 // Stack: Django + Django REST Framework + PostgreSQL
 // Architecture: Modular Monolith
 // Primary keys: UUID
 //
 // IMPORTANT:
 // Comments marked IMPLEMENTATION NOTE describe constraints
-// that must be implemented using Django migrations or services.
+// that must be implemented using Django migrations, PostgreSQL
+// constraints, or transactional service methods.
 // ============================================================
 
 
@@ -56,8 +58,28 @@ Table user_profiles {
 Ref: user_profiles.user_id - users.id
 
 
+
+Table social_accounts {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  user_id uuid [not null]
+  provider varchar(30) [not null]
+  provider_user_id varchar(255) [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (provider, provider_user_id) [unique]
+    (user_id, provider) [unique]
+  }
+}
+
+Ref: social_accounts.user_id > users.id
+
+
 // ============================================================
-// 2. PROPERTIES AND UNITS
+// 2. PROPERTIES (CENTRAL RENTABLE ASSET)
 // ============================================================
 
 Table properties {
@@ -65,9 +87,11 @@ Table properties {
 
   owner_id uuid [not null]
 
-  name varchar(200) [not null]
-  property_type varchar(30) [not null]
+  title varchar(200) [not null]
   description text
+
+  category varchar(20) [not null]
+  property_type varchar(30) [not null]
 
   address_line_1 varchar(255) [not null]
   address_line_2 varchar(255)
@@ -82,6 +106,21 @@ Table properties {
   pin_code varchar(10) [not null]
   country_code char(2) [not null, default: 'IN']
 
+  // Map-based location
+  latitude decimal(10,7)
+  longitude decimal(10,7)
+
+  built_up_area numeric(10,2)
+
+  // Physical specifications (residential fields nullable for commercial)
+  bedrooms smallint
+  bathrooms numeric(3,1)
+  furnishing_status varchar(20)
+
+  // Parking availability and details
+  parking_spaces integer [default: 0]
+  parking_details varchar(100)
+
   status varchar(20) [not null, default: 'draft']
 
   created_at timestamptz [not null, default: `now()`]
@@ -89,59 +128,42 @@ Table properties {
 
   indexes {
     (owner_id, status)
+    (category, property_type)
     (city, locality)
+    (status, created_at)
   }
 
-  // IMPLEMENTATION NOTE:
-  // pin_code uses varchar(10) to support variable-length postal formats without padding.
-  // When country_code = 'IN', validate the 6-digit Indian PIN format (^[1-9][0-9]{5}$)
-  // via a Django model validator or serializer rather than a rigid database column constraint.
+  // IMPLEMENTATION NOTES:
+  // 1. category must be one of: 'residential', 'commercial'.
+  // 2. property_type validation:
+  //    - If category = 'residential': 'independent_house', 'villa', 'apartment', 'studio_apartment', 'other'.
+  //    - If category = 'commercial': 'office', 'shop', 'showroom', 'warehouse', 'other'.
+  //    - Category and property_type are strictly separate fields.
+  // 3. bedrooms and bathrooms:
+  //    - Required (>= 0) for residential before publishing.
+  //    - Nullable for commercial properties (offices, shops, showrooms, warehouses).
+  // 4. furnishing_status:
+  //    - Controlled values: 'unfurnished', 'semi_furnished', 'fully_furnished' (or NULL where not applicable).
+  // 5. built_up_area:
+  //    - built_up_area > 0 when supplied (expressed in sq ft).
+  // 6. parking_spaces:
+  //    - parking_spaces >= 0. Default 0 indicates no reserved parking.
+  // 7. Coordinates:
+  //    - Latitude must be between -90 and 90.
+  //    - Longitude must be between -180 and 180.
+  //    - Both coordinates must be NULL or both populated.
+  //    - Coordinates are required before publishing.
+  //    - Draft properties may have NULL coordinates.
+  // 8. PIN code:
+  //    - When country_code = 'IN', validate the 6-digit Indian PIN format using a Django model validator.
+  // 9. Rental Pricing Architecture Decision:
+  //    - In this property-centric design, asking rental terms (monthly_rent, security_deposit, available_from)
+  //      belong exclusively to `listings`, while agreed contract terms belong to `tenancies`.
+  //    - We deliberately avoid duplicating monthly_rent and security_deposit on `properties` to maintain a single
+  //      source of truth for marketing terms and prevent data drift between the physical asset and listings.
 }
 
 Ref: properties.owner_id > users.id
-
-
-Table units {
-  id uuid [pk, default: `gen_random_uuid()`]
-
-  property_id uuid [not null]
-
-  unit_number varchar(50) [not null]
-  unit_type varchar(30) [not null]
-
-  floor_number integer
-  bedrooms smallint [not null, default: 0]
-  bathrooms numeric(3,1) [not null, default: 1.0]
-
-  area_sqft numeric(10,2)
-
-  furnishing_status varchar(20) [not null, default: 'unfurnished']
-
-  monthly_rent numeric(12,2)
-  security_deposit numeric(12,2)
-
-  status varchar(20) [not null, default: 'active']
-
-  description text
-
-  created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (property_id, unit_number) [unique]
-    (property_id, status)
-  }
-
-  // IMPLEMENTATION NOTE:
-  // bedrooms >= 0
-  // bathrooms >= 0
-  // area_sqft > 0 when supplied
-  // monthly_rent >= 0 when supplied
-  // security_deposit >= 0 when supplied
-  // Validate permitted unit, furnishing, and status values.
-}
-
-Ref: units.property_id > properties.id
 
 
 Table property_images {
@@ -166,6 +188,11 @@ Table property_images {
   // Implement as a PostgreSQL partial unique index via Django Meta.constraints:
   // UniqueConstraint(fields=['property_id'], condition=Q(is_primary=True), name='uq_property_single_primary_image')
   // This guarantees at most one primary image per property.
+  //
+  // ARCHITECTURAL CONSOLIDATION DECISION:
+  // In the property-centric MVP, property_images serves as the single authoritative photo gallery
+  // for both property management and public marketing listings. A separate listing_images table is removed
+  // to avoid redundant photo uploads and dual-table synchronization overhead.
 }
 
 Ref: property_images.property_id > properties.id
@@ -174,8 +201,6 @@ Ref: property_images.property_id > properties.id
 // ============================================================
 // 2A. AMENITIES
 // ============================================================
-// Amenities are catalogued once, then linked separately to a property
-// (shared/building amenities) or a unit (amenities inside that unit).
 
 Table amenities {
   id uuid [pk, default: `gen_random_uuid()`]
@@ -193,9 +218,9 @@ Table amenities {
   }
 
   // IMPLEMENTATION NOTE:
-  // Keep category values controlled in application code (for example,
-  // building, safety, recreation, appliance, or accessibility).
-  // Do not store property-specific availability or claims on this catalogue row.
+  // Amenities catalogue covers both residential and commercial assets.
+  // Controlled categories: 'building', 'safety', 'hvac', 'power_backup', 'connectivity',
+  // 'recreation', 'appliance', 'accessibility'.
 }
 
 Table property_amenities {
@@ -215,23 +240,6 @@ Table property_amenities {
 Ref: property_amenities.property_id > properties.id
 Ref: property_amenities.amenity_id > amenities.id
 
-Table unit_amenities {
-  id uuid [pk, default: `gen_random_uuid()`]
-
-  unit_id uuid [not null]
-  amenity_id uuid [not null]
-
-  created_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (unit_id, amenity_id) [unique]
-    (amenity_id)
-  }
-}
-
-Ref: unit_amenities.unit_id > units.id
-Ref: unit_amenities.amenity_id > amenities.id
-
 
 // ============================================================
 // 3. LISTINGS
@@ -240,7 +248,7 @@ Ref: unit_amenities.amenity_id > amenities.id
 Table listings {
   id uuid [pk, default: `gen_random_uuid()`]
 
-  unit_id uuid [not null]
+  property_id uuid [not null]
 
   title varchar(200) [not null]
   description text
@@ -265,7 +273,7 @@ Table listings {
 
   indexes {
     (status, published_at)
-    (unit_id, status)
+    (property_id, status)
     (review_status, status)
   }
 
@@ -274,42 +282,17 @@ Table listings {
   //
   // DBML index syntax cannot enforce partial conditions (WHERE clauses).
   // Implement as a PostgreSQL partial unique index via Django Meta.constraints:
-  // UniqueConstraint(fields=['unit_id'], condition=Q(status__in=['draft', 'published', 'paused']), name='uq_unit_single_open_listing')
+  // UniqueConstraint(fields=['property_id'], condition=Q(status__in=['draft', 'published', 'paused']), name='uq_property_single_open_listing')
   //
-  // This permits at most one open listing per unit. Closed listings do not block new listings.
-  // Listing publication and approval are separate concerns.
+  // This permits at most one open listing per property. Closed listings do not block new listings.
+  // Listing publication and approval policy:
+  // - When mandatory approval is ON: Search results filter by status = 'published' AND review_status = 'approved'.
+  // - When mandatory approval is OFF: Search results filter by status = 'published' directly (or publishing auto-approves).
   // Only listings permitted by the configured approval policy may appear in public search results.
 }
 
-Ref: listings.unit_id > units.id
+Ref: listings.property_id > properties.id
 Ref: listings.reviewed_by_id > users.id
-
-
-Table listing_images {
-  id uuid [pk, default: `gen_random_uuid()`]
-
-  listing_id uuid [not null]
-
-  image_url varchar(1000) [not null]
-  caption varchar(255)
-
-  display_order integer [not null, default: 0]
-  is_primary boolean [not null, default: false]
-
-  created_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (listing_id, display_order)
-  }
-
-  // IMPLEMENTATION REQUIREMENT (PostgreSQL / Django):
-  // DBML index syntax cannot enforce partial conditions (WHERE clauses).
-  // Implement as a PostgreSQL partial unique index via Django Meta.constraints:
-  // UniqueConstraint(fields=['listing_id'], condition=Q(is_primary=True), name='uq_listing_single_primary_image')
-  // This guarantees at most one primary image per listing.
-}
-
-Ref: listing_images.listing_id > listings.id
 
 
 Table saved_properties {
@@ -358,10 +341,9 @@ Table applications {
   }
 
   // IMPLEMENTATION NOTE:
-  // Validate permitted application statuses.
+  // Permitted statuses: 'submitted', 'under_review', 'approved', 'rejected', 'withdrawn'.
   // Only authorized users may review an application.
-  // Update application status and insert status history
-  // within the same database transaction.
+  // Update application status and insert status history within the same database transaction.
 }
 
 Ref: applications.listing_id > listings.id
@@ -402,7 +384,7 @@ Ref: application_status_history.changed_by_id > users.id
 Table tenancies {
   id uuid [pk, default: `gen_random_uuid()`]
 
-  unit_id uuid [not null]
+  property_id uuid [not null]
   tenant_id uuid [not null]
   application_id uuid [unique]
 
@@ -425,7 +407,7 @@ Table tenancies {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (unit_id, status)
+    (property_id, status)
     (tenant_id, status)
     (start_date, end_date)
   }
@@ -436,25 +418,32 @@ Table tenancies {
   // CHECK security_deposit >= 0
   // CHECK rent_due_day BETWEEN 1 AND 28
   //
+  // Permitted statuses: 'pending', 'confirmed', 'active', 'ended', 'cancelled'.
   // Validate actual move-in/out dates and permitted statuses.
   //
   // APPLICATION CONSISTENCY:
-  // If application_id is supplied, verify that the application
-  // belongs to tenant_id and refers to a listing for this unit.
+  // If application_id is supplied, verify that the application belongs to tenant_id
+  // and refers to a listing for this property (listing.property_id = tenancies.property_id).
   //
-  // OVERLAPPING TENANCIES:
-  // Use a PostgreSQL exclusion constraint with a date range,
-  // or equivalent carefully tested transactional protection.
-  // Prevent overlapping scheduled/active tenancies for the same unit.
-  // Decide whether pending tenancies also reserve the unit.
+  // OVERLAPPING TENANCIES (POSTGRESQL EXCLUSION CONSTRAINT):
+  // Prevent overlapping date ranges for confirmed and active tenancies belonging to the same property.
+  // Pending, ended, and cancelled tenancies do NOT reserve the property.
   //
-  // For concurrency-sensitive creation/activation, use
-  // transaction.atomic() and select_for_update() on the unit.
-  // A row lock alone is not a substitute for a database exclusion
-  // constraint if other write paths can bypass the service.
+  // Implement as a PostgreSQL exclusion constraint via Django migration using btree_gist extension:
+  // ALTER TABLE tenancies ADD CONSTRAINT excl_tenancy_property_no_overlap
+  // EXCLUDE USING gist (
+  //   property_id WITH =,
+  //   daterange(start_date, COALESCE(end_date, 'infinity'::date), '[]') WITH &&
+  // )
+  // WHERE (status IN ('confirmed', 'active'));
+  //
+  // For concurrency-sensitive creation and activation, use transaction.atomic()
+  // and select_for_update() on the property record.
+  // Recheck property availability before transitioning a pending tenancy to confirmed/active.
+  // A row lock alone is not a substitute for the database exclusion constraint.
 }
 
-Ref: tenancies.unit_id > units.id
+Ref: tenancies.property_id > properties.id
 Ref: tenancies.tenant_id > users.id
 Ref: tenancies.application_id - applications.id
 
@@ -553,6 +542,43 @@ Table payments {
 }
 
 Ref: payments.tenancy_id > tenancies.id
+
+
+Table payment_refunds {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  payment_id uuid [not null]
+
+  amount numeric(12,2) [not null]
+  currency char(3) [not null, default: 'INR']
+
+  reason varchar(255) [not null]
+  status varchar(20) [not null, default: 'pending']
+
+  refund_reference varchar(255)
+  processed_at timestamptz
+
+  created_by uuid [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (payment_id)
+    (status, created_at)
+    (created_by, created_at)
+  }
+
+  // REFUND VALIDATION:
+  // Refund amount must be greater than zero.
+  // Total successful refunds must not exceed the original payment amount.
+  // Only successful payments can be refunded.
+  // A refund must belong to the same tenancy as its original payment.
+  // Record the external refund transaction reference when available.
+}
+
+Ref: payment_refunds.payment_id > payments.id
+Ref: payment_refunds.created_by > users.id
 
 
 // ============================================================
@@ -682,7 +708,11 @@ Ref: audit_logs.actor_id > users.id
 Table documents {
   id uuid [pk, default: `gen_random_uuid()`]
 
-  uploaded_by_id uuid [not null]
+  uploaded_by uuid [not null]
+
+  property_id uuid
+  application_id uuid
+  tenancy_id uuid
 
   document_type varchar(50) [not null]
 
@@ -692,80 +722,164 @@ Table documents {
   mime_type varchar(100)
   file_size_bytes bigint
 
-  related_object_type varchar(50)
-  related_object_id uuid
-
   status varchar(20) [not null, default: 'active']
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (uploaded_by_id, created_at)
-    (related_object_type, related_object_id)
+    (uploaded_by, created_at)
+    (property_id, document_type)
+    (application_id, document_type)
+    (tenancy_id, document_type)
     (document_type, status)
   }
 
   // IMPLEMENTATION NOTE:
   // CHECK file_size_bytes > 0 when file_size_bytes is not null.
-  // Validate file type, size, ownership, and access permissions.
+  // Explicit parent references: property_id, application_id, tenancy_id.
+  // At most one of these three references can be populated:
+  // CHECK (
+  //   (CASE WHEN property_id IS NOT NULL THEN 1 ELSE 0 END +
+  //    CASE WHEN application_id IS NOT NULL THEN 1 ELSE 0 END +
+  //    CASE WHEN tenancy_id IS NOT NULL THEN 1 ELSE 0 END) <= 1
+  // )
+  // All three can remain NULL temporarily for an unattached document.
+  // Rental agreements are stored as tenancy documents with document_type = 'rental_agreement'.
+  // No separate rental_agreements table is used for the MVP.
+  // Validate actual file content, type, size, ownership, and access permissions.
   // Store files in private object storage and issue authorized URLs.
-  //
-  // related_object_type + related_object_id is polymorphic;
-  // validate the referenced object in application logic.
 }
 
-Ref: documents.uploaded_by_id > users.id
+Ref: documents.uploaded_by > users.id
+Ref: documents.property_id > properties.id
+Ref: documents.application_id > applications.id
+Ref: documents.tenancy_id > tenancies.id
+
 
 // ============================================================
-// 12. RENTAL AGREEMENTS
+// 12. SUBSCRIPTIONS
 // ============================================================
-// MVP scope: track an agreement record and its uploaded document.
-// Electronic signatures, signatory events, and template clause builders are out of scope.
 
-Table rental_agreements {
+Table subscription_plans {
   id uuid [pk, default: `gen_random_uuid()`]
 
-  tenancy_id uuid [not null]
-  document_id uuid [unique]
-  version smallint [not null, default: 1]
+  name varchar(50) [not null, unique]
+  code varchar(30) [not null, unique]
 
-  status varchar(20) [not null, default: 'draft']
+  min_properties integer [not null]
+  max_properties integer
 
-  // Snapshot the agreed terms so an old agreement does not change if tenancy data changes.
-  start_date date [not null]
-  end_date date
-  monthly_rent numeric(12,2) [not null]
-  security_deposit numeric(12,2) [not null, default: 0]
-  rent_due_day smallint [not null, default: 1]
+  monthly_price numeric(10,2)
+  currency char(3) [not null, default: 'INR']
 
-  created_by_id uuid [not null]
+  trial_duration_months smallint [not null, default: 3]
+
+  is_active boolean [not null, default: true]
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (tenancy_id, version) [unique]
-    (tenancy_id, status)
-    (created_by_id, created_at)
+    (is_active)
   }
 
-  // IMPLEMENTATION NOTE:
-  // document_id is nullable while an agreement is a draft; when supplied,
-  // it points to the uploaded agreement file in documents.
-  // Set documents.document_type to an agreed value such as 'rental_agreement'.
-  // Validate the uploaded file type, size, access, and tenancy ownership.
-  // Snapshot terms from the tenancy when the agreement is created; subsequent
-  // tenancy edits must not silently alter an existing agreement version.
-  // Enforce version >= 1, monthly_rent >= 0, security_deposit >= 0,
-  // rent_due_day BETWEEN 1 AND 28, and end_date IS NULL OR end_date >= start_date.
-  // Use controlled status values such as draft, active, expired, cancelled.
-  // A transition to active should be an explicit authorized action after the
-  // agreement has been finalized outside this MVP workflow.
-  // If only one active agreement per tenancy is allowed, add a PostgreSQL
-  // partial unique constraint on tenancy_id where status = 'active'.
+  // VALIDATION & QUOTA RULES:
+  // min_properties >= 1.
+  // max_properties must be NULL or >= min_properties.
+  // monthly_price must be positive when supplied.
+  // trial_duration_months >= 0.
+  // NULL monthly_price represents custom pricing.
+  // NULL max_properties represents no upper property limit.
+  //
+  // MVP Plan Tiers:
+  // - Starter: min_properties = 1, max_properties = 5, monthly_price = 399.00 INR
+  // - Growth: min_properties = 6, max_properties = 12, monthly_price = 799.00 INR
+  // - Pro: min_properties = 13, max_properties = 25, monthly_price = 1199.00 INR
+  // - Enterprise: min_properties = 26, max_properties = NULL, monthly_price = NULL (custom pricing)
+  //
+  // Quota Interpretation:
+  // 1. One independently rentable property consumes one quota slot.
+  // 2. Every property owned by the owner counts, regardless of listing publication status.
+  // 3. Pausing or unpublishing a listing does not release quota.
+  // 4. Deleting a property releases quota only when deletion is permitted by tenancy, financial and data-retention rules.
+  // 5. Enforce quota when creating a property through a transaction-safe backend service:
+  //    SELECT COUNT(*) FROM properties WHERE owner_id = :owner_id FOR UPDATE
 }
 
-Ref: rental_agreements.tenancy_id > tenancies.id
-Ref: rental_agreements.document_id - documents.id
-Ref: rental_agreements.created_by_id > users.id
+Table subscriptions {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  owner_id uuid [not null, unique]
+  plan_id uuid [not null]
+
+  status varchar(20) [not null, default: 'trialing']
+
+  trial_started_at timestamptz
+  trial_ends_at timestamptz
+
+  current_period_start timestamptz
+  current_period_end timestamptz
+
+  started_at timestamptz
+  cancelled_at timestamptz
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (plan_id, status)
+    (status, current_period_end)
+  }
+
+  // VALIDATION:
+  // One subscription per owner account.
+  // Trial end must be later than trial start.
+  // Current period end must be later than current period start.
+  // Validate permitted subscription statuses.
+  // Plan changes must preserve previous payment records.
+  // Expired or cancelled subscriptions must not delete owner data.
+}
+
+Ref: subscriptions.owner_id - users.id
+Ref: subscriptions.plan_id > subscription_plans.id
+
+
+Table subscription_payments {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  subscription_id uuid [not null]
+  plan_id uuid [not null]
+
+  amount numeric(10,2) [not null]
+  currency char(3) [not null, default: 'INR']
+
+  payment_method varchar(30)
+  transaction_reference varchar(255)
+
+  status varchar(20) [not null, default: 'pending']
+
+  billing_period_start timestamptz
+  billing_period_end timestamptz
+
+  paid_at timestamptz
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (subscription_id, created_at)
+    (status, created_at)
+    (transaction_reference)
+  }
+
+  // VALIDATION:
+  // amount >= 0.
+  // Validate permitted payment methods and statuses.
+  // Only successful payments count as received revenue.
+  // Store the plan applicable to each billing transaction.
+  // Prevent duplicate external transaction references.
+  // Preserve failed and pending transactions for auditability.
+}
+
+Ref: subscription_payments.subscription_id > subscriptions.id
+Ref: subscription_payments.plan_id > subscription_plans.id

@@ -23,17 +23,17 @@ The Figma project captures the complete user journey across key personas (Proper
 
 1. **Authentication & Onboarding**:
    - Registration, login, role selection, and user profile management.
-2. **Property & Unit Management**:
-   - Property creation, unit configuration, amenity tagging, and image management.
+2. **Property Management**:
+   - Property creation (residential & commercial categories/types), physical specs, amenity tagging, and photo gallery management.
 3. **Rental Listing Creation & Marketplace**:
-   - Listing composition with AI description draft assistance.
-   - Public listing search, filtering, and detailed unit view for prospective tenants.
+   - Listing composition with asking terms and AI description draft assistance.
+   - Public listing search, filtering, and detailed property view for prospective tenants.
 4. **Rental Applications & Approvals**:
-   - Tenant application submission workflow.
+   - Tenant application submission workflow and status tracking.
    - Owner review dashboard for accepting or rejecting applicant submissions.
 5. **Tenancy & Rent Tracking**:
-   - Tenancy agreement details, agreed rental terms, and active tenancy status.
-   - Rent payment tracking, charge schedules, and payment receipts.
+   - Active tenancy status, agreed contract terms, and attached rental agreement documents.
+   - Rent payment tracking, charge schedules, payment refunds, and payment receipts.
 
 ---
 

@@ -27,6 +27,7 @@ graph LR
             Listings[listings]
             Leasing[leasing]
             Rent[rent]
+            Subscriptions[subscriptions]
             AIModule[ai_assistant]
             Shared[notifications, audit_logs, documents, common]
         end
@@ -69,7 +70,7 @@ graph LR
 ### 3.3 External AI Communication
 - The `ai_assistant` module communicates with an external AI provider API over HTTPS.
 - Provider-specific configuration, prompt templates, and HTTP transport logic remain fully isolated inside the `ai_assistant` module.
-- Input data (unit and property specs) is validated prior to external dispatch.
+- Input data (property specifications) is validated prior to external dispatch.
 - External API calls enforce timeouts and graceful error handling; if the AI service fails or times out, the system returns a safe fallback so property and listing operations are never blocked.
 - *Detailed prompt templates, validation rules, and error handling are documented in [`docs/ai-integration.md`](ai-integration.md).*
 
@@ -78,7 +79,7 @@ graph LR
   - `ListingPublished`: Triggers listing visibility.
   - `ApplicationSubmitted`: Notifies property owner.
   - `ApplicationApproved`: Initiates tenancy drafting.
-  - `TenancyCreated`: Marks unit occupied and issues initial rent charge.
+  - `TenancyCreated`: Marks property occupied and issues initial rent charge.
   - `PaymentRecorded`: Allocates payment and recalculates balance.
 - **MVP Strategy**: These are **conceptual business events** executed synchronously via service-layer calls inside database transactions.
 - **No Broker Infrastructure**: Distributed message brokers (e.g., Kafka, RabbitMQ, Celery, Redis) are deliberately omitted for the 3-week MVP to prevent operational complexity.
@@ -114,7 +115,7 @@ graph LR
 
 ### 4.2 AI Listing Description Flow
 1. **Trigger**: Owner requests an AI-generated description draft from the listing form.
-2. **Internal Delegation**: `listings` invokes `ai_assistant.services.generate_description(...)` with unit specs.
+2. **Internal Delegation**: `listings` invokes `ai_assistant.services.generate_description(...)` with property specifications.
 3. **Provider Call**: `ai_assistant` formats the prompt and queries the external AI API via HTTPS.
 4. **Draft Presentation**: The generated text is returned to the frontend as an uncommitted draft.
 5. **Owner Review & Edit**: The owner reviews and edits the copy directly in the browser.

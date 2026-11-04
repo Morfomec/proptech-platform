@@ -7,16 +7,16 @@ This document serves as the **consolidated system blueprint and final submission
 ## 1. Problem Statement & System Overview (Item a)
 
 ### 1.1 Problem Statement
-The residential rental market suffers from fragmented workflows spanning disconnected listing portals, chat applications, and manual spreadsheets. Property owners struggle with tedious listing composition, disjointed applicant screening, and error-prone manual rent ledgers. Tenants encounter inconsistent listing details, lack of transparency in application statuses, and fragmented payment tracking.
+The residential and commercial rental market suffers from fragmented workflows spanning disconnected listing portals, chat applications, and manual spreadsheets. Property owners struggle with tedious listing composition, disjointed applicant screening, and error-prone manual rent ledgers. Tenants encounter inconsistent listing details, lack of transparency in application statuses, and fragmented payment tracking.
 
 ### 1.2 System Overview
-The **PropTech Platform** is a unified residential rental marketplace and property-management application. It streamlines the end-to-end rental lifecycle:
+The **PropTech Platform** is a unified rental marketplace and property-management application. It streamlines the end-to-end rental lifecycle:
 1. **Discovery & Marketplace**: Tenants search verified listings and submit structured applications.
-2. **Property & Tenancy Management**: Owners manage property units, review applicants, establish tenancies, and track rent charges and payments.
-3. **AI Assistant**: Accelerates listing composition by generating editable marketing drafts from verified property and unit specifications.
+2. **Property & Tenancy Management**: Owners manage properties (across residential and commercial categories), review applicants, establish tenancies, and track rent charges, payments, and refunds.
+3. **AI Assistant**: Accelerates listing composition by generating editable marketing drafts from verified property specifications.
 
 **Target Personas:**
-- **Property Owner**: Manages real estate assets, creates listings, reviews tenant applications, issues agreements, and logs rent receipts.
+- **Property Owner**: Manages real estate assets within subscription quotas, creates listings, reviews tenant applications, attaches rental agreements, and logs rent receipts.
 - **Tenant**: Explores public listings, submits applications, views tenancy terms, and tracks rent charges and payment history.
 - **Administrator**: Oversees system integrity, user moderation, and platform operations via Django Admin.
 
@@ -25,13 +25,14 @@ The **PropTech Platform** is a unified residential rental marketplace and proper
 ## 2. Product Scope & User Roles (Item a)
 
 ### 2.1 MVP Scope (P0)
-- **Authentication & RBAC**: Role-based access control for Owners, Tenants, and Admins.
-- **Property & Unit Management**: Multi-unit hierarchy, address details, amenities, and property images.
-- **Listings & Discovery**: Listing composition, publication controls, and public search/filtering.
+- **Authentication & RBAC**: Role-based access control for Owners, Tenants, and Admins using custom email-based accounts and Google OAuth 2.0 social accounts (`social_accounts`).
+- **Property Management**: Property-centric architecture (one property is one independently rentable asset across residential and commercial categories/types), address details, coordinates, amenities catalogue, and authoritative photo gallery.
+- **Subscriptions & Quota Management**: Owner SaaS subscription tiers (Starter, Growth, Pro, Enterprise), active subscriptions, trial tracking, and transactional property quota enforcement (locking the owner or active subscription row, counting all properties belonging to the owner, validating against applicable plan quota, and creating the property within the same transaction).
+- **Listings & Discovery**: Listing composition, asking terms (rent, deposit, available_from), moderation controls, and public search/filtering.
 - **AI Listing Descriptions**: Automated draft descriptions generated via external AI provider with mandatory owner review and editing prior to publication.
-- **Rental Applications**: Tenant application submissions and owner approval/rejection workflows.
-- **Tenancy & Agreements**: Conversion of approved applications into active tenancies and agreement snapshots.
-- **Rent & Payment Tracking**: Recurring rent charges, manual payment logging, payment allocations, and outstanding balance calculation.
+- **Rental Applications**: Tenant application submissions, append-only status audit trails, and owner review workflows.
+- **Tenancy & Agreements**: Conversion of approved applications into active tenancies, date overlap protection via PostgreSQL exclusion constraints, and tenancy-linked rental agreement documents.
+- **Rent & Payment Tracking**: Recurring rent charges, manual payment logging, refund tracking, payment allocations, and outstanding balance calculation.
 
 ### 2.2 Out-of-Scope (Deferred Post-MVP)
 - Automated online payment gateway integration (Stripe/Razorpay) — *manual payment logging only in MVP*.
@@ -53,11 +54,11 @@ The visual design system, interaction patterns, wireframes, and responsive user 
 
 ### Key Mapped Screens & Flows:
 1. **Authentication & Profile Setup**: Registration, credential verification, and profile management.
-2. **Owner Property Dashboard**: Property and unit registration forms, amenity checklists, and photo management.
+2. **Owner Property Dashboard**: Property registration forms (residential/commercial categories & types), location mapping, amenity checklists, and photo gallery management.
 3. **Listing Studio & AI Assistant**: Listing form integrating prompt preview, AI draft generation, inline editing, and publishing controls.
 4. **Tenant Marketplace**: Search bar, filter drawers (rent range, bedrooms, amenities), listing cards, and detailed property views.
 5. **Application & Leasing Pipeline**: Application submission modal for tenants; review, approval, and tenancy onboarding cards for owners.
-6. **Rent Ledger & History**: Rent charge schedule, payment logging modal, and tenant ledger balances.
+6. **Rent Ledger & History**: Rent charge schedule, payment logging modal, refund tracking, and tenant ledger balances.
 
 ---
 
@@ -85,6 +86,7 @@ graph LR
             Listings[listings]
             Leasing[leasing]
             Rent[rent]
+            Subscriptions[subscriptions]
             AIModule[ai_assistant]
             Shared[notifications, audit_logs, documents, common]
         end
@@ -111,7 +113,7 @@ graph LR
 ### Architectural Principles:
 - **Monolith Runtime**: All modules execute within a single backend application process, avoiding distributed operational overhead.
 - **Strict Domain Partitioning**: Business logic is encapsulated in Django apps with explicit table ownership.
-- **Synchronous In-Process Service Calls**: Modules interact via typed Python service functions (e.g. `leasing.services`) inside database transactions (`transaction.atomic()`).
+- **Synchronous In-Process Service Calls**: Modules interact via typed Python service functions (e.g. `leasing.services`, `subscriptions.services`) inside database transactions (`transaction.atomic()`).
 
 *Detailed specification: [System Architecture](system-architecture.md)*
 
@@ -119,19 +121,20 @@ graph LR
 
 ## 5. Service / Module Breakdown (Item d)
 
-The backend is partitioned into nine logically separated modules:
+The backend is partitioned into ten logically separated modules:
 
 | Module | Core Responsibility | Data Owned (Tables) | Direct Dependencies |
 | :--- | :--- | :--- | :--- |
-| **`accounts`** | User authentication, identity, profiles, and RBAC. | `users`, `user_profiles` | *None (Foundational)* |
-| **`properties`** | Physical real estate, units, amenities, and media. | `properties`, `units`, `property_images`, `saved_properties`, `amenities`, `property_amenities`, `unit_amenities` | `accounts` |
-| **`listings`** | Public rental listings, publication controls, and search. | `listings`, `listing_images` | `properties`, `accounts`, `ai_assistant` |
-| **`leasing`** | Applications, status workflows, tenancies, and agreements. | `applications`, `application_status_history`, `tenancies`, `rental_agreements` | `listings`, `properties`, `accounts` |
-| **`rent`** | Rent charges, manual payments, allocations, and balances. | `rent_charges`, `payments`, `payment_allocations` | `leasing`, `accounts` |
+| **`accounts`** | User authentication, identity, profiles, social accounts (OAuth 2.0), and RBAC. | `users`, `user_profiles`, `social_accounts` | *None (Foundational)* |
+| **`properties`** | Physical real estate assets (residential & commercial), photos, and amenities catalogue. | `properties`, `property_images`, `amenities`, `property_amenities` | `accounts`, `subscriptions` (for quota checks) |
+| **`listings`** | Public rental listings, asking terms, publication moderation, and saved properties. | `listings`, `saved_properties` | `properties`, `accounts`, `ai_assistant` |
+| **`leasing`** | Applications, status workflows, and tenancies. *(Rental agreements tracked in `documents`).* | `applications`, `application_status_history`, `tenancies` | `listings`, `properties`, `accounts` |
+| **`rent`** | Rent charges, manual payments, refunds, allocations, and balances. | `rent_charges`, `payments`, `payment_refunds`, `payment_allocations` | `leasing`, `accounts` |
+| **`subscriptions`** | Owner SaaS subscription tiers, property quotas, active subscriptions, and billing. | `subscription_plans`, `subscriptions`, `subscription_payments` | `accounts` |
 | **`ai_assistant`** | Listing description draft generation isolating external AI provider. | *Stateless (No persistent tables)* | *None (External API adapter)* |
 | **`notifications`** | In-app user notifications and delivery status. | `notifications` | `accounts` |
 | **`audit_logs`** | Immutable historical audit trail for critical state transitions. | `audit_logs` | `accounts` |
-| **`documents`** | File metadata, attachment tracking, and access authorization. | `documents` | `accounts` |
+| **`documents`** | Centralized file metadata, attachment tracking, and tenancy rental agreements. | `documents` | `accounts` |
 
 *Detailed rules and dependency graph: [Module Boundaries](module-boundaries.md)*
 
@@ -139,32 +142,34 @@ The backend is partitioned into nine logically separated modules:
 
 ## 6. Database Design (Item e)
 
-The relational schema comprises **21 tables** implemented in PostgreSQL using UUID primary keys, ISO timestamps, INR currency decimals, and strict referential integrity constraints:
+The relational schema comprises **22 tables** implemented in PostgreSQL using UUID primary keys, ISO timestamps, INR currency decimals, and strict referential integrity constraints:
 
 ```text
-├── Accounts (2 tables)
+├── Accounts (3 tables)
 │   ├── users
-│   └── user_profiles
-├── Properties & Amenities (7 tables)
+│   ├── user_profiles
+│   └── social_accounts
+├── Properties & Amenities (4 tables)
 │   ├── properties
-│   ├── units
 │   ├── property_images
-│   ├── saved_properties
 │   ├── amenities
-│   ├── property_amenities
-│   └── unit_amenities
+│   └── property_amenities
 ├── Listings (2 tables)
 │   ├── listings
-│   └── listing_images
-├── Leasing (4 tables)
+│   └── saved_properties
+├── Leasing (3 tables)
 │   ├── applications
 │   ├── application_status_history
-│   ├── tenancies
-│   └── rental_agreements
-├── Rent & Ledger (3 tables)
+│   └── tenancies
+├── Rent & Ledger (4 tables)
 │   ├── rent_charges
 │   ├── payments
+│   ├── payment_refunds
 │   └── payment_allocations
+├── Subscriptions (3 tables)
+│   ├── subscription_plans
+│   ├── subscriptions
+│   └── subscription_payments
 └── Supporting Services (3 tables)
     ├── notifications
     ├── audit_logs
@@ -173,7 +178,7 @@ The relational schema comprises **21 tables** implemented in PostgreSQL using UU
 
 ### Key Artifacts:
 - **Design Overview**: [`docs/database-design.md`](database-design.md)
-- **Editable DBML Schema**: [`docs/diagrams/database-erd.dbml`](diagrams/database-erd.dbml)
+- **DBML Schema Source**: [`docs/diagrams/database-erd.version.02.dbml`](diagrams/database-erd.version.02.dbml)
 - **Visual ERD Diagram**: [`docs/diagrams/database-erd.png`](diagrams/database-erd.png)
 
 ---
@@ -192,8 +197,8 @@ The platform exposes a synchronous RESTful API built with Django REST Framework 
   Authorization: Bearer {{access_token}}
   ```
 - **Payload Format**: `application/json` with `snake_case` keys and UUID resource identifiers.
-- **Media Uploads**: `multipart/form-data` for property/unit images and uploaded tenancy documents.
-- **Maturity Distinction**: The Postman collection contains 133 mock examples providing the target contract for frontend integration; backend routes will become operational as Django viewsets and serializers are implemented.
+- **Media Uploads**: `multipart/form-data` for property images and uploaded tenancy documents.
+- **Maturity Distinction**: The Postman collection contains mock examples providing the target contract for frontend integration; backend routes will become operational as Django viewsets and serializers are implemented.
 
 ---
 
@@ -212,8 +217,9 @@ To maintain architectural seams without introducing distributed queue overhead, 
 | `ListingPublished` | `listings` | Status set to published; visible in public search. | Search indexer, marketing emails. |
 | `ApplicationSubmitted` | `leasing` | Application record created; owner notification generated. | SMS / Push notifications. |
 | `ApplicationApproved` | `leasing` | Application approved; tenancy drafted; applicant notified. | Digital lease signing dispatch. |
-| `TenancyCreated` | `leasing` | Tenancy activated; unit status set to occupied; initial rent charge created. | Welcome email, calendar alerts. |
+| `TenancyCreated` | `leasing` | Tenancy activated; property status set to occupied; initial rent charge created. | Welcome email, calendar alerts. |
 | `PaymentRecorded` | `rent` | Manual payment recorded; allocated to charges; balance recalculated. | Tenant receipt email, ledger export. |
+| `SubscriptionActivated` | `subscriptions` | Owner subscription activated; owner property quota updated. | Welcome email, invoice dispatch. |
 
 *Detailed infrastructure baseline: [System Architecture](system-architecture.md)*
 
@@ -223,7 +229,7 @@ To maintain architectural seams without introducing distributed queue overhead, 
 
 The platform's initial AI capability is focused on **automated rental listing description draft generation**:
 
-- **Input**: Verified property and unit facts (bedrooms, bathrooms, area, amenities, location).
+- **Input**: Verified property facts (category, property type, bedrooms, bathrooms, area, furnishing, amenities, location).
 - **Processing**: The `ai_assistant` formats a structured prompt, applies safety filters, and queries the external provider over HTTPS.
 - **Output**: An editable marketing description draft returned to the owner's browser.
 - **Human-in-the-Loop Safeguard**: The AI service cannot persist or publish listings directly; all drafts must be explicitly reviewed, edited, and approved by the property owner.
@@ -237,12 +243,12 @@ The platform's initial AI capability is focused on **automated rental listing de
 
 The unified system supports the complete end-to-end user lifecycle:
 1. **Registration**: An owner registers and authenticates via `/auth/register/` and `/auth/login/`.
-2. **Asset Setup**: The owner creates a property and rentable units with catalogued amenities.
+2. **Asset Setup**: The owner creates a property (residential or commercial) within their active subscription quota and associates catalogued amenities and photos.
 3. **Listing Composition**: The owner drafts a listing, invokes the AI assistant for description copy, edits the text, and publishes the listing.
-4. **Discovery & Application**: A prospective tenant searches public listings, reviews unit attributes, and submits a rental application.
+4. **Discovery & Application**: A prospective tenant searches public listings, reviews property attributes, and submits a rental application.
 5. **Review & Approval**: The owner reviews the application and approves it.
-6. **Tenancy Onboarding**: The approved application is converted into an active tenancy with an associated rental agreement.
-7. **Ledger & Settlement**: Monthly rent charges are generated; the owner records manual tenant payments; payment allocations settle outstanding charges and update tenant balances.
+6. **Tenancy Onboarding**: The approved application is converted into an active tenancy with an attached rental agreement document.
+7. **Ledger & Settlement**: Monthly rent charges are generated; the owner records manual tenant payments; payment allocations settle outstanding charges, handle refunds when necessary, and update tenant balances.
 
 ---
 
@@ -261,3 +267,4 @@ All mandatory milestones from project planning (`SecondProject - Flow`) are comp
 | **7. Communication Design** | [`docs/system-architecture.md`](system-architecture.md) & Section 8 above | **Complete** |
 | **8. AI Integration Plan** | [`docs/ai-integration.md`](ai-integration.md) | **Complete** |
 | **9. Final System Blueprint** | [`docs/final-system-blueprint.md`](final-system-blueprint.md) | **Complete** |
+| **10. Execution Strategy** | [`docs/project-planning-execution-strategy.md`](project-planning-execution-strategy.md) | **Complete** |

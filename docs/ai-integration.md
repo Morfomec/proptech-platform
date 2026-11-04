@@ -2,7 +2,7 @@
 
 ## 1. MVP Feature
 
-The platform uses AI only to generate draft descriptions for rental listings. An owner supplies property and unit details, requests a draft, then reviews and edits it before saving or publishing the listing.
+The platform uses AI only to generate draft descriptions for rental listings. An owner supplies property details, requests a draft, then reviews and edits it before saving or publishing the listing.
 
 The AI does not approve, save, or publish listings.
 
@@ -33,7 +33,7 @@ The AI module owns no database tables and should be called through an internal P
 
 ## 3. Input and Prompt Rules
 
-Inputs may include property type, locality and city, bedrooms and bathrooms, floor, area, furnishing status, rent, deposit, amenities, and optional owner notes.
+Inputs may include property category (residential or commercial), property type, locality and city, bedrooms and bathrooms, built-up area, furnishing status, asking rent, security deposit, catalogued amenities, and optional owner notes.
 
 Prompts should:
 - Use only the supplied facts and avoid inventing amenities, nearby landmarks, travel times, or legal claims.

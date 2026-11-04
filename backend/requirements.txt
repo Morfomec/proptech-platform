@@ -1,0 +1,8 @@
+Django>=6.0,<7.0
+djangorestframework
+psycopg[binary]
+django-environ
+djangorestframework-simplejwt
+drf-spectacular
+django-cors-headers
+Pillow

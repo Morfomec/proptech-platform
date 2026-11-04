@@ -20,18 +20,21 @@ Establishing an explicit API contract prior to backend implementation serves sev
 
 ## 2. Current MVP Modules
 
-The MVP architecture partitions the application into dedicated domain modules as documented in [Module Boundaries](../module-boundaries.md) and [System Architecture](../system-architecture.md). The canonical API contract defines endpoints supporting these MVP functional domains:
+The MVP architecture partitions the application into dedicated domain modules as documented in [Module Boundaries](../module-boundaries.md) and [System Architecture](../system-architecture.md). The updated functional domains in accordance with the DBML Version 02 schema are:
 
 | Module | Scope in API Contract | Key Endpoints / Resources |
 | :--- | :--- | :--- |
-| **Authentication & Accounts** | User registration, authentication, token refresh, password recovery, and user profiles. | `/auth/register/`, `/auth/login/`, `/auth/logout/`, `/auth/refresh/`, `/profile/me/` |
-| **Properties** | Real estate property management, locations, and property media. | `/properties/`, `/properties/me/`, `/properties/{property_uuid}/`, `/properties/{property_uuid}/images/` |
-| **Units & Pricing** | Rentable units under properties, unit amenities, and pricing configurations. | `/units/`, `/properties/{property_uuid}/units/`, `/units/{unit_uuid}`, `/unit-pricing/` |
-| **Listings & Discovery** | Public rental marketplace listings, search, publication, and saved listings. | `/listings/`, `/listings/search`, `/listings/{listing_uuid}/`, `/listings/{listing_uuid}/publish/`, `/saved-listings/` |
-| **Leasing & Agreements** | Rental applications, applicant processing, and tenancy agreements. | `/agreements`, `/agreements/{agreement_uuid}`, application workflows |
-| **Rent & Payments** | Rent charges, manual payment logging, receipts, and payment history. | `/payments`, `/payments/{payment_uuid}`, `/payments/history` |
-| **Notifications** | In-app user notifications and read receipts. | `/notifications`, `/notifications/{notification_id}/read` |
-| **Administration** | Platform oversight, user management, and moderation actions. | `/admin/users`, `/admin/properties`, `/admin/reports` |
+| **Authentication & Accounts** | User registration, authentication, token refresh, password recovery, social authentication (Google OAuth 2.0), and user profiles. | `/auth/register/`, `/auth/login/`, `/auth/logout/`, `/auth/refresh/`, `/auth/google/`, `/profile/me/` |
+| **Properties** | Property-centric real estate assets (residential and commercial), physical specs, coordinates, amenities catalogue, and property photo gallery. | `/properties/`, `/properties/me/`, `/properties/{property_uuid}/`, `/properties/{property_uuid}/images/`, `/amenities/` |
+| **Subscriptions** | Owner SaaS subscription tiers, active subscriptions, property quota tracking, and subscription payments. | `/subscriptions/`, `/subscription-plans/`, `/subscription-payments/` |
+| **Listings & Discovery** | Public rental marketplace listings, asking terms (rent, deposit, availability), moderation, search, and saved properties. | `/listings/`, `/listings/search`, `/listings/{listing_uuid}/`, `/listings/{listing_uuid}/publish/`, `/saved-properties/` |
+| **Leasing & Tenancies** | Rental applications, status history audit trails, and agreed tenancies with attached rental agreement documents. | `/applications/`, `/applications/{application_uuid}/status/`, `/tenancies/`, `/documents/` |
+| **Rent & Ledger** | Rent charges, manual payment logging, refund tracking, and payment allocations. | `/rent-charges/`, `/payments/`, `/payments/{payment_uuid}/refunds/`, `/payment-allocations/` |
+| **Notifications** | In-app user notifications and read receipts. | `/notifications/`, `/notifications/{notification_id}/read/` |
+| **Administration** | Platform oversight, user management, and moderation actions. | `/admin/users/`, `/admin/properties/`, `/admin/reports/` |
+
+> [!NOTE]
+> **API Contract Alignment**: The attached Postman collection was originally drafted prior to the consolidation of the property-centric schema. Certain legacy folders (e.g. standalone `/units/` and standalone `/agreements/`) reflect the pre-consolidation design. Backend serializers, viewsets, and updated Postman requests will follow the property-centric DBML schema (where properties are the direct rentable assets, pricing resides in listings and tenancies, and rental agreements are tenancy documents).
 
 ---
 
@@ -73,10 +76,10 @@ Configure the following variables in your Postman environment:
 | `access_token` | *(empty string)* | JWT bearer access token returned from login. |
 | `refresh_token` | *(empty string)* | JWT refresh token used to obtain a new access token. |
 | `property_uuid` | *(empty string)* | UUID of an active test property. |
-| `unit_uuid` | *(empty string)* | UUID of an active test unit. |
 | `listing_uuid` | *(empty string)* | UUID of an active test listing. |
-| `agreement_uuid` | *(empty string)* | UUID of an active test tenancy agreement. |
+| `tenancy_uuid` | *(empty string)* | UUID of an active test tenancy. |
 | `payment_uuid` | *(empty string)* | UUID of an active test payment record. |
+| `document_uuid` | *(empty string)* | UUID of an active test document (e.g., rental agreement). |
 
 ---
 
