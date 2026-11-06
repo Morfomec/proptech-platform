@@ -7,6 +7,7 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
   leftElement?: React.ReactNode
   rightElement?: React.ReactNode
   fullWidth?: boolean
+  inputSize?: 'md' | 'lg'
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -18,6 +19,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       leftElement,
       rightElement,
       fullWidth = true,
+      inputSize = 'md',
       id: customId,
       required,
       disabled,
@@ -39,12 +41,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       .filter(Boolean)
       .join(' ')
 
+    const heightClass =
+      inputSize === 'lg'
+        ? 'h-11 sm:h-12 text-sm sm:text-base'
+        : 'h-10.5 text-sm'
+
     return (
       <div className={`${fullWidth ? 'w-full' : 'inline-block'} text-left`}>
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-[#111827] mb-1.5"
+            className="block text-xs sm:text-sm font-medium text-[#111827] mb-1.5"
           >
             {label}
             {required && <span className="text-[#DC2626] ml-1" aria-hidden="true">*</span>}
@@ -68,9 +75,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             disabled={disabled}
             aria-invalid={hasError ? 'true' : undefined}
             aria-describedby={ariaDescribedBy || undefined}
-            className={`w-full bg-white text-[#111827] text-sm rounded-xl border transition-all duration-150 outline-none h-10 ${
-              leftElement ? 'pl-10' : 'pl-3.5'
-            } ${rightElement ? 'pr-10' : 'pr-3.5'} py-2 placeholder:text-[#6B7280] ${
+            className={`w-full bg-white text-[#111827] rounded-xl border transition-all duration-150 outline-none ${heightClass} ${
+              leftElement ? 'pl-11' : 'pl-4'
+            } ${rightElement ? 'pr-11' : 'pr-4'} py-2.5 placeholder:text-[#9CA3AF] ${
               hasError
                 ? 'border-[#DC2626] focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20'
                 : 'border-[#E5E7EB] hover:border-gray-400 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20'

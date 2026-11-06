@@ -61,7 +61,7 @@ def send_password_reset_email(user, raw_token):
             raise ImproperlyConfigured(
                 "FRONTEND_URL must be explicitly configured in production to send password reset emails."
             )
-        frontend_url = "http://localhost:5173"
+        frontend_url = "http://localhost:5174"
 
     reset_url = f"{frontend_url}/reset-password?uid={user.pk}&token={raw_token}"
 

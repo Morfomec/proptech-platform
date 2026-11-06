@@ -8,13 +8,14 @@ export interface DropdownMenuItem {
   disabled?: boolean
   danger?: boolean
   separator?: boolean
+  header?: boolean
   shortcut?: string
 }
 
 export type DropdownPlacement = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
 
 export interface DropdownProps {
-  trigger: React.ReactNode
+  trigger: React.ReactNode | ((isOpen: boolean) => React.ReactNode)
   items: DropdownMenuItem[]
   placement?: DropdownPlacement
   width?: string
@@ -42,8 +43,10 @@ export const Dropdown: React.FC<DropdownProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Filter out pure separators to calculate selectable item indices for keyboard navigation
-  const selectableItems = items.filter((item) => !item.separator && !item.disabled)
+  // Filter out pure separators and non-interactive headers to calculate selectable item indices for keyboard navigation
+  const selectableItems = items.filter(
+    (item) => !item.separator && !item.disabled && !item.header
+  )
 
   const toggleDropdown = () => {
     if (disabled) return
@@ -129,7 +132,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
           disabled ? 'opacity-50 pointer-events-none' : ''
         }`}
       >
-        {trigger}
+        {typeof trigger === 'function' ? trigger(isOpen) : trigger}
       </div>
 
       {/* Menu Overlay */}
@@ -141,6 +144,18 @@ export const Dropdown: React.FC<DropdownProps> = ({
           className={`absolute z-50 ${width} ${placementStyles[placement]} bg-surface rounded-xl border border-border shadow-lg p-1.5 focus:outline-none animate-in fade-in-0 zoom-in-95`}
         >
           {items.map((item, index) => {
+            if (item.header) {
+              return (
+                <div
+                  key={item.id || `header-${index}`}
+                  role="presentation"
+                  className="px-3 py-2 border-b border-border mb-1"
+                >
+                  {item.label}
+                </div>
+              )
+            }
+
             if (item.separator) {
               return (
                 <div

@@ -176,7 +176,7 @@ class ResendEmailVerificationView(APIView):
         serializer = ResendEmailVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        resend_verification_email(
+        resend_email_verification(
             email=serializer.validated_data["email"]
         )
 

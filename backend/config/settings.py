@@ -247,17 +247,27 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:5173"],
+    default=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
 )
 
 FRONTEND_URL = env(
     "FRONTEND_URL",
-    default="http://localhost:5173" if DEBUG else "",
+    default="http://localhost:5174" if DEBUG else "",
 )
 
 CSRF_TRUSTED_ORIGINS = env.list(
     "CSRF_TRUSTED_ORIGINS",
-    default=[],
+    default=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
 )
 
 
