@@ -13,11 +13,28 @@ import AuthSocialDivider from '../../components/auth/AuthSocialDivider'
 import type { ApiErrorResponse } from '../../types/api'
 
 interface LocationState {
-  from?: {
-    pathname?: string
-    search?: string
-    hash?: string
+  from?:
+    | string
+    | {
+        pathname?: string
+        search?: string
+        hash?: string
+      }
+}
+
+function resolveDestination(from: LocationState['from']): string {
+  if (typeof from === 'string' && from.startsWith('/')) {
+    return from
   }
+  if (
+    typeof from === 'object' &&
+    from !== null &&
+    typeof from.pathname === 'string' &&
+    from.pathname.startsWith('/')
+  ) {
+    return `${from.pathname}${from.search || ''}${from.hash || ''}`
+  }
+  return '/'
 }
 
 export const LoginPage: React.FC = () => {
@@ -78,10 +95,7 @@ export const LoginPage: React.FC = () => {
 
       // Safely resolve the intended destination (only local paths, preventing open redirects)
       const state = location.state as LocationState | undefined
-      const destination =
-        state?.from?.pathname && state.from.pathname.startsWith('/')
-          ? `${state.from.pathname}${state.from.search || ''}${state.from.hash || ''}`
-          : '/'
+      const destination = resolveDestination(state?.from)
 
       navigate(destination, { replace: true })
     } catch (err: unknown) {
@@ -254,6 +268,7 @@ export const LoginPage: React.FC = () => {
         Don&apos;t have an account?{' '}
         <Link
           to="/register"
+          state={location.state}
           className="font-semibold text-[#408A71] hover:text-[#34745C] hover:underline transition-colors"
         >
           Sign up

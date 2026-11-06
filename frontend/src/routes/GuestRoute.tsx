@@ -4,11 +4,28 @@ import { useAuth } from '../hooks/useAuth'
 import LoadingScreen from '../components/common/LoadingScreen'
 
 interface LocationState {
-  from?: {
-    pathname?: string
-    search?: string
-    hash?: string
+  from?:
+    | string
+    | {
+        pathname?: string
+        search?: string
+        hash?: string
+      }
+}
+
+function resolveDestination(from: LocationState['from']): string {
+  if (typeof from === 'string' && from.startsWith('/')) {
+    return from
   }
+  if (
+    typeof from === 'object' &&
+    from !== null &&
+    typeof from.pathname === 'string' &&
+    from.pathname.startsWith('/')
+  ) {
+    return `${from.pathname}${from.search || ''}${from.hash || ''}`
+  }
+  return '/'
 }
 
 /**
@@ -28,10 +45,7 @@ export const GuestRoute: React.FC = () => {
   // If already authenticated, redirect to the intended destination or landing page (/)
   if (isAuthenticated) {
     const state = location.state as LocationState | undefined
-    const destination =
-      state?.from?.pathname && state.from.pathname.startsWith('/')
-        ? `${state.from.pathname}${state.from.search || ''}${state.from.hash || ''}`
-        : '/'
+    const destination = resolveDestination(state?.from)
 
     return <Navigate to={destination} replace />
   }

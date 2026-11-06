@@ -98,8 +98,27 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           />
         </svg>
       ),
-      onClick: () => navigate('/app/dashboard'),
+      onClick: () => navigate(user?.is_owner ? '/app/owner/dashboard' : '/app/owner/properties/new'),
     },
+    ...(user?.is_owner
+      ? [
+          {
+            id: 'owner-workspace',
+            label: 'Owner Workspace',
+            icon: (
+              <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                />
+              </svg>
+            ),
+            onClick: () => navigate('/app/owner/dashboard'),
+          },
+        ]
+      : []),
     {
       separator: true,
     },
@@ -416,7 +435,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                   </Link>
 
                   <Link
-                    to="/app/dashboard"
+                    to={user?.is_owner ? '/app/owner/dashboard' : '/app/owner/properties/new'}
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-[#111827] hover:text-[#408A71] hover:bg-gray-50 rounded-lg transition-colors"
                   >

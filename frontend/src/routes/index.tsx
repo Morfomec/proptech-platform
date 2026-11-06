@@ -1,8 +1,14 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AuthLayout from '../layouts/AuthLayout'
 import PublicLayout from '../layouts/PublicLayout'
+import OwnerWorkspaceLayout from '../layouts/OwnerWorkspaceLayout'
 import DashboardPage from '../pages/app/DashboardPage'
 import ProfilePage from '../pages/app/ProfilePage'
+import OwnerDashboardPage from '../pages/owner/OwnerDashboardPage'
+import MyPropertiesPage from '../pages/owner/MyPropertiesPage'
+import AddPropertyWizardPage from '../pages/owner/AddPropertyWizardPage'
+import PropertyDetailPage from '../pages/owner/PropertyDetailPage'
+import EditPropertyPage from '../pages/owner/EditPropertyPage'
 import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage'
 import LoginPage from '../pages/auth/LoginPage'
 import RegisterPage from '../pages/auth/RegisterPage'
@@ -14,15 +20,17 @@ import LandingPage from '../pages/public/LandingPage'
 import NotFoundPage from '../pages/public/NotFoundPage'
 import GuestRoute from './GuestRoute'
 import ProtectedRoute from './ProtectedRoute'
+import OwnerRoute from './OwnerRoute'
 
 /**
  * Centralized Application Route Configuration
  *
  * Route Hierarchy:
  * 1. Public Routes: Accessible to all visitors regardless of authentication status.
- * 2. Guest-Only Routes: Wrapped by GuestRoute and AuthLayout (redirects authenticated users to / or their intended destination).
- * 3. Protected Routes: Wrapped by ProtectedRoute under /app (redirects to /login if unauthenticated).
- * 4. Developer & Catch-All Routes: Development sandbox and 404 handler.
+ * 2. Guest-Only Routes: Wrapped by GuestRoute and AuthLayout.
+ * 3. Protected Routes: Wrapped by ProtectedRoute under /app.
+ * 4. Owner Workspace: Nested under /app/owner guarded by OwnerRoute (strictly user.is_owner === true).
+ * 5. Developer & Catch-All Routes: Development sandbox and 404 handler.
  */
 export const router = createBrowserRouter([
   // 1. Public Routes
@@ -85,12 +93,42 @@ export const router = createBrowserRouter([
         path: 'profile',
         element: <ProfilePage />,
       },
-      // Planned nested routes:
-      // { path: 'properties', element: <PropertiesPage /> },
-      // { path: 'properties/new', element: <NewPropertyPage /> },
-      // { path: 'properties/:propertyId', element: <PropertyDetailPage /> },
-      // { path: 'profile', element: <ProfilePage /> },
-      // { path: 'settings', element: <SettingsPage /> },
+      // Dedicated Owner Workspace Routes
+      {
+        path: 'owner',
+        element: <OwnerRoute />,
+        children: [
+          {
+            element: <OwnerWorkspaceLayout />,
+            children: [
+              {
+                index: true,
+                element: <Navigate to="/app/owner/dashboard" replace />,
+              },
+              {
+                path: 'dashboard',
+                element: <OwnerDashboardPage />,
+              },
+              {
+                path: 'properties',
+                element: <MyPropertiesPage />,
+              },
+              {
+                path: 'properties/new',
+                element: <AddPropertyWizardPage />,
+              },
+              {
+                path: 'properties/:propertyId',
+                element: <PropertyDetailPage />,
+              },
+              {
+                path: 'properties/:propertyId/edit',
+                element: <EditPropertyPage />,
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
 

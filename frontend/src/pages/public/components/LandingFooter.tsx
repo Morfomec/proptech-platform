@@ -92,7 +92,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ isAuthenticated })
             <ul className="space-y-3 text-sm">
               <li>
                 <Link
-                  to={isAuthenticated ? '/app/dashboard' : '/register'}
+                  to={isAuthenticated ? '/app/owner/properties/new' : '/register'}
                   className="hover:text-[#408A71] transition-colors"
                 >
                   List Your Property

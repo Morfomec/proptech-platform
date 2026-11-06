@@ -1,11 +1,15 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../../hooks/useAuth'
 
 export interface LandingHeroProps {
-  isAuthenticated: boolean
+  isAuthenticated?: boolean
 }
 
-export const LandingHero: React.FC<LandingHeroProps> = ({ isAuthenticated }) => {
+export const LandingHero: React.FC<LandingHeroProps> = () => {
+  const { isAuthenticated, user } = useAuth()
+  const navigate = useNavigate()
+
   const primaryHeroImage =
     'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=2000&q=85'
   const fallbackHeroImage =
@@ -26,6 +30,25 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ isAuthenticated }) => 
       propertiesSection.scrollIntoView({ behavior: 'smooth' })
     }
   }
+
+  const handleOwnerClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: { from: { pathname: '/app/owner/properties/new' } },
+      })
+    } else if (user?.is_owner === true) {
+      navigate('/app/owner/dashboard')
+    } else {
+      navigate('/app/owner/properties/new')
+    }
+  }
+
+  const ownerCta = !isAuthenticated
+    ? { to: '/login', state: { from: { pathname: '/app/owner/properties/new' } } }
+    : user?.is_owner === true
+    ? { to: '/app/owner/dashboard', state: undefined }
+    : { to: '/app/owner/properties/new', state: undefined }
 
   return (
     <section className="relative w-full min-h-[580px] sm:min-h-[620px] lg:min-h-[680px] flex items-center justify-center overflow-hidden">
@@ -75,8 +98,10 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ isAuthenticated }) => 
           </a>
 
           <Link
-            to={isAuthenticated ? '/app/dashboard' : '/register'}
-            className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-white hover:bg-gray-100 text-[#111827] px-8 py-3.5 text-base font-semibold shadow-md transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            to={ownerCta.to}
+            state={ownerCta.state}
+            onClick={handleOwnerClick}
+            className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-white hover:bg-gray-100 text-[#111827] px-8 py-3.5 text-base font-semibold shadow-md transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
           >
             I&apos;m a Property Owner
           </Link>

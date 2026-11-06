@@ -1,11 +1,15 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../../hooks/useAuth'
 
 export interface HowItWorksProps {
-  isAuthenticated: boolean
+  isAuthenticated?: boolean
 }
 
-export const HowItWorks: React.FC<HowItWorksProps> = ({ isAuthenticated }) => {
+export const HowItWorks: React.FC<HowItWorksProps> = () => {
+  const { isAuthenticated, user } = useAuth()
+  const navigate = useNavigate()
+
   const handleScrollToProperties = (e: React.MouseEvent) => {
     e.preventDefault()
     const propertiesEl = document.getElementById('properties')
@@ -13,6 +17,25 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ isAuthenticated }) => {
       propertiesEl.scrollIntoView({ behavior: 'smooth' })
     }
   }
+
+  const handleOwnerClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: { from: { pathname: '/app/owner/properties/new' } },
+      })
+    } else if (user?.is_owner === true) {
+      navigate('/app/owner/dashboard')
+    } else {
+      navigate('/app/owner/properties/new')
+    }
+  }
+
+  const ownerCta = !isAuthenticated
+    ? { to: '/login', state: { from: { pathname: '/app/owner/properties/new' } } }
+    : user?.is_owner === true
+    ? { to: '/app/owner/dashboard', state: undefined }
+    : { to: '/app/owner/properties/new', state: undefined }
 
   return (
     <section id="how-it-works" className="py-20 bg-white border-t border-gray-100">
@@ -176,8 +199,10 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ isAuthenticated }) => {
 
             {/* CTA */}
             <Link
-              to={isAuthenticated ? '/app/dashboard' : '/register'}
-              className="w-full inline-flex items-center justify-center rounded-xl bg-[#1E293B] hover:bg-[#0F172A] text-white py-3.5 px-6 font-semibold text-sm transition-colors shadow-xs"
+              to={ownerCta.to}
+              state={ownerCta.state}
+              onClick={handleOwnerClick}
+              className="w-full inline-flex items-center justify-center rounded-xl bg-[#1E293B] hover:bg-[#0F172A] text-white py-3.5 px-6 font-semibold text-sm transition-colors shadow-xs cursor-pointer"
             >
               List Your Property
             </Link>

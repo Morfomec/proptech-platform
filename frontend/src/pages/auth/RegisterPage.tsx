@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/ui/toast'
@@ -30,6 +30,7 @@ interface FormErrors {
 export const RegisterPage: React.FC = () => {
   const { register } = useAuth()
   const { addToast } = useToast()
+  const location = useLocation()
 
   const [form, setForm] = useState<FormFields>({
     firstName: '',
@@ -237,6 +238,7 @@ export const RegisterPage: React.FC = () => {
           <div className="pt-2">
             <Link
               to="/login"
+              state={location.state}
               className="inline-flex w-full items-center justify-center rounded-xl bg-[#408A71] px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-[#34745C]"
             >
               Proceed to Sign In
@@ -395,6 +397,7 @@ export const RegisterPage: React.FC = () => {
         Already have an account?{' '}
         <Link
           to="/login"
+          state={location.state}
           className="font-semibold text-[#408A71] hover:text-[#34745C] hover:underline transition-colors"
         >
           Sign in

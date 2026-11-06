@@ -223,7 +223,7 @@ export const ProfilePage: React.FC = () => {
           {/* Navigation & Logout */}
           <div className="flex items-center gap-3 sm:gap-5">
             <Link
-              to="/app/dashboard"
+              to="/app/owner/dashboard"
               className="text-xs sm:text-sm font-medium text-gray-600 hover:text-[#111827] transition-colors"
             >
               Dashboard
@@ -245,7 +245,7 @@ export const ProfilePage: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 text-xs font-medium text-[#6B7280] mb-1">
-              <Link to="/app/dashboard" className="hover:text-[#408A71] transition-colors">
+              <Link to="/app/owner/dashboard" className="hover:text-[#408A71] transition-colors">
                 Dashboard
               </Link>
               <span>/</span>
@@ -469,7 +469,7 @@ export const ProfilePage: React.FC = () => {
 
                 {/* Save Button */}
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
-                  <Link to="/app/dashboard">
+                  <Link to="/app/owner/dashboard">
                     <Button type="button" variant="secondary" size="md">
                       Cancel
                     </Button>
