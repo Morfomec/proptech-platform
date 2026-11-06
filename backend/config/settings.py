@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     # Local applications
     "apps.accounts.apps.AccountsConfig",
     "apps.core.apps.CoreConfig",
+    "apps.properties.apps.PropertiesConfig",
 ]
 
 

@@ -30,6 +30,9 @@ urlpatterns = [
     # Authentication & Accounts API
     path("api/v1/auth/", include("apps.accounts.urls")),
 
+    # Properties & Amenities API
+    path("api/v1/", include("apps.properties.urls")),
+
     # OpenAPI Schema
     path(
         "api/schema/",
