@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import brandConfig from '../../config/brand'
 import {
   Button,
@@ -66,6 +67,15 @@ const samplePropertyRecords: PropertyRecord[] = [
 ]
 
 const UIKitPlaygroundContent: React.FC<UIKitPlaygroundProps> = ({ onNavigateHome }) => {
+  const navigate = useNavigate()
+  const handleNavigateHome = () => {
+    if (onNavigateHome) {
+      onNavigateHome()
+    } else {
+      navigate('/')
+    }
+  }
+
   const { toast, dismissAll } = useToast()
   const [inputValue, setInputValue] = useState('')
   const [isCopied, setIsCopied] = useState<string | null>(null)
@@ -241,15 +251,13 @@ const UIKitPlaygroundContent: React.FC<UIKitPlaygroundProps> = ({ onNavigateHome
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-brand-soft text-brand-deep border border-default">
               Route: /dev/ui-kit
             </span>
-            {onNavigateHome && (
-              <button
-                type="button"
-                onClick={onNavigateHome}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-surface text-heading border border-default hover:bg-background transition-colors shadow-xs"
-              >
-                &larr; Back to Home
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleNavigateHome}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-surface text-heading border border-default hover:bg-background transition-colors shadow-xs"
+            >
+              &larr; Back to Home
+            </button>
           </div>
         </header>
 
