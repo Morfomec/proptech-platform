@@ -183,6 +183,12 @@ class CapabilityPermissionsTests(TestCase):
             is_tenant=False,
             is_owner=True,
         )
+        self.other_owner_user = User.objects.create_user(
+            email="other_owner_only@example.com",
+            password="password123",
+            is_tenant=False,
+            is_owner=True,
+        )
         self.dual_user = User.objects.create_user(
             email="dual_cap@example.com",
             password="password123",
@@ -226,41 +232,141 @@ class CapabilityPermissionsTests(TestCase):
 
     def test_is_owner_or_read_only_permission(self):
         perm = IsOwnerOrReadOnly()
+        own_obj = Mock(owner=self.owner_user)
+        other_obj = Mock(owner=self.other_owner_user)
 
-        # SAFE_METHODS (GET, HEAD, OPTIONS)
+        # 1. Anonymous safe request
+        self.assertTrue(perm.has_permission(self._make_request("GET", self.anon_user), None))
+        self.assertTrue(perm.has_object_permission(self._make_request("GET", self.anon_user), None, own_obj))
+
+        # 2. Tenant safe request
         self.assertTrue(perm.has_permission(self._make_request("GET", self.tenant_user), None))
-        self.assertTrue(perm.has_permission(self._make_request("GET", self.owner_user), None))
+        self.assertTrue(perm.has_object_permission(self._make_request("GET", self.tenant_user), None, own_obj))
 
-        # Unsafe methods (POST, PUT, DELETE)
+        # 3. Tenant write request denied
+        self.assertFalse(perm.has_permission(self._make_request("POST", self.tenant_user), None))
+        self.assertFalse(perm.has_permission(self._make_request("PATCH", self.tenant_user), None))
+        self.assertFalse(perm.has_object_permission(self._make_request("PATCH", self.tenant_user), None, own_obj))
+        self.assertFalse(perm.has_permission(self._make_request("POST", self.anon_user), None))
+
+        # 4. Owner safe request
+        self.assertTrue(perm.has_permission(self._make_request("GET", self.owner_user), None))
+        self.assertTrue(perm.has_object_permission(self._make_request("GET", self.owner_user), None, own_obj))
+
+        # 5. Owner modifying own object allowed
         self.assertTrue(perm.has_permission(self._make_request("POST", self.owner_user), None))
         self.assertTrue(perm.has_permission(self._make_request("POST", self.dual_user), None))
-        self.assertFalse(perm.has_permission(self._make_request("POST", self.tenant_user), None))
-        self.assertFalse(perm.has_permission(self._make_request("POST", self.anon_user), None))
+        self.assertTrue(perm.has_object_permission(self._make_request("PATCH", self.owner_user), None, own_obj))
+        self.assertTrue(perm.has_object_permission(self._make_request("DELETE", self.owner_user), None, own_obj))
+
+        # 6. Owner modifying another owner's object denied
+        self.assertFalse(perm.has_object_permission(self._make_request("PATCH", self.owner_user), None, other_obj))
+        self.assertFalse(perm.has_object_permission(self._make_request("DELETE", self.owner_user), None, other_obj))
 
     def test_is_object_owner_permission(self):
         perm = IsObjectOwner()
 
-        # Target object exposing owner_id
+        # 1. Correct direct owner
         obj_with_id = Mock(owner_id=self.owner_user.pk, spec=["owner_id"])
         self.assertTrue(
             perm.has_object_permission(self._make_request(user=self.owner_user), None, obj_with_id)
         )
-        self.assertFalse(
-            perm.has_object_permission(self._make_request(user=self.tenant_user), None, obj_with_id)
-        )
-        self.assertFalse(
-            perm.has_object_permission(self._make_request(user=self.anon_user), None, obj_with_id)
-        )
-
-        # Target object exposing owner instance
         obj_with_instance = Mock(owner=self.owner_user, spec=["owner"])
         self.assertTrue(
             perm.has_object_permission(
                 self._make_request(user=self.owner_user), None, obj_with_instance
             )
         )
+        obj_with_str_id = Mock(owner_id=str(self.owner_user.pk), spec=["owner_id"])
+        self.assertTrue(
+            perm.has_object_permission(
+                self._make_request(user=self.owner_user), None, obj_with_str_id
+            )
+        )
+
+        # 2. Incorrect owner
+        self.assertFalse(
+            perm.has_object_permission(
+                self._make_request(user=self.other_owner_user), None, obj_with_instance
+            )
+        )
         self.assertFalse(
             perm.has_object_permission(
                 self._make_request(user=self.tenant_user), None, obj_with_instance
             )
+        )
+
+        # 3. Tenant relationship
+        tenant_obj = Mock(tenant=self.tenant_user, spec=["tenant"])
+        tenant_id_obj = Mock(tenant_id=self.tenant_user.pk, spec=["tenant_id"])
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.tenant_user), None, tenant_obj)
+        )
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.tenant_user), None, tenant_id_obj)
+        )
+        self.assertFalse(
+            perm.has_object_permission(self._make_request(user=self.owner_user), None, tenant_obj)
+        )
+
+        # 4. Applicant relationship
+        applicant_obj = Mock(applicant=self.tenant_user, spec=["applicant"])
+        applicant_id_obj = Mock(applicant_id=self.tenant_user.pk, spec=["applicant_id"])
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.tenant_user), None, applicant_obj)
+        )
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.tenant_user), None, applicant_id_obj)
+        )
+        self.assertFalse(
+            perm.has_object_permission(self._make_request(user=self.owner_user), None, applicant_obj)
+        )
+
+        # 5. User relationship
+        user_obj = Mock(user=self.tenant_user, spec=["user"])
+        user_id_obj = Mock(user_id=self.tenant_user.pk, spec=["user_id"])
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.tenant_user), None, user_obj)
+        )
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.tenant_user), None, user_id_obj)
+        )
+        self.assertFalse(
+            perm.has_object_permission(self._make_request(user=self.owner_user), None, user_obj)
+        )
+
+        # 6. Nested property owner
+        nested_prop = Mock(property=Mock(owner=self.owner_user, spec=["owner"]), spec=["property"])
+        nested_prop_id = Mock(property=Mock(owner_id=self.owner_user.pk, spec=["owner_id"]), spec=["property"])
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.owner_user), None, nested_prop)
+        )
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.owner_user), None, nested_prop_id)
+        )
+        self.assertFalse(
+            perm.has_object_permission(self._make_request(user=self.other_owner_user), None, nested_prop)
+        )
+
+        # Secondary nested
+        nested_listing = Mock(
+            listing=Mock(property=Mock(owner=self.owner_user, spec=["owner"]), spec=["property"]),
+            spec=["listing"],
+        )
+        self.assertTrue(
+            perm.has_object_permission(self._make_request(user=self.owner_user), None, nested_listing)
+        )
+
+        # 7. Missing ownership attribute
+        unrelated_obj = Mock(title="Apartment 4B", spec=["title"])
+        self.assertFalse(
+            perm.has_object_permission(self._make_request(user=self.owner_user), None, unrelated_obj)
+        )
+
+        # 8. Unauthenticated request
+        self.assertFalse(
+            perm.has_object_permission(self._make_request(user=self.anon_user), None, obj_with_instance)
+        )
+        self.assertFalse(
+            perm.has_object_permission(self._make_request(user=self.anon_user), None, nested_prop)
         )
