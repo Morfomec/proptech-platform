@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/ui/toast'
@@ -10,6 +10,31 @@ import AuthCard from '../../components/auth/AuthCard'
 import PasswordInput from '../../components/auth/PasswordInput'
 import AuthSocialDivider from '../../components/auth/AuthSocialDivider'
 import type { ApiErrorResponse } from '../../types/api'
+
+interface LocationState {
+  from?:
+    | string
+    | {
+        pathname?: string
+        search?: string
+        hash?: string
+      }
+}
+
+function resolveDestination(from: LocationState['from']): string {
+  if (typeof from === 'string' && from.startsWith('/')) {
+    return from
+  }
+  if (
+    typeof from === 'object' &&
+    from !== null &&
+    typeof from.pathname === 'string' &&
+    from.pathname.startsWith('/')
+  ) {
+    return `${from.pathname}${from.search || ''}${from.hash || ''}`
+  }
+  return '/'
+}
 
 interface FormFields {
   firstName: string
@@ -28,8 +53,9 @@ interface FormErrors {
 }
 
 export const RegisterPage: React.FC = () => {
-  const { register } = useAuth()
+  const { register, loginWithGoogle } = useAuth()
   const { addToast } = useToast()
+  const navigate = useNavigate()
   const location = useLocation()
 
   const [form, setForm] = useState<FormFields>({
@@ -43,6 +69,7 @@ export const RegisterPage: React.FC = () => {
   const [fieldErrors, setFieldErrors] = useState<FormErrors>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState('')
 
@@ -152,12 +179,36 @@ export const RegisterPage: React.FC = () => {
     }
   }
 
-  const handleGoogleClick = () => {
-    addToast({
-      title: 'Google Sign-Up',
-      description: 'Google registration will be available in an upcoming update.',
-      variant: 'info',
-    })
+  const handleGoogleSuccess = async (credential: string) => {
+    if (isSubmitting || isGoogleSubmitting) return
+
+    setGeneralError(null)
+    setIsGoogleSubmitting(true)
+
+    try {
+      await loginWithGoogle(credential)
+
+      addToast({
+        title: 'Welcome to PropTech!',
+        description: 'You have signed in with Google successfully.',
+        variant: 'success',
+      })
+
+      const state = location.state as LocationState | undefined
+      const destination = resolveDestination(state?.from)
+      navigate(destination, { replace: true })
+    } catch (err: unknown) {
+      let errMsg = 'Google registration failed. Please try again.'
+      if (axios.isAxiosError(err) && err.response?.data) {
+        const data = err.response.data as ApiErrorResponse
+        errMsg = data.message || errMsg
+      } else if (err instanceof Error) {
+        errMsg = err.message
+      }
+      setGeneralError(errMsg)
+    } finally {
+      setIsGoogleSubmitting(false)
+    }
   }
 
   const userIcon = (
@@ -203,7 +254,6 @@ export const RegisterPage: React.FC = () => {
     return (
       <AuthCard
         title="Check your inbox"
-        subtitle="Verification link dispatched"
       >
         <div className="py-2 text-center space-y-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-[#408A71] border border-emerald-200">
@@ -262,7 +312,6 @@ export const RegisterPage: React.FC = () => {
   return (
     <AuthCard
       title="Create Account"
-      subtitle="Join thousands of property professionals today."
     >
       {/* General Error Banner */}
       {generalError && (
@@ -390,7 +439,12 @@ export const RegisterPage: React.FC = () => {
       </form>
 
       {/* Social Divider & Google Button */}
-      <AuthSocialDivider onGoogleClick={handleGoogleClick} />
+      <AuthSocialDivider
+        onGoogleSuccess={handleGoogleSuccess}
+        isLoading={isGoogleSubmitting}
+        disabled={isSubmitting}
+        buttonText="signup_with"
+      />
 
       {/* Switch to Login */}
       <div className="mt-4 text-center text-xs sm:text-sm text-[#6B7280]">

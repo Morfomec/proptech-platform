@@ -8,7 +8,6 @@ import OwnerDashboardPage from '../pages/owner/OwnerDashboardPage'
 import MyPropertiesPage from '../pages/owner/MyPropertiesPage'
 import AddPropertyWizardPage from '../pages/owner/AddPropertyWizardPage'
 import PropertyDetailPage from '../pages/owner/PropertyDetailPage'
-import EditPropertyPage from '../pages/owner/EditPropertyPage'
 import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage'
 import LoginPage from '../pages/auth/LoginPage'
 import RegisterPage from '../pages/auth/RegisterPage'
@@ -17,6 +16,9 @@ import ResetPasswordPage from '../pages/auth/ResetPasswordPage'
 import VerifyEmailPage from '../pages/auth/VerifyEmailPage'
 import UIKitPlayground from '../pages/dev/UIKitPlayground'
 import LandingPage from '../pages/public/LandingPage'
+import BrowseRentalsPage from '../pages/public/BrowseRentalsPage'
+import PublicPropertyDetailPage from '../pages/public/PublicPropertyDetailPage'
+import SavedPropertiesPage from '../pages/public/SavedPropertiesPage'
 import NotFoundPage from '../pages/public/NotFoundPage'
 import GuestRoute from './GuestRoute'
 import ProtectedRoute from './ProtectedRoute'
@@ -40,6 +42,30 @@ export const router = createBrowserRouter([
       {
         path: '/',
         element: <LandingPage />,
+      },
+      {
+        path: '/properties',
+        element: <BrowseRentalsPage />,
+      },
+      {
+        path: '/properties/:id',
+        element: <PublicPropertyDetailPage />,
+      },
+      {
+        path: '/rentals',
+        element: <Navigate to="/properties" replace />,
+      },
+      {
+        path: '/rentals/:id',
+        element: <PublicPropertyDetailPage />,
+      },
+      {
+        path: '/saved-properties',
+        element: <SavedPropertiesPage />,
+      },
+      {
+        path: '/saved',
+        element: <Navigate to="/saved-properties" replace />,
       },
     ],
   },
@@ -123,7 +149,7 @@ export const router = createBrowserRouter([
               },
               {
                 path: 'properties/:propertyId/edit',
-                element: <EditPropertyPage />,
+                element: <AddPropertyWizardPage />,
               },
             ],
           },

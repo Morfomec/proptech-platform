@@ -303,6 +303,7 @@ class PropertyDetailSerializer(serializers.ModelSerializer):
     owner = PropertyOwnerSummarySerializer(read_only=True)
     images = PropertyImageSerializer(many=True, read_only=True)
     amenities = PropertyAmenitySummarySerializer(many=True, read_only=True)
+    primary_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Property
@@ -331,12 +332,29 @@ class PropertyDetailSerializer(serializers.ModelSerializer):
             "parking_spaces",
             "parking_details",
             "status",
+            "primary_image_url",
             "images",
             "amenities",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_primary_image_url(self, obj):
+        primary_image = obj.images.filter(is_primary=True).first()
+        if primary_image:
+            image_url = primary_image.image_url
+        else:
+            first_image = obj.images.first()
+            image_url = first_image.image_url if first_image else None
+
+        if not image_url:
+            return None
+
+        request = self.context.get("request")
+        if request and image_url.startswith("/"):
+            return request.build_absolute_uri(image_url)
+        return image_url
 
 
 class PropertyListSerializer(serializers.ModelSerializer):
@@ -352,18 +370,32 @@ class PropertyListSerializer(serializers.ModelSerializer):
             "title",
             "category",
             "property_type",
+            "address_line_1",
             "city",
             "locality",
+            "built_up_area",
+            "bedrooms",
+            "bathrooms",
             "status",
             "primary_image_url",
             "created_at",
+            "updated_at",
         ]
         read_only_fields = fields
 
     def get_primary_image_url(self, obj):
         primary_image = obj.images.filter(is_primary=True).first()
         if primary_image:
-            return primary_image.image_url
-        first_image = obj.images.first()
-        return first_image.image_url if first_image else None
+            image_url = primary_image.image_url
+        else:
+            first_image = obj.images.first()
+            image_url = first_image.image_url if first_image else None
+
+        if not image_url:
+            return None
+
+        request = self.context.get("request")
+        if request and image_url.startswith("/"):
+            return request.build_absolute_uri(image_url)
+        return image_url
 

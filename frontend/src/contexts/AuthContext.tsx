@@ -34,6 +34,11 @@ export interface AuthContextValue {
   login: (credentials: LoginRequest) => Promise<void>
 
   /**
+   * Authenticate or register using a Google Identity Services credential.
+   */
+  loginWithGoogle: (credential: string) => Promise<void>
+
+  /**
    * Register a new user account and dispatch activation email.
    */
   register: (payload: RegisterRequest) => Promise<ApiResponse<RegisterResponseData>>

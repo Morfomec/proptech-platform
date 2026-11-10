@@ -1,87 +1,205 @@
-import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useAuth } from '../../hooks/useAuth'
 import { OWNER_PROPERTIES_QUERY_KEY } from '../../hooks/useOwnerProperties'
 import { propertyService } from '../../services/property.service'
+import { listingService } from '../../services/listing.service'
 import type {
   AmenityItem,
   CreatePropertyPayload,
   FurnishingStatus,
   PropertyCategory,
 } from '../../types/property'
-import { PropertyMapPreview } from '../../components/owner/PropertyMapPreview'
+import type { CreateListingPayload, PublicListingItem } from '../../types/listing'
 
-export interface ImageEntry {
-  image_url: string
-  caption: string
-  is_primary: boolean
+import {
+  PropertyBasicsSection,
+  PropertySpecificationsSection,
+  PropertyLocationSection,
+  AmenitiesSection,
+  PropertyPhotosSection,
+  RentalTermsSection,
+  FormActionBar,
+  PropertySuccessView,
+  type ImageEntry,
+} from '../../components/owner/add-property'
+
+export type { ImageEntry }
+
+const MAX_IMAGES_LIMIT = 15
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+/**
+ * Extracts DRF backend validation errors into field-specific errors,
+ * clean global messages, and a deduped list of unique readable messages.
+ */
+function extractApiErrors(data: unknown): {
+  fieldErrors: Record<string, string>
+  globalError: string | null
+  uniqueErrors: string[]
+} {
+  const fieldErrors: Record<string, string> = {}
+  let globalError: string | null = null
+
+  if (!data || typeof data !== 'object') {
+    const fallback = typeof data === 'string' && data.trim() ? data.trim() : null
+    return {
+      fieldErrors,
+      globalError: fallback,
+      uniqueErrors: fallback ? [fallback] : [],
+    }
+  }
+
+  const raw = data as Record<string, unknown>
+  const errorsPayload =
+    raw.errors && typeof raw.errors === 'object'
+      ? (raw.errors as Record<string, unknown>)
+      : raw
+
+  const processEntry = (key: string, val: unknown) => {
+    if (typeof val === 'string' && val.trim()) {
+      if (['non_field_errors', 'detail', '__all__'].includes(key)) {
+        globalError = globalError ? `${globalError} | ${val.trim()}` : val.trim()
+      } else {
+        fieldErrors[key] = val.trim()
+      }
+    } else if (Array.isArray(val) && val.length > 0) {
+      const first = val[0]
+      if (typeof first === 'string' && first.trim()) {
+        if (['non_field_errors', 'detail', '__all__'].includes(key)) {
+          globalError = globalError ? `${globalError} | ${first.trim()}` : first.trim()
+        } else {
+          fieldErrors[key] = first.trim()
+        }
+      } else if (typeof first === 'object' && first !== null) {
+        processEntry(key, first)
+      }
+    } else if (val && typeof val === 'object' && val !== null) {
+      for (const [subKey, subVal] of Object.entries(val)) {
+        processEntry(subKey, subVal)
+      }
+    }
+  }
+
+  for (const [key, val] of Object.entries(errorsPayload)) {
+    if (key === 'success' || key === 'status_code') continue
+    if (key === 'message' && typeof val === 'string' && val.trim() && val !== 'Request failed.') {
+      if (!globalError) globalError = val.trim()
+      continue
+    }
+    processEntry(key, val)
+  }
+
+  // Cross-map coordinates
+  if (fieldErrors.coordinates) {
+    if (!fieldErrors.latitude) fieldErrors.latitude = fieldErrors.coordinates
+    if (!fieldErrors.longitude) fieldErrors.longitude = fieldErrors.coordinates
+    delete fieldErrors.coordinates
+  }
+
+  // Deduplicate property and image error messages
+  if (fieldErrors.property && fieldErrors.images && fieldErrors.property === fieldErrors.images) {
+    delete fieldErrors.property
+  } else if (fieldErrors.property && fieldErrors.property.toLowerCase().includes('image')) {
+    fieldErrors.images = fieldErrors.property
+    delete fieldErrors.property
+  }
+
+  // Fallback for global message
+  if (!globalError && typeof raw.message === 'string' && raw.message.trim() && raw.message !== 'Request failed.') {
+    globalError = raw.message.trim()
+  } else if (!globalError && typeof raw.detail === 'string' && raw.detail.trim()) {
+    globalError = raw.detail.trim()
+  }
+
+  // Collect unique error strings for clean, deduped user display
+  const errorSet = new Set<string>()
+  if (globalError) errorSet.add(globalError)
+  Object.values(fieldErrors).forEach((msg) => {
+    if (msg) errorSet.add(msg)
+  })
+
+  return { fieldErrors, globalError, uniqueErrors: Array.from(errorSet) }
 }
-
-// Approved DBML Property Types
-const RESIDENTIAL_OPTIONS = [
-  { value: 'independent_house', label: 'Independent House' },
-  { value: 'villa', label: 'Villa' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'studio_apartment', label: 'Studio Apartment' },
-  { value: 'other', label: 'Other' },
-]
-
-const COMMERCIAL_OPTIONS = [
-  { value: 'office', label: 'Office' },
-  { value: 'shop', label: 'Shop' },
-  { value: 'showroom', label: 'Showroom' },
-  { value: 'warehouse', label: 'Warehouse' },
-  { value: 'other', label: 'Other' },
-]
-
-// Fallback standard amenities grouped by display categories
-const FALLBACK_AMENITIES: { id: string; name: string; group: string }[] = [
-  // General & Interior
-  { id: 'wifi', name: 'Wi-Fi', group: 'GENERAL & INTERIOR' },
-  { id: 'ac', name: 'AC', group: 'GENERAL & INTERIOR' },
-  { id: 'pool', name: 'Pool', group: 'GENERAL & INTERIOR' },
-  { id: 'gym', name: 'Gym', group: 'GENERAL & INTERIOR' },
-  { id: 'elevator', name: 'Elevator', group: 'GENERAL & INTERIOR' },
-  // Safety & Security
-  { id: 'cctv', name: 'CCTV', group: 'SAFETY & SECURITY' },
-  { id: 'security-247', name: '24/7 Security', group: 'SAFETY & SECURITY' },
-  { id: 'intercom', name: 'Intercom', group: 'SAFETY & SECURITY' },
-  { id: 'fire-alarm', name: 'Fire Alarm', group: 'SAFETY & SECURITY' },
-  // Other Features
-  { id: 'pet-friendly', name: 'Pet Friendly', group: 'OTHER FEATURES' },
-  { id: 'garden', name: 'Garden', group: 'OTHER FEATURES' },
-]
 
 export const AddPropertyWizardPage: React.FC = () => {
   const navigate = useNavigate()
+  const { propertyId } = useParams<{ propertyId?: string }>()
+  const isEditMode = Boolean(propertyId)
   const queryClient = useQueryClient()
   const { refreshProfile } = useAuth()
 
-  // Master amenities catalogue query
-  const { data: amenitiesCatalogue = [] } = useQuery<AmenityItem[]>({
+  // Master amenities catalogue query (fetched exclusively from backend)
+  const {
+    data: amenitiesCatalogue = [],
+    isLoading: isLoadingAmenities,
+    isError: isAmenitiesError,
+    error: amenitiesError,
+    refetch: refetchAmenities,
+  } = useQuery<AmenityItem[]>({
     queryKey: ['amenities-catalogue'],
     queryFn: () => propertyService.getAmenities(),
     staleTime: 1000 * 60 * 10,
   })
 
-  // Submission & validation state
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [locationConfirmed, setLocationConfirmed] = useState(false)
-  const [geoLocating, setGeoLocating] = useState(false)
-  const [aiGenerating, setAiGenerating] = useState(false)
+  // Fetch existing property for edit mode
+  const {
+    data: existingProperty,
+    isLoading: isLoadingProperty,
+    isError: isPropertyError,
+    error: propertyFetchError,
+    refetch: refetchProperty,
+  } = useQuery({
+    queryKey: ['property', propertyId],
+    queryFn: () => propertyService.getProperty(propertyId!),
+    enabled: isEditMode,
+  })
 
-  // Form State
+  // Fetch owner listings to find associated listing for rent/terms
+  const { data: ownerListings } = useQuery({
+    queryKey: ['owner-listings', propertyId],
+    queryFn: async () => {
+      const res = await listingService.getOwnerListings()
+      return res.results || []
+    },
+    enabled: isEditMode,
+  })
+
+  // Submission & Validation State
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submittingAction, setSubmittingAction] = useState<'publish' | 'draft' | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [uniqueErrors, setUniqueErrors] = useState<string[]>([])
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [geoLocating, setGeoLocating] = useState(false)
+
+  // Persisted IDs for safe retries without duplicating records
+  const [persistedPropertyId, setPersistedPropertyId] = useState<string | null>(null)
+  const [persistedListingId, setPersistedListingId] = useState<string | null>(null)
+  const [listingStatus, setListingStatus] = useState<string | null>(null)
+
+  // Success screen state
+  const [successData, setSuccessData] = useState<{
+    mode: 'published' | 'draft'
+    propertyId: string
+    listingId?: string
+    title: string
+    location: string
+    primaryImageUrl?: string
+    monthlyRent?: number | string
+  } | null>(null)
+
+  // Form Fields State
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState<PropertyCategory>('residential')
   const [propertyType, setPropertyType] = useState('apartment')
   const [builtUpArea, setBuiltUpArea] = useState('')
   const [description, setDescription] = useState('')
 
-  // Details
+  // Specifications
   const [bedrooms, setBedrooms] = useState('')
   const [bathrooms, setBathrooms] = useState('')
   const [furnishingStatus, setFurnishingStatus] = useState<FurnishingStatus>('unfurnished')
@@ -91,7 +209,6 @@ export const AddPropertyWizardPage: React.FC = () => {
   const [selectedAmenityIds, setSelectedAmenityIds] = useState<string[]>([])
 
   // Location
-  const [searchLocation, setSearchLocation] = useState('')
   const [addressLine1, setAddressLine1] = useState('')
   const [addressLine2, setAddressLine2] = useState('')
   const [locality, setLocality] = useState('')
@@ -102,51 +219,77 @@ export const AddPropertyWizardPage: React.FC = () => {
   const [latitude, setLatitude] = useState('')
   const [longitude, setLongitude] = useState('')
 
-  // Images state (clean initial state with zero sample images)
+  // Rental Details
+  const [monthlyRent, setMonthlyRent] = useState('')
+  const [securityDeposit, setSecurityDeposit] = useState('')
+  const [availableFrom, setAvailableFrom] = useState('')
+
+  // Images state (local binary files ready to upload + previews)
   const [images, setImages] = useState<ImageEntry[]>([])
 
-  // New Image URL input state
-  const [imageUrlInput, setImageUrlInput] = useState('')
-  const [imageCaptionInput, setImageCaptionInput] = useState('')
+  // Populate existing property state in edit mode
+  const populatedPropertyIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (existingProperty && populatedPropertyIdRef.current !== existingProperty.id) {
+      populatedPropertyIdRef.current = existingProperty.id
+      setPersistedPropertyId(existingProperty.id)
+      setTitle(existingProperty.title || '')
+      setCategory(existingProperty.category || 'residential')
+      setPropertyType(existingProperty.property_type || 'apartment')
+      setBuiltUpArea(existingProperty.built_up_area ? String(existingProperty.built_up_area) : '')
+      setDescription(existingProperty.description || '')
+      setBedrooms(existingProperty.bedrooms != null ? String(existingProperty.bedrooms) : '')
+      setBathrooms(existingProperty.bathrooms != null ? String(existingProperty.bathrooms) : '')
+      setFurnishingStatus((existingProperty.furnishing_status || 'unfurnished') as FurnishingStatus)
+      setParkingDetails(existingProperty.parking_details || '')
+      setSelectedAmenityIds(existingProperty.amenities ? existingProperty.amenities.map((a) => a.id) : [])
+      setAddressLine1(existingProperty.address_line_1 || '')
+      setAddressLine2(existingProperty.address_line_2 || '')
+      setLocality(existingProperty.locality || '')
+      setCity(existingProperty.city || '')
+      setDistrict(existingProperty.district || '')
+      setState(existingProperty.state || '')
+      setPinCode(existingProperty.pin_code || '')
+      setLatitude(existingProperty.latitude ? String(existingProperty.latitude) : '')
+      setLongitude(existingProperty.longitude ? String(existingProperty.longitude) : '')
 
-  // Map amenities into groups
-  const amenityGroups = React.useMemo(() => {
-    if (amenitiesCatalogue && amenitiesCatalogue.length > 0) {
-      const groups: Record<string, { id: string; name: string }[]> = {
-        'GENERAL & INTERIOR': [],
-        'SAFETY & SECURITY': [],
-        'OTHER FEATURES': [],
+      if (existingProperty.images && existingProperty.images.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setImages(
+          existingProperty.images.map((img) => ({
+            id: img.id,
+            image_url: img.image_url,
+            caption: img.caption || '',
+            is_primary: img.is_primary,
+            uploaded: true,
+          }))
+        )
       }
+    }
+  }, [existingProperty])
 
-      amenitiesCatalogue.forEach((item) => {
-        const cat = (item.category || '').toLowerCase()
-        if (['building', 'appliance', 'hvac', 'connectivity'].includes(cat)) {
-          groups['GENERAL & INTERIOR'].push({ id: item.id, name: item.name })
-        } else if (['safety', 'power_backup', 'accessibility'].includes(cat)) {
-          groups['SAFETY & SECURITY'].push({ id: item.id, name: item.name })
-        } else {
-          groups['OTHER FEATURES'].push({ id: item.id, name: item.name })
-        }
+  // Populate existing listing state in edit mode
+  const populatedListingRef = useRef(false)
+  useEffect(() => {
+    if (ownerListings && existingProperty && !populatedListingRef.current) {
+      const matched = ownerListings.find((l: PublicListingItem) => {
+        if (l.property_id) return l.property_id === existingProperty.id
+        if (l.property?.id) return l.property.id === existingProperty.id
+        return false
       })
-
-      // If any group has items, return it
-      const hasItems = Object.values(groups).some((arr) => arr.length > 0)
-      if (hasItems) return groups
+      if (matched) {
+        populatedListingRef.current = true
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPersistedListingId(matched.id)
+        setListingStatus(matched.status || null)
+        if (matched.monthly_rent != null) setMonthlyRent(String(matched.monthly_rent))
+        if (matched.security_deposit != null) setSecurityDeposit(String(matched.security_deposit))
+        if (matched.available_from) setAvailableFrom(matched.available_from.slice(0, 10))
+      }
     }
+  }, [ownerListings, existingProperty])
 
-    // Fallback standard groups matching screenshot
-    const fallbackGroups: Record<string, { id: string; name: string }[]> = {
-      'GENERAL & INTERIOR': [],
-      'SAFETY & SECURITY': [],
-      'OTHER FEATURES': [],
-    }
-    FALLBACK_AMENITIES.forEach((item) => {
-      fallbackGroups[item.group].push({ id: item.id, name: item.name })
-    })
-    return fallbackGroups
-  }, [amenitiesCatalogue])
-
-  // Handlers
+  // Category switch handler
   const handleCategoryChange = (newCat: PropertyCategory) => {
     setCategory(newCat)
     if (newCat === 'residential') {
@@ -154,14 +297,22 @@ export const AddPropertyWizardPage: React.FC = () => {
     } else {
       setPropertyType('office')
     }
+    setFieldErrors((prev) => {
+      const next = { ...prev }
+      delete next.category
+      delete next.property_type
+      return next
+    })
   }
 
+  // Amenity toggle
   const handleToggleAmenity = (id: string) => {
     setSelectedAmenityIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     )
   }
 
+  // Current GPS Position
   const handleFetchCurrentPosition = () => {
     if (!navigator.geolocation) {
       setApiError('Geolocation is not supported by your browser.')
@@ -174,58 +325,95 @@ export const AddPropertyWizardPage: React.FC = () => {
         setLatitude(pos.coords.latitude.toFixed(6))
         setLongitude(pos.coords.longitude.toFixed(6))
         setGeoLocating(false)
-        setLocationConfirmed(true)
+        setFieldErrors((prev) => {
+          const next = { ...prev }
+          delete next.latitude
+          delete next.longitude
+          delete next.coordinates
+          return next
+        })
       },
       (err) => {
         setGeoLocating(false)
-        setApiError(`Could not fetch location coordinates: ${err.message}`)
+        setApiError(`Could not retrieve location: ${err.message}`)
       },
       { timeout: 10000, enableHighAccuracy: true }
     )
   }
 
-  const handleAddImageUrl = (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    const cleanUrl = imageUrlInput.trim()
-    if (!cleanUrl) return
+  // File Upload Handlers
+  const processFiles = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList)
+    if (files.length === 0) return
 
-    const isFirst = images.length === 0
-    setImages((prev) => [
-      ...prev,
-      {
-        image_url: cleanUrl,
-        caption: imageCaptionInput.trim(),
-        is_primary: isFirst,
-      },
-    ])
-    setImageUrlInput('')
-    setImageCaptionInput('')
-  }
+    let availableSlots = MAX_IMAGES_LIMIT - images.length
+    if (availableSlots <= 0) {
+      setApiError(`A maximum of ${MAX_IMAGES_LIMIT} photos is allowed per property.`)
+      return
+    }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
+    const newEntries: ImageEntry[] = []
+    let hasSizeError = false
+    let hasTypeError = false
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const result = event.target?.result as string
-        if (result) {
-          setImages((prev) => [
-            ...prev,
-            {
-              image_url: result,
-              caption: file.name.replace(/\.[^/.]+$/, ''),
-              is_primary: prev.length === 0,
-            },
-          ])
-        }
+    files.forEach((file) => {
+      if (availableSlots <= 0) return
+
+      if (!ALLOWED_MIME_TYPES.includes(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) {
+        hasTypeError = true
+        return
       }
-      reader.readAsDataURL(file)
+
+      if (file.size > MAX_IMAGE_BYTES) {
+        hasSizeError = true
+        return
+      }
+
+      const previewUrl = URL.createObjectURL(file)
+      newEntries.push({
+        image_url: previewUrl,
+        caption: file.name.replace(/\.[^/.]+$/, ''),
+        is_primary: images.length === 0 && newEntries.length === 0,
+        file,
+        uploaded: false,
+      })
+      availableSlots--
     })
+
+    if (hasSizeError) {
+      setApiError('One or more files exceeded the 10MB limit and were skipped.')
+    } else if (hasTypeError) {
+      setApiError('Only JPG, PNG, and WEBP image formats are supported.')
+    }
+
+    if (newEntries.length > 0) {
+      setImages((prev) => {
+        const combined = [...prev, ...newEntries]
+        if (!combined.some((img) => img.is_primary) && combined.length > 0) {
+          combined[0].is_primary = true
+        }
+        return combined
+      })
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.images
+        delete next.property
+        return next
+      })
+      if (!hasSizeError && !hasTypeError) {
+        setApiError(null)
+      }
+    }
   }
 
-  const handleSetPrimaryImage = (index: number) => {
+  const handleSetPrimary = (index: number) => {
+    const target = images[index]
+    const propId = persistedPropertyId || propertyId
+    if (target?.id && propId) {
+      propertyService.setPrimaryImage(propId, target.id).catch((err) => {
+        console.error('Failed to set primary image on server', err)
+      })
+    }
     setImages((prev) =>
       prev.map((img, i) => ({
         ...img,
@@ -236,26 +424,38 @@ export const AddPropertyWizardPage: React.FC = () => {
 
   const handleRemoveImage = (index: number) => {
     setImages((prev) => {
-      const filtered = prev.filter((_, i) => i !== index)
-      if (filtered.length > 0 && !filtered.some((img) => img.is_primary)) {
-        filtered[0].is_primary = true
+      const target = prev[index]
+      if (target?.file && target.image_url.startsWith('blob:')) {
+        URL.revokeObjectURL(target.image_url)
       }
-      return filtered
+      const propId = persistedPropertyId || propertyId
+      if (target?.id && propId) {
+        propertyService.deletePropertyImage(propId, target.id).catch((err) => {
+          console.error('Failed to delete image on server', err)
+        })
+      }
+      const updated = prev.filter((_, i) => i !== index)
+      if (updated.length > 0 && !updated.some((img) => img.is_primary)) {
+        updated[0].is_primary = true
+      }
+      return updated
     })
   }
 
-  const handleGenerateAiDescription = () => {
-    setAiGenerating(true)
-    setTimeout(() => {
-      const catLabel = category === 'residential' ? 'residential' : 'commercial'
-      const areaText = builtUpArea ? `${builtUpArea} sq. ft.` : 'generously proportioned'
-      const generated = `Exceptional ${catLabel} opportunity featuring a modern ${propertyType.replace('_', ' ')} spanning ${areaText}. Thoughtfully designed with superior natural illumination, premium interior finishes, and direct access to essential neighborhood hubs and major arterial transport links.`
-      setDescription(generated)
-      setAiGenerating(false)
-    }, 600)
+  // Quick Rent Multiplier for Deposit
+  const handleSetDepositMultiplier = (multiplier: number) => {
+    const rentNum = parseFloat(monthlyRent)
+    if (!isNaN(rentNum) && rentNum > 0) {
+      setSecurityDeposit(String(Math.round(rentNum * multiplier)))
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.security_deposit
+        return next
+      })
+    }
   }
 
-  // Parse total parking spaces from parkingDetails
+  // Parse parking spaces from free text
   const computeParkingSpaces = (str: string): number => {
     const matches = str.match(/\d+/g)
     if (matches && matches.length > 0) {
@@ -264,1118 +464,609 @@ export const AddPropertyWizardPage: React.FC = () => {
     return 0
   }
 
-  // Validation
-  const validateForm = (): boolean => {
-    const errors: Record<string, string> = {}
-
-    if (!title.trim()) {
-      errors.title = 'Property title is required.'
-    } else if (title.trim().length < 3) {
-      errors.title = 'Property title must be at least 3 characters.'
-    }
-
-    if (!propertyType) {
-      errors.property_type = 'Please select a property type.'
-    }
-
-    if (!addressLine1.trim()) {
-      errors.address_line_1 = 'Address line 1 is required.'
-    }
-    if (!locality.trim()) {
-      errors.locality = 'Locality is required.'
-    }
-    if (!city.trim()) {
-      errors.city = 'City is required.'
-    }
-    if (!district.trim()) {
-      errors.district = 'District is required.'
-    }
-    if (!state.trim()) {
-      errors.state = 'State is required.'
-    }
-    if (!pinCode.trim()) {
-      errors.pin_code = 'PIN code is required.'
-    }
-
-    if (builtUpArea.trim()) {
-      const area = parseFloat(builtUpArea)
-      if (isNaN(area) || area <= 0) {
-        errors.built_up_area = 'Built-up area must be greater than zero.'
-      }
-    }
-
-    // Coordinates cross-field check
-    const hasLat = Boolean(latitude.trim())
-    const hasLng = Boolean(longitude.trim())
-    if (hasLat !== hasLng) {
-      errors.coordinates = 'Both latitude and longitude must be provided, or both left blank.'
-    }
-
-    setFieldErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
   // Form Submission
-  const handleSubmit = async () => {
+  const handleSubmit = async (wantsPublish: boolean) => {
     if (isSubmitting) return
 
     setApiError(null)
+    setUniqueErrors([])
     setFieldErrors({})
 
-    if (!validateForm()) {
-      setApiError('Please fill in all required fields marked in red.')
+    // Pre-flight check: If publishing immediately, user must have selected at least 1 photo
+    const hasAnyImageToUpload = images.length > 0 || images.some((img) => img.uploaded)
+    if (wantsPublish && !hasAnyImageToUpload) {
+      const msg = 'A property must have at least one uploaded photo before its listing can be published.'
+      setApiError(msg)
+      setUniqueErrors([msg])
+      setFieldErrors({ images: 'Please select at least one property photo.' })
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
 
     setIsSubmitting(true)
+    setSubmittingAction(wantsPublish ? 'publish' : 'draft')
 
     try {
-      // 1. Prepare creation payload strictly matching backend PropertyCreateSerializer
-      // Map valid UUIDs for amenities (only UUIDs are accepted by backend)
-      const validAmenityUuids = selectedAmenityIds.filter((id) =>
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
-      )
+      // 1. Prepare Creation Payload
+      const cleanAddressLine1 = addressLine1.trim()
+      const cleanLocality = locality.trim()
+      const cleanCity = city.trim()
+      const cleanDistrict = district.trim() || cleanCity
+      const cleanState = state.trim()
+      const cleanPinCode = pinCode.trim()
 
       const payload: CreatePropertyPayload = {
         title: title.trim(),
         description: description.trim() || undefined,
         category,
         property_type: propertyType,
-        address_line_1: addressLine1.trim(),
+        address_line_1: cleanAddressLine1,
         address_line_2: addressLine2.trim() || undefined,
-        locality: locality.trim(),
-        city: city.trim(),
-        district: district.trim(),
-        state: state.trim(),
-        pin_code: pinCode.trim(),
+        locality: cleanLocality,
+        city: cleanCity,
+        district: cleanDistrict,
+        state: cleanState,
+        pin_code: cleanPinCode,
         country_code: 'IN',
         latitude: latitude.trim() || null,
         longitude: longitude.trim() || null,
         built_up_area: builtUpArea.trim() ? parseFloat(builtUpArea) : null,
         bedrooms: category === 'residential' && bedrooms.trim() ? parseInt(bedrooms, 10) : null,
         bathrooms: category === 'residential' && bathrooms.trim() ? parseFloat(bathrooms) : null,
-        furnishing_status: furnishingStatus,
+        furnishing_status: furnishingStatus || null,
         parking_spaces: computeParkingSpaces(parkingDetails),
         parking_details: parkingDetails.trim() || undefined,
-        amenity_ids: validAmenityUuids.length > 0 ? validAmenityUuids : undefined,
+        amenity_ids: selectedAmenityIds,
       }
 
-      // 2. POST /api/v1/properties/
-      const createResponse = await propertyService.createProperty(payload)
-      const createdPropertyId = createResponse.data?.id
+      // 2. Create or Update Property asset (Operation 1)
+      let activePropertyId: string | null = persistedPropertyId
+      try {
+        if (!activePropertyId) {
+          const createRes = await propertyService.createProperty(payload)
+          activePropertyId = createRes.data?.id || null
+          if (!activePropertyId) {
+            throw new Error('Property creation did not return a valid property ID.')
+          }
+          setPersistedPropertyId(activePropertyId)
+        } else {
+          await propertyService.updateProperty(activePropertyId, payload)
+        }
+      } catch (propErr) {
+        let errMsg = 'Failed to save property details'
+        if (axios.isAxiosError(propErr) && propErr.response?.data) {
+          const { fieldErrors: pFields, globalError: pGlobal } = extractApiErrors(propErr.response.data)
+          setFieldErrors(pFields)
+          errMsg = Object.values(pFields)[0] || pGlobal || errMsg
+        } else if (propErr instanceof Error) {
+          errMsg = propErr.message
+        }
+        setApiError(`Failed to save property: ${errMsg}`)
+        setUniqueErrors([errMsg])
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        setIsSubmitting(false)
+        setSubmittingAction(null)
+        return
+      }
 
-      // 3. Attach gallery images via POST /api/v1/properties/{id}/images/
-      if (createdPropertyId && images.length > 0) {
-        for (let i = 0; i < images.length; i++) {
-          const img = images[i]
-          // Only send valid URLs over network (ignore local base64 if not accepted)
-          if (img.image_url.startsWith('http://') || img.image_url.startsWith('https://')) {
-            try {
-              await propertyService.addPropertyImage(createdPropertyId, {
-                image_url: img.image_url.trim(),
-                caption: img.caption.trim() || undefined,
+      // 3. Upload gallery images (Operation 2)
+      const nextImages = images.map((img) => ({ ...img }))
+      let imageUploadFailure: string | null = null
+
+      if (nextImages.length > 0) {
+        for (let i = 0; i < nextImages.length; i++) {
+          const currentImg = nextImages[i]
+          if (currentImg.uploaded) continue // Do not re-upload already uploaded images
+
+          try {
+            if (currentImg.file) {
+              const uploadRes = await propertyService.addPropertyImage(activePropertyId, {
+                file: currentImg.file,
+                caption: currentImg.caption.trim() || undefined,
                 display_order: i,
-                is_primary: img.is_primary,
+                is_primary: currentImg.is_primary,
               })
-            } catch {
-              // Non-critical image attachment failure shouldn't abort property creation
+              // eslint-disable-next-line react-hooks/immutability
+              nextImages[i] = {
+                ...currentImg,
+                uploaded: true,
+                error: undefined,
+                id: uploadRes.data?.id || currentImg.id,
+                image_url: uploadRes.data?.image_url || currentImg.image_url,
+              }
+            }
+          } catch (uploadErr) {
+            let errMsg = 'Image upload failed'
+            if (axios.isAxiosError(uploadErr) && uploadErr.response?.data) {
+              const { fieldErrors: imgFieldErrors, globalError: imgGlobalError } =
+                extractApiErrors(uploadErr.response.data)
+              errMsg = imgFieldErrors.file || imgFieldErrors.image || imgGlobalError || errMsg
+            } else if (uploadErr instanceof Error) {
+              errMsg = uploadErr.message
+            }
+            nextImages[i] = {
+              ...currentImg,
+              error: errMsg,
+            }
+            imageUploadFailure = `Failed to upload image "${currentImg.caption || `Photo ${i + 1}`}": ${errMsg}`
+            break // Stop on first image failure so user can resolve and retry
+          }
+        }
+        setImages(nextImages)
+      }
+
+      // If an image upload failed, halt before listing creation to prevent orphan draft listings
+      if (imageUploadFailure) {
+        setApiError(imageUploadFailure)
+        setUniqueErrors([imageUploadFailure])
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        setIsSubmitting(false)
+        setSubmittingAction(null)
+        return
+      }
+
+      // Confirm that at least one photo succeeded if publish is requested
+      const hasUploadedImages = nextImages.some((img) => img.uploaded)
+      if (wantsPublish && !hasUploadedImages) {
+        const msg = 'A property must have at least one uploaded photo before its listing can be published.'
+        setApiError(msg)
+        setUniqueErrors([msg])
+        setFieldErrors({ images: 'Please select and upload at least one property photo.' })
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        setIsSubmitting(false)
+        setSubmittingAction(null)
+        return
+      }
+
+      // 4. Create or Update Listing (Operation 3)
+      let activeListingId: string | null = persistedListingId
+      const shouldCreateListing = wantsPublish || Boolean(monthlyRent.trim())
+
+      if (shouldCreateListing) {
+        const rentAmount = monthlyRent.trim() ? parseFloat(monthlyRent) : 0
+        const depositAmount = securityDeposit.trim() ? parseFloat(securityDeposit) : 0
+        const availFrom = availableFrom.trim() || null
+
+        try {
+          if (!activeListingId) {
+            const listingPayload: CreateListingPayload = {
+              property_id: activePropertyId,
+              title: title.trim(),
+              description: description.trim() || undefined,
+              monthly_rent: rentAmount,
+              security_deposit: depositAmount,
+              available_from: availFrom,
+              status: wantsPublish ? 'published' : 'draft',
+              publish: wantsPublish,
+            }
+            const listingRes = await listingService.createListing(listingPayload)
+            activeListingId = listingRes.data?.id || null
+            if (activeListingId) {
+              setPersistedListingId(activeListingId)
+            }
+          } else {
+            await listingService.updateListing(activeListingId, {
+              title: title.trim(),
+              description: description.trim() || undefined,
+              monthly_rent: rentAmount,
+              security_deposit: depositAmount,
+              available_from: availFrom,
+            })
+            if (wantsPublish) {
+              await listingService.publishListing(activeListingId)
             }
           }
+        } catch (listingErr) {
+          let errMsg = 'Failed to create listing'
+          if (axios.isAxiosError(listingErr) && listingErr.response?.data) {
+            const { fieldErrors: lFields, globalError: lGlobal } = extractApiErrors(listingErr.response.data)
+            setFieldErrors(lFields)
+            errMsg = Object.values(lFields)[0] || lGlobal || errMsg
+          } else if (listingErr instanceof Error) {
+            errMsg = listingErr.message
+          }
+          setApiError(`Failed to ${wantsPublish ? 'publish' : 'save'} listing: ${errMsg}`)
+          setUniqueErrors([errMsg])
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          setIsSubmitting(false)
+          setSubmittingAction(null)
+          return
         }
       }
 
-      // 4. Invalidate React Query cache for properties
-      await queryClient.invalidateQueries({ queryKey: [OWNER_PROPERTIES_QUERY_KEY] })
+      // 5. Confirm that listing is published when wantsPublish is true (Operation 4)
+      if (wantsPublish && activeListingId) {
+        try {
+          const verifyRes = await listingService.getListing(activeListingId)
+          if (verifyRes.data?.status !== 'published') {
+            await listingService.publishListing(activeListingId)
+          }
+        } catch (verifyErr) {
+          console.warn('Listing status confirmation warning:', verifyErr)
+        }
+      }
 
-      // 5. Refresh user session so newly activated is_owner capability is reflected
+      // 6. Invalidate caches and refresh owner session
+      await queryClient.invalidateQueries({ queryKey: [OWNER_PROPERTIES_QUERY_KEY] })
       await refreshProfile()
 
-      // 6. Navigate to Owner Dashboard or Properties
-      navigate('/app/owner/dashboard', { replace: true })
+      // 7. Presentation Success View
+      const primaryPhoto =
+        nextImages.find((img) => img.is_primary && img.uploaded)?.image_url ||
+        nextImages.find((img) => img.uploaded)?.image_url
+      setSuccessData({
+        mode: wantsPublish ? 'published' : 'draft',
+        propertyId: activePropertyId,
+        listingId: activeListingId ?? undefined,
+        title: title.trim(),
+        location: [locality, city].filter(Boolean).join(', ') || cleanAddressLine1,
+        primaryImageUrl: primaryPhoto,
+        monthlyRent: monthlyRent.trim() ? parseFloat(monthlyRent) : undefined,
+      })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response) {
-        const errorData = err.response.data
-        const message = errorData.message || 'Failed to create property. Please review your input.'
-
-        if (errorData.errors && typeof errorData.errors === 'object') {
-          const mapped: Record<string, string> = {}
-          for (const [key, val] of Object.entries(errorData.errors)) {
-            if (Array.isArray(val) && val.length > 0) {
-              mapped[key] = String(val[0])
-            } else if (typeof val === 'string') {
-              mapped[key] = val
-            }
-          }
-          setFieldErrors(mapped)
-        }
-
-        setApiError(message)
-      } else {
-        setApiError('A network error occurred. Please check your connection and try again.')
-      }
+      const msg = err instanceof Error ? err.message : 'An unexpected error occurred during submission.'
+      setApiError(msg)
+      setUniqueErrors([msg])
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } finally {
       setIsSubmitting(false)
+      setSubmittingAction(null)
     }
   }
 
-  // Display summary address
+  // Address summary for map
   const fullAddressSummary = [addressLine1, locality, city, district, state, pinCode]
     .filter(Boolean)
     .join(', ')
 
-  const hasAddress = Boolean(fullAddressSummary.trim())
+  // Formatted price preview
+  const formattedRentPreview = useMemo(() => {
+    const val = parseFloat(monthlyRent)
+    if (isNaN(val) || val <= 0) return null
+    return `₹${val.toLocaleString('en-IN')}`
+  }, [monthlyRent])
 
-  const latNum = parseFloat(latitude)
-  const lngNum = parseFloat(longitude)
-  const hasCoordinates = !isNaN(latNum) && !isNaN(lngNum)
+  // Success Confirmation Screen
+  if (successData) {
+    return <PropertySuccessView isEditMode={isEditMode} data={successData} />
+  }
 
-  const formattedLat = hasCoordinates
-    ? `${Math.abs(latNum).toFixed(4)}° ${latNum >= 0 ? 'N' : 'S'}`
-    : '--'
-  const formattedLng = hasCoordinates
-    ? `${Math.abs(lngNum).toFixed(4)}° ${lngNum >= 0 ? 'E' : 'W'}`
-    : '--'
+  // Loading state for edit mode
+  if (isEditMode && isLoadingProperty) {
+    return (
+      <div className="max-w-4xl mx-auto py-16 flex flex-col items-center justify-center space-y-4 text-center">
+        <div className="w-8 h-8 border-3 border-[#408A71] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-500 font-medium">Loading property details...</p>
+      </div>
+    )
+  }
+
+  // Error state for edit mode
+  if (isEditMode && (isPropertyError || !existingProperty)) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 space-y-4">
+        <div className="p-4 bg-red-50 border border-red-200 text-red-900 rounded-xl text-sm">
+          <p className="font-semibold">Property Not Found</p>
+          <p className="text-xs text-red-700 mt-1">
+            {propertyFetchError instanceof Error
+              ? propertyFetchError.message
+              : 'The requested property could not be loaded or you do not have permission to edit it.'}
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={() => void refetchProperty()}
+              className="px-3 py-1.5 text-xs font-medium bg-red-100 hover:bg-red-200 text-red-900 rounded-md cursor-pointer transition-colors"
+            >
+              Retry
+            </button>
+            <Link
+              to="/app/owner/properties"
+              className="text-xs font-medium text-[#408A71] hover:underline"
+            >
+              &larr; Return to My Properties
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6 pb-16 max-w-6xl mx-auto">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#E5E7EB] pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111827]">
-            Add New Property
-          </h1>
-          <p className="text-xs sm:text-sm text-[#6B7280] mt-0.5">
-            Complete the details below to list your property on the portal.
-          </p>
-        </div>
-
-        {/* Top-Right Action Buttons */}
-        <div className="flex items-center gap-3">
-          <Link
-            to="/app/owner/properties"
-            className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#D1D5DB] hover:bg-[#F9FAFB] rounded-lg transition-colors shadow-2xs"
-          >
-            Cancel
+    <div className="max-w-4xl mx-auto space-y-6 pb-16">
+      {/* 1. Header Navigation & Breadcrumbs */}
+      <div className="space-y-2">
+        <nav className="flex items-center gap-2 text-xs text-gray-500">
+          <Link to="/app/owner/dashboard" className="hover:text-[#408A71] transition-colors">
+            Dashboard
           </Link>
+          <span>/</span>
+          <Link to="/app/owner/properties" className="hover:text-[#408A71] transition-colors">
+            My Properties
+          </Link>
+          <span>/</span>
+          {isEditMode ? (
+            <>
+              <span className="text-gray-500 truncate max-w-[150px]">{title || 'Property'}</span>
+              <span>/</span>
+              <span className="text-gray-900 font-medium">Edit</span>
+            </>
+          ) : (
+            <span className="text-gray-900 font-medium">Add Property</span>
+          )}
+        </nav>
+
+        <div className="flex items-center gap-3 border-b border-gray-200 pb-4">
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="px-5 py-2 text-sm font-medium text-white bg-[#408A71] hover:bg-[#34745C] disabled:bg-[#408A71]/60 rounded-lg transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+            onClick={() => navigate('/app/owner/properties')}
+            className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+            title="Back to My Properties"
+            aria-label="Back to My Properties"
           >
-            {isSubmitting ? (
-              <>
-                <svg
-                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                Saving...
-              </>
-            ) : (
-              <>
-                <span className="text-base leading-none font-bold">+</span>
-                Save Property
-              </>
-            )}
+            <svg
+              className="w-5 h-5"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
           </button>
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">
+              {isEditMode ? `Edit Property: ${title || 'Property'}` : 'Add New Property'}
+            </h1>
+          </div>
         </div>
       </div>
 
-      {/* Global Error Alert Banner */}
+      {/* 2. User-Friendly Error Alert Banner */}
       {apiError && (
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm flex items-start gap-3">
-          <svg
-            className="w-5 h-5 text-red-500 shrink-0 mt-0.5"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <div className="flex-1">
-            <p className="font-semibold">{apiError}</p>
+        <div className="p-4 bg-red-50 border border-red-200 text-red-900 rounded-xl text-sm flex items-start gap-3 shadow-xs">
+          <div className="w-5 h-5 text-red-500 shrink-0 mt-0.5">
+            <svg
+              className="w-5 h-5"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <div className="flex-1 space-y-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="font-medium text-red-900 text-sm">{apiError}</h4>
+              <button
+                type="button"
+                onClick={() => setApiError(null)}
+                className="text-red-400 hover:text-red-700 p-1 rounded-lg hover:bg-red-100/60 transition-colors cursor-pointer shrink-0"
+                aria-label="Dismiss error banner"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {uniqueErrors.length > 1 && (
+              <ul className="list-disc list-inside text-xs space-y-1 text-red-700 pt-0.5">
+                {uniqueErrors
+                  .filter((msg) => msg !== apiError)
+                  .map((msg, i) => (
+                    <li key={i}>{msg}</li>
+                  ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
 
-      {/* CARD 1: Basic Information */}
-      <section className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-[#408A71]/10 text-[#408A71] flex items-center justify-center shrink-0">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-          </div>
-          <h2 className="text-sm sm:text-base font-semibold text-[#111827]">
-            Basic Information
-          </h2>
-        </div>
+      {/* 3. Section 1: Basic Information */}
+      <PropertyBasicsSection
+        title={title}
+        onTitleChange={(val) => {
+          setTitle(val)
+          if (fieldErrors.title) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.title
+              return next
+            })
+          }
+        }}
+        category={category}
+        onCategoryChange={handleCategoryChange}
+        propertyType={propertyType}
+        onPropertyTypeChange={setPropertyType}
+        builtUpArea={builtUpArea}
+        onBuiltUpAreaChange={(val) => {
+          setBuiltUpArea(val)
+          if (fieldErrors.built_up_area) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.built_up_area
+              return next
+            })
+          }
+        }}
+        description={description}
+        onDescriptionChange={setDescription}
+        fieldErrors={fieldErrors}
+      />
 
-        {/* Property Title */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-[#374151]">
-            Property Title <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Modern Villa in Sunset Valley"
-            className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all ${
-              fieldErrors.title ? 'border-red-400 bg-red-50/20' : 'border-[#D1D5DB]'
-            }`}
-          />
-          {fieldErrors.title && (
-            <p className="text-xs text-red-600 mt-1">{fieldErrors.title}</p>
-          )}
-        </div>
+      {/* 4. Section 2: Property Specifications */}
+      <PropertySpecificationsSection
+        category={category}
+        bedrooms={bedrooms}
+        onBedroomsChange={(val) => {
+          setBedrooms(val)
+          if (fieldErrors.bedrooms) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.bedrooms
+              return next
+            })
+          }
+        }}
+        bathrooms={bathrooms}
+        onBathroomsChange={(val) => {
+          setBathrooms(val)
+          if (fieldErrors.bathrooms) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.bathrooms
+              return next
+            })
+          }
+        }}
+        furnishingStatus={furnishingStatus}
+        onFurnishingStatusChange={setFurnishingStatus}
+        parkingDetails={parkingDetails}
+        onParkingDetailsChange={setParkingDetails}
+        fieldErrors={fieldErrors}
+      />
 
-        {/* Category & Property Type Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Property Category */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-[#374151]">
-              Property Category <span className="text-red-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 p-1 bg-[#F3F4F6] rounded-lg border border-[#E5E7EB]">
-              <button
-                type="button"
-                onClick={() => handleCategoryChange('residential')}
-                className={`py-2 text-xs sm:text-sm font-medium rounded-md transition-all cursor-pointer ${
-                  category === 'residential'
-                    ? 'bg-white text-[#408A71] shadow-2xs font-semibold border border-[#D1E7DD]'
-                    : 'text-[#6B7280] hover:text-[#111827]'
-                }`}
-              >
-                Residential
-              </button>
-              <button
-                type="button"
-                onClick={() => handleCategoryChange('commercial')}
-                className={`py-2 text-xs sm:text-sm font-medium rounded-md transition-all cursor-pointer ${
-                  category === 'commercial'
-                    ? 'bg-white text-[#408A71] shadow-2xs font-semibold border border-[#D1E7DD]'
-                    : 'text-[#6B7280] hover:text-[#111827]'
-                }`}
-              >
-                Commercial
-              </button>
-            </div>
-          </div>
+      {/* 5. Section 3: Property Location */}
+      <PropertyLocationSection
+        addressLine1={addressLine1}
+        onAddressLine1Change={(val) => {
+          setAddressLine1(val)
+          if (fieldErrors.address_line_1) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.address_line_1
+              return next
+            })
+          }
+        }}
+        addressLine2={addressLine2}
+        onAddressLine2Change={setAddressLine2}
+        locality={locality}
+        onLocalityChange={(val) => {
+          setLocality(val)
+          if (fieldErrors.locality) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.locality
+              return next
+            })
+          }
+        }}
+        city={city}
+        onCityChange={(val) => {
+          setCity(val)
+          if (fieldErrors.city) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.city
+              return next
+            })
+          }
+        }}
+        district={district}
+        onDistrictChange={setDistrict}
+        state={state}
+        onStateChange={(val) => {
+          setState(val)
+          if (fieldErrors.state) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.state
+              return next
+            })
+          }
+        }}
+        pinCode={pinCode}
+        onPinCodeChange={(val) => {
+          setPinCode(val)
+          if (fieldErrors.pin_code) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.pin_code
+              return next
+            })
+          }
+        }}
+        latitude={latitude}
+        longitude={longitude}
+        onCoordinateChange={(lat, lng) => {
+          setLatitude(lat)
+          setLongitude(lng)
+        }}
+        onDetectLocation={handleFetchCurrentPosition}
+        isDetectingLocation={geoLocating}
+        fullAddressSummary={fullAddressSummary}
+        fieldErrors={fieldErrors}
+      />
 
-          {/* Property Type Dropdown */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-[#374151]">
-              Property Type <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <select
-                value={propertyType}
-                onChange={(e) => setPropertyType(e.target.value)}
-                className="w-full appearance-none px-3.5 py-2.5 bg-white border border-[#D1D5DB] rounded-lg text-sm text-[#111827] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all cursor-pointer"
-              >
-                {(category === 'residential' ? RESIDENTIAL_OPTIONS : COMMERCIAL_OPTIONS).map(
-                  (opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  )
-                )}
-              </select>
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                <svg
-                  className="w-4 h-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* 6. Section 4: Amenities & Features */}
+      <AmenitiesSection
+        catalogue={amenitiesCatalogue}
+        selectedIds={selectedAmenityIds}
+        onToggle={handleToggleAmenity}
+        isLoading={isLoadingAmenities}
+        isError={isAmenitiesError}
+        errorMessage={amenitiesError instanceof Error ? amenitiesError.message : undefined}
+        onRetry={() => void refetchAmenities()}
+      />
 
-        {/* Built-up Area */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-[#374151]">
-            Built-up Area
-          </label>
-          <div className="relative">
-            <input
-              type="number"
-              step="any"
-              value={builtUpArea}
-              onChange={(e) => setBuiltUpArea(e.target.value)}
-              placeholder="0.00"
-              className={`w-full pr-16 px-3.5 py-2.5 bg-white border rounded-lg text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all ${
-                fieldErrors.built_up_area ? 'border-red-400 bg-red-50/20' : 'border-[#D1D5DB]'
-              }`}
-            />
-            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-[#6B7280] pointer-events-none">
-              Sq. Ft.
-            </div>
-          </div>
-          {fieldErrors.built_up_area && (
-            <p className="text-xs text-red-600 mt-1">{fieldErrors.built_up_area}</p>
-          )}
-        </div>
+      {/* 7. Section 5: Property Photos */}
+      <PropertyPhotosSection
+        images={images}
+        onFilesSelected={processFiles}
+        onSetPrimary={handleSetPrimary}
+        onRemove={handleRemoveImage}
+        error={fieldErrors.images || fieldErrors.property}
+        maxLimit={MAX_IMAGES_LIMIT}
+      />
 
-        {/* Description with AI generation option */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="block text-xs font-semibold text-[#374151]">
-                Description
-              </label>
-              <p className="text-[11px] text-[#6B7280]">
-                Craft a compelling story for your property to attract tenants.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleGenerateAiDescription}
-              disabled={aiGenerating}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-[#408A71] bg-[#408A71]/10 hover:bg-[#408A71]/20 rounded-md transition-colors cursor-pointer"
-            >
-              <span className="text-sm">✨</span>
-              {aiGenerating ? 'Generating...' : 'Generate with AI'}
-            </button>
-          </div>
-          <textarea
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the property's unique features, neighborhood, proximity to services, etc."
-            className="w-full px-3.5 py-2.5 bg-white border border-[#D1D5DB] rounded-lg text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all"
-          />
-        </div>
-      </section>
+      {/* 8. Section 6: Pricing & Rental Terms */}
+      <RentalTermsSection
+        monthlyRent={monthlyRent}
+        onMonthlyRentChange={(val) => {
+          setMonthlyRent(val)
+          if (fieldErrors.monthly_rent) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.monthly_rent
+              return next
+            })
+          }
+        }}
+        securityDeposit={securityDeposit}
+        onSecurityDepositChange={(val) => {
+          setSecurityDeposit(val)
+          if (fieldErrors.security_deposit) {
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.security_deposit
+              return next
+            })
+          }
+        }}
+        onSetDepositMultiplier={handleSetDepositMultiplier}
+        availableFrom={availableFrom}
+        onAvailableFromChange={setAvailableFrom}
+        formattedRentPreview={formattedRentPreview}
+        fieldErrors={fieldErrors}
+      />
 
-      {/* TWO-COLUMN ROW: Property Details (Left) & Amenities (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* CARD 2: Property Details */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-5 h-full">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-[#408A71]/10 text-[#408A71] flex items-center justify-center shrink-0">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 16v-4" />
-                <path d="M12 8h.01" />
-              </svg>
-            </div>
-            <h2 className="text-sm sm:text-base font-semibold text-[#111827]">
-              Property Details
-            </h2>
-          </div>
-
-          {/* Bedrooms & Bathrooms */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-[#374151]">
-                Bedrooms
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={bedrooms}
-                onChange={(e) => setBedrooms(e.target.value)}
-                placeholder="3"
-                className="w-full px-3.5 py-2.5 bg-white border border-[#D1D5DB] rounded-lg text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-[#374151]">
-                Bathrooms
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={bathrooms}
-                onChange={(e) => setBathrooms(e.target.value)}
-                placeholder="2"
-                className="w-full px-3.5 py-2.5 bg-white border border-[#D1D5DB] rounded-lg text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Furnishing Status */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-[#374151]">
-              Furnishing Status
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  { value: 'fully_furnished', label: 'Fully Furnished' },
-                  { value: 'semi_furnished', label: 'Semi-Furnished' },
-                  { value: 'unfurnished', label: 'Unfurnished' },
-                ] as const
-              ).map((f) => (
-                <button
-                  key={f.value}
-                  type="button"
-                  onClick={() => setFurnishingStatus(f.value)}
-                  className={`py-2 px-1 text-center text-xs font-medium rounded-lg border transition-all cursor-pointer ${
-                    furnishingStatus === f.value
-                      ? 'border-[#408A71] bg-[#408A71]/10 text-[#408A71] font-semibold ring-1 ring-[#408A71]'
-                      : 'border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[#D1D5DB]'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Parking Details */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-[#374151]">
-              Parking Details
-            </label>
-            <div className="relative">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 10.7 2 10.9 2 11v5c0 .6.4 1 1 1h2" />
-                  <circle cx="7" cy="17" r="2" />
-                  <path d="M9 17h6" />
-                  <circle cx="17" cy="17" r="2" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                value={parkingDetails}
-                onChange={(e) => setParkingDetails(e.target.value)}
-                placeholder="e.g. 2 Covered, 1 Open"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-[#D1D5DB] rounded-lg text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* CARD 3: Amenities */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-5 h-full">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-[#408A71]/10 text-[#408A71] flex items-center justify-center shrink-0">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-              </svg>
-            </div>
-            <h2 className="text-sm sm:text-base font-semibold text-[#111827]">
-              Amenities
-            </h2>
-          </div>
-
-          {/* Grouped Amenities Chips */}
-          <div className="space-y-4">
-            {Object.entries(amenityGroups).map(([groupTitle, items]) => {
-              if (items.length === 0) return null
-              return (
-                <div key={groupTitle} className="space-y-2">
-                  <h3 className="text-[11px] font-bold text-[#6B7280] tracking-wider uppercase">
-                    {groupTitle}
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {items.map((item) => {
-                      const isSelected = selectedAmenityIds.includes(item.id)
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => handleToggleAmenity(item.id)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
-                            isSelected
-                              ? 'border-[#408A71] bg-[#408A71]/10 text-[#408A71] font-semibold ring-1 ring-[#408A71]'
-                              : 'border-[#E5E7EB] bg-white text-[#4B5563] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]'
-                          }`}
-                        >
-                          {item.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      </div>
-
-      {/* CARD 4: Location (2-Column inside: Form on left, Map on right) */}
-      <section className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-[#408A71]/10 text-[#408A71] flex items-center justify-center shrink-0">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-          </div>
-          <h2 className="text-sm sm:text-base font-semibold text-[#111827]">
-            Location
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Search & Address Summary */}
-          <div className="lg:col-span-5 space-y-4">
-            {/* Search Location Bar */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-[#374151]">
-                Search Location
-              </label>
-              <div className="relative">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none">
-                  <svg
-                    className="w-4 h-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={searchLocation}
-                  onChange={(e) => setSearchLocation(e.target.value)}
-                  placeholder="e.g. Mavoor Road, Kozhikode, Kerala 673016"
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-[#D1D5DB] rounded-lg text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/30 focus:border-[#408A71] transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Structured Address Fields */}
-            <div className="space-y-3 pt-1">
-              <div>
-                <label className="block text-xs font-semibold text-[#374151] mb-1">
-                  Street Address <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={addressLine1}
-                  onChange={(e) => setAddressLine1(e.target.value)}
-                  placeholder="e.g. Door No. 4/120, Mavoor Road"
-                  className={`w-full px-3 py-2 bg-white border rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71] ${
-                    fieldErrors.address_line_1 ? 'border-red-400' : 'border-[#D1D5DB]'
-                  }`}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-[#374151] mb-1">
-                    Locality <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={locality}
-                    onChange={(e) => setLocality(e.target.value)}
-                    placeholder="e.g. Palayam / Arayidathupalam"
-                    className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#374151] mb-1">
-                    City <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="e.g. Kozhikode"
-                    className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-[#374151] mb-1">
-                    District <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    placeholder="e.g. Kozhikode"
-                    className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#374151] mb-1">
-                    State <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    placeholder="e.g. Kerala"
-                    className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#374151] mb-1">
-                    PIN Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={pinCode}
-                    onChange={(e) => setPinCode(e.target.value)}
-                    placeholder="e.g. 673016"
-                    className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* SELECTED ADDRESS Box */}
-            <div className="bg-[#EBF5F1] border border-[#C5E8DC] rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-[#408A71] tracking-wider uppercase">
-                  Selected Address
-                </span>
-                <button
-                  type="button"
-                  onClick={handleFetchCurrentPosition}
-                  disabled={geoLocating}
-                  className="text-[11px] text-[#408A71] hover:underline flex items-center gap-1 font-medium cursor-pointer"
-                >
-                  <span>📍</span>
-                  {geoLocating ? 'Detecting...' : 'Detect GPS'}
-                </button>
-              </div>
-
-              {hasAddress ? (
-                <p className="text-xs text-[#111827] leading-relaxed font-semibold">
-                  {fullAddressSummary}
-                </p>
-              ) : (
-                <p className="text-xs text-[#6B7280] italic leading-relaxed">
-                  No address entered yet. Enter street address, locality, and city above or use GPS detection.
-                </p>
-              )}
-
-              <div className="flex items-center gap-4 text-[11px] text-[#4B5563]">
-                <div>
-                  <span className="font-semibold text-gray-500 uppercase tracking-wider">
-                    Latitude:{' '}
-                  </span>
-                  <span className="font-mono text-[#111827]">{formattedLat}</span>
-                </div>
-                <div>
-                  <span className="font-semibold text-gray-500 uppercase tracking-wider">
-                    Longitude:{' '}
-                  </span>
-                  <span className="font-mono text-[#111827]">{formattedLng}</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setLocationConfirmed(true)}
-                className={`w-full py-2.5 px-4 text-xs font-semibold rounded-lg transition-colors shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer ${
-                  locationConfirmed
-                    ? 'bg-[#34745C] text-white'
-                    : 'bg-[#408A71] hover:bg-[#34745C] text-white'
-                }`}
-              >
-                {locationConfirmed ? (
-                  <>
-                    <span>✓</span> Location Confirmed
-                  </>
-                ) : (
-                  'Confirm Location'
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Right Column: Isolated Map Preview */}
-          <div className="lg:col-span-7">
-            <PropertyMapPreview
-              latitude={latitude}
-              longitude={longitude}
-              onCoordinateChange={(newLat, newLng) => {
-                setLatitude(newLat)
-                setLongitude(newLng)
-              }}
-              addressSummary={fullAddressSummary}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* CARD 5: Rental Details (Preview Only - Disabled) */}
-      <section className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-[#408A71]/10 text-[#408A71] flex items-center justify-center shrink-0">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect width="20" height="14" x="2" y="5" rx="2" />
-                <line x1="2" x2="22" y1="10" y2="10" />
-              </svg>
-            </div>
-            <h2 className="text-sm sm:text-base font-semibold text-[#111827]">
-              Rental Details
-            </h2>
-          </div>
-
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium rounded-md">
-            <span>ℹ️</span> Coming with Listing Setup
-          </div>
-        </div>
-
-        <p className="text-xs text-[#6B7280]">
-          Physical properties are catalogued separately from rental listings. Monthly rent, deposit, and lease availability are configured when publishing a listing.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-          {/* Monthly Rent */}
-          <div className="space-y-1.5 opacity-75">
-            <label className="block text-xs font-semibold text-[#6B7280]">
-              Monthly Rent ($)
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                disabled
-                placeholder="0.00"
-                className="w-full pr-16 px-3.5 py-2.5 bg-gray-50 border border-[#E5E7EB] rounded-lg text-sm text-gray-500 cursor-not-allowed"
-              />
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                / month
-              </div>
-            </div>
-          </div>
-
-          {/* Security Deposit */}
-          <div className="space-y-1.5 opacity-75">
-            <label className="block text-xs font-semibold text-[#6B7280]">
-              Security Deposit ($)
-            </label>
-            <input
-              type="text"
-              disabled
-              placeholder="0.00"
-              className="w-full px-3.5 py-2.5 bg-gray-50 border border-[#E5E7EB] rounded-lg text-sm text-gray-500 cursor-not-allowed"
-            />
-          </div>
-
-          {/* Available From */}
-          <div className="space-y-1.5 opacity-75">
-            <label className="block text-xs font-semibold text-[#6B7280]">
-              Available from
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                disabled
-                placeholder="mm/dd/yyyy"
-                className="w-full pr-10 px-3.5 py-2.5 bg-gray-50 border border-[#E5E7EB] rounded-lg text-sm text-gray-500 cursor-not-allowed"
-              />
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400">
-                <svg
-                  className="w-4 h-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CARD 6: Property Media */}
-      <section className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-[#408A71]/10 text-[#408A71] flex items-center justify-center shrink-0">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-              <circle cx="9" cy="9" r="2" />
-              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-            </svg>
-          </div>
-          <h2 className="text-sm sm:text-base font-semibold text-[#111827]">
-            Property Media
-          </h2>
-        </div>
-
-        {/* Drag and drop upload target area */}
-        <label className="border-2 border-dashed border-[#D1D5DB] hover:border-[#408A71] bg-[#F9FAFB] hover:bg-[#EBF5F1]/30 rounded-xl p-8 text-center transition-all cursor-pointer block">
-          <input
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <div className="w-12 h-12 mx-auto rounded-full bg-[#408A71]/10 text-[#408A71] flex items-center justify-center mb-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
-              <path d="M12 12v9" />
-              <path d="m16 16-4-4-4 4" />
-            </svg>
-          </div>
-          <p className="text-sm font-semibold text-[#111827]">
-            Click to upload or drag and drop
-          </p>
-          <p className="text-xs text-[#6B7280] mt-0.5">
-            PNG, JPG or WEBP (MAX. 10MB)
-          </p>
-        </label>
-
-        {/* Or add by Image URL row */}
-        <div className="p-3.5 bg-gray-50 rounded-xl border border-[#E5E7EB] space-y-2">
-          <span className="text-xs font-semibold text-gray-700">Or add by Image URL:</span>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="url"
-              value={imageUrlInput}
-              onChange={(e) => setImageUrlInput(e.target.value)}
-              placeholder="https://example.com/property-photo.jpg"
-              className="flex-1 px-3 py-2 bg-white border border-[#D1D5DB] rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71]"
-            />
-            <input
-              type="text"
-              value={imageCaptionInput}
-              onChange={(e) => setImageCaptionInput(e.target.value)}
-              placeholder="Caption (e.g. Master Bedroom)"
-              className="sm:w-48 px-3 py-2 bg-white border border-[#D1D5DB] rounded-lg text-xs text-[#111827] focus:outline-hidden focus:ring-1 focus:ring-[#408A71]"
-            />
-            <button
-              type="button"
-              onClick={handleAddImageUrl}
-              className="px-3.5 py-2 bg-[#408A71] hover:bg-[#34745C] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
-            >
-              + Add Image
-            </button>
-          </div>
-        </div>
-
-        {/* Gallery Thumbnails Row */}
-        {images.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-2">
-            {images.map((img, idx) => (
-              <div
-                key={idx}
-                className="group relative aspect-4/3 rounded-lg overflow-hidden border border-[#E5E7EB] bg-gray-100 shadow-2xs"
-              >
-                <img
-                  src={img.image_url}
-                  alt={img.caption || `Property image ${idx + 1}`}
-                  className="w-full h-full object-cover"
-                />
-
-                {/* Primary Badge */}
-                {img.is_primary && (
-                  <div className="absolute top-2 left-2 bg-[#408A71] text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-xs tracking-wider">
-                    PRIMARY
-                  </div>
-                )}
-
-                {/* Caption Banner */}
-                {img.caption && (
-                  <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-2 py-1 truncate pointer-events-none">
-                    {img.caption}
-                  </div>
-                )}
-
-                {/* Hover Actions */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveImage(idx)}
-                      className="p-1 rounded bg-white/90 text-red-600 hover:bg-white transition-colors cursor-pointer"
-                      title="Remove image"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M3 6h18" />
-                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {!img.is_primary && (
-                    <button
-                      type="button"
-                      onClick={() => handleSetPrimaryImage(idx)}
-                      className="w-full py-1 text-[10px] font-semibold bg-white/95 text-[#408A71] hover:bg-white rounded transition-colors text-center cursor-pointer"
-                    >
-                      Set Primary
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* Quick Add More Card */}
-            <label className="aspect-4/3 rounded-lg border-2 border-dashed border-[#D1D5DB] hover:border-[#408A71] flex flex-col items-center justify-center text-gray-400 hover:text-[#408A71] transition-colors cursor-pointer bg-gray-50/50">
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <span className="text-xl font-bold">+</span>
-              <span className="text-[10px] font-medium">Add more</span>
-            </label>
-          </div>
-        )}
-      </section>
-
-      {/* Page Footer */}
-      <footer className="pt-6 border-t border-[#E5E7EB] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#6B7280]">
-        <p>&copy; 2024 PropTech Solutions Inc. All rights reserved.</p>
-        <div className="flex items-center gap-4">
-          <a href="#" className="hover:text-[#111827] transition-colors">
-            Privacy Policy
-          </a>
-          <a href="#" className="hover:text-[#111827] transition-colors">
-            Terms of Service
-          </a>
-          <a href="#" className="hover:text-[#111827] transition-colors">
-            Cookie Policy
-          </a>
-        </div>
-      </footer>
+      {/* 9. Bottom Action Bar */}
+      <FormActionBar
+        isEditMode={isEditMode}
+        listingStatus={listingStatus}
+        isSubmitting={isSubmitting}
+        submittingAction={submittingAction}
+        imageCount={images.length}
+        onCancel={() => navigate('/app/owner/properties')}
+        onSubmit={handleSubmit}
+      />
     </div>
   )
 }

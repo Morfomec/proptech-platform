@@ -210,6 +210,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [])
 
+  const loginWithGoogle = useCallback(async (credential: string): Promise<void> => {
+    const currentLogoutVersion = logoutVersionRef.current
+    const response = await authService.loginWithGoogle({ credential })
+    const loginData = response.data
+
+    if (!loginData?.access || !loginData?.refresh || !loginData?.user) {
+      throw new Error('Invalid Google authentication response payload.')
+    }
+
+    const persisted = setRefreshToken(loginData.refresh)
+    if (!persisted) {
+      throw new Error('Failed to persist refresh token in browser storage.')
+    }
+
+    if (logoutVersionRef.current !== currentLogoutVersion) {
+      removeRefreshToken()
+      return
+    }
+
+    accessTokenRef.current = loginData.access
+    setUser(loginData.user)
+
+    try {
+      const profileResponse = await authService.getProfile()
+      if (
+        profileResponse.data &&
+        logoutVersionRef.current === currentLogoutVersion
+      ) {
+        setUser(profileResponse.data)
+      }
+    } catch {
+      // Profile fetch failed temporarily; keep user as authenticated User
+    }
+  }, [])
+
   const register = useCallback(
     async (
       payload: RegisterRequest
@@ -263,11 +298,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       isAuthenticated: Boolean(user),
       isInitializing,
       login,
+      loginWithGoogle,
       register,
       logout,
       refreshProfile,
     }),
-    [user, isInitializing, login, register, logout, refreshProfile]
+    [user, isInitializing, login, loginWithGoogle, register, logout, refreshProfile]
   )
 
   return (

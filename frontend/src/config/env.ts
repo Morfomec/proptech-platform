@@ -23,6 +23,10 @@ export interface EnvironmentConfig {
    */
   readonly appUrl: string | undefined
   /**
+   * Google OAuth Web Client ID for Google Identity Services.
+   */
+  readonly googleClientId: string
+  /**
    * Vite runtime mode (e.g., "development", "production", "test").
    */
   readonly mode: string
@@ -99,6 +103,10 @@ export const envConfig: EnvironmentConfig = {
   get appUrl(): string | undefined {
     const raw = import.meta.env.VITE_APP_URL
     return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : undefined
+  },
+  get googleClientId(): string {
+    const raw = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    return typeof raw === 'string' ? raw.trim() : ''
   },
   mode: import.meta.env.MODE,
   isDev: Boolean(import.meta.env.DEV),

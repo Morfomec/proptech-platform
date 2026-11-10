@@ -1,6 +1,7 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -39,6 +40,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
       are strictly restricted to authenticated users with owner capability.
     - Querysets are scoped to the requesting owner.
     """
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_permissions(self):
         if self.action == "create":
@@ -66,7 +68,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
             return PropertyCreateSerializer
         elif self.action in ["update", "partial_update"]:
             return PropertyUpdateSerializer
-        elif self.action == "list":
+        elif self.action in ["list", "my_properties"]:
             return PropertyListSerializer
         return PropertyDetailSerializer
 
@@ -165,11 +167,16 @@ class PropertyViewSet(viewsets.ModelViewSet):
     # ============================================================
     # Image Management Endpoints
     # ============================================================
-    @action(detail=True, methods=["get", "post"], url_path="images")
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="images",
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
     def images(self, request, pk=None):
         """
         GET: List all images for the property.
-        POST: Add a new image to the property gallery.
+        POST: Add a new image to the property gallery (accepts binary file or image_url).
         """
         prop = self.get_object()
 
@@ -190,7 +197,8 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
         image = add_property_image(
             property_instance=prop,
-            image_url=serializer.validated_data["image_url"],
+            image_url=serializer.validated_data.get("image_url"),
+            file=serializer.validated_data.get("file"),
             caption=serializer.validated_data.get("caption"),
             display_order=serializer.validated_data.get("display_order"),
             is_primary=serializer.validated_data.get("is_primary", False),

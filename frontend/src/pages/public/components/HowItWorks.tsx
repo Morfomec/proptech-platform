@@ -10,14 +10,6 @@ export const HowItWorks: React.FC<HowItWorksProps> = () => {
   const { isAuthenticated, user } = useAuth()
   const navigate = useNavigate()
 
-  const handleScrollToProperties = (e: React.MouseEvent) => {
-    e.preventDefault()
-    const propertiesEl = document.getElementById('properties')
-    if (propertiesEl) {
-      propertiesEl.scrollIntoView({ behavior: 'smooth' })
-    }
-  }
-
   const handleOwnerClick = (e: React.MouseEvent) => {
     e.preventDefault()
     if (!isAuthenticated) {
@@ -41,14 +33,10 @@ export const HowItWorks: React.FC<HowItWorksProps> = () => {
     <section id="how-it-works" className="py-20 bg-white border-t border-gray-100">
       <div className="max-w-7xl mx-auto px-6">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-[#111827] tracking-tight mb-3">
+        <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
+          <h2 className="text-3xl sm:text-4xl font-bold text-[#111827] tracking-tight">
             How It Works
           </h2>
-          <p className="text-base sm:text-lg text-[#6B7280] leading-relaxed">
-            PropTech simplifies the rental journey for everyone. Whether you&apos;re looking for
-            your next home or managing a portfolio.
-          </p>
         </div>
 
         {/* Two Large Side-by-Side Cards */}
@@ -121,13 +109,12 @@ export const HowItWorks: React.FC<HowItWorksProps> = () => {
             </div>
 
             {/* CTA */}
-            <a
-              href="#properties"
-              onClick={handleScrollToProperties}
+            <Link
+              to="/properties"
               className="w-full inline-flex items-center justify-center rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white py-3.5 px-6 font-semibold text-sm transition-colors shadow-xs"
             >
               Start Searching
-            </a>
+            </Link>
           </div>
 
           {/* Right Card: For Property Owners */}

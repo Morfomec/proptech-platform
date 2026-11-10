@@ -1,7 +1,12 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import envConfig from '../../config/env'
 
 export interface AuthSocialDividerProps {
+  onGoogleSuccess?: (credential: string) => void
   onGoogleClick?: () => void
+  isLoading?: boolean
+  disabled?: boolean
+  buttonText?: 'signin_with' | 'signup_with' | 'continue_with'
 }
 
 /**
@@ -32,13 +37,93 @@ const GoogleIcon: React.FC<{ className?: string }> = ({
 
 /**
  * AuthSocialDivider
- * Provides the "OR CONTINUE WITH" divider and non-functional Google visual element.
+ * Provides the "OR CONTINUE WITH" divider and Google Identity Services credential authentication.
  */
 export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
+  onGoogleSuccess,
   onGoogleClick,
+  isLoading = false,
+  disabled = false,
+  buttonText = 'continue_with',
 }) => {
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const googleBtnContainerRef = useRef<HTMLDivElement>(null)
+  const [gisReady, setGisReady] = useState(false)
+
+  useEffect(() => {
+    const clientId = envConfig.googleClientId
+    if (!clientId) {
+      return
+    }
+
+    let intervalId: number | null = null
+    let cancelled = false
+
+    const initGis = () => {
+      if (cancelled || !window.google?.accounts?.id || !googleBtnContainerRef.current) {
+        return
+      }
+
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response: { credential: string }) => {
+            if (response?.credential && onGoogleSuccess) {
+              onGoogleSuccess(response.credential)
+            }
+          },
+          cancel_on_tap_outside: true,
+        })
+
+        googleBtnContainerRef.current.innerHTML = ''
+        window.google.accounts.id.renderButton(googleBtnContainerRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: buttonText,
+          shape: 'rectangular',
+          logo_alignment: 'left',
+          width: 320,
+        })
+
+        setGisReady(true)
+      } catch {
+        // Fallback gracefully to default button if GIS initialization encounters an issue
+        setGisReady(false)
+      }
+    }
+
+    if (window.google?.accounts?.id) {
+      initGis()
+    } else {
+      intervalId = window.setInterval(() => {
+        if (window.google?.accounts?.id) {
+          if (intervalId) window.clearInterval(intervalId)
+          initGis()
+        }
+      }, 250)
+    }
+
+    return () => {
+      cancelled = true
+      if (intervalId) {
+        window.clearInterval(intervalId)
+      }
+    }
+  }, [buttonText, onGoogleSuccess])
+
+  const handleFallbackClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
+    if (disabled || isLoading) return
+
+    if (window.google?.accounts?.id && envConfig.googleClientId) {
+      try {
+        window.google.accounts.id.prompt()
+        return
+      } catch {
+        // Prompt blocked or not available
+      }
+    }
+
     if (onGoogleClick) {
       onGoogleClick()
     }
@@ -58,19 +143,66 @@ export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
         </div>
       </div>
 
-      {/* Google Button (Visual Element) */}
-      <button
-        type="button"
-        onClick={handleClick}
-        className="flex w-full h-10.5 sm:h-11 items-center justify-center gap-2.5 rounded-xl border border-gray-200/90 bg-white px-4 text-xs sm:text-sm font-medium text-[#374151] shadow-2xs transition-all hover:bg-gray-50 hover:border-gray-300 focus:outline-hidden focus:ring-2 focus:ring-[#408A71] focus:ring-offset-1 cursor-pointer"
-        aria-label="Continue with Google (Integration coming soon)"
-      >
-        <GoogleIcon className="h-4 w-4" />
-        <span>Google</span>
-      </button>
+      {/* Google Authentication Button */}
+      {isLoading ? (
+        <button
+          type="button"
+          disabled
+          className="flex w-full h-10.5 sm:h-11 items-center justify-center gap-2.5 rounded-xl border border-gray-200/90 bg-gray-50 px-4 text-xs sm:text-sm font-medium text-gray-500 shadow-2xs cursor-not-allowed"
+        >
+          <svg
+            className="animate-spin h-4 w-4 text-[#408A71]"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+          <span>Signing in with Google...</span>
+        </button>
+      ) : (
+        <>
+          {/* Official Google Identity Services Container */}
+          <div
+            ref={googleBtnContainerRef}
+            className={`w-full flex justify-center items-center ${
+              gisReady && !disabled ? 'block' : 'hidden'
+            }`}
+          />
+
+          {/* Fallback button if GIS script is loading, disabled, or blocked */}
+          {(!gisReady || disabled) && (
+            <button
+              type="button"
+              onClick={handleFallbackClick}
+              disabled={disabled}
+              className={`flex w-full h-10.5 sm:h-11 items-center justify-center gap-2.5 rounded-xl border border-gray-200/90 bg-white px-4 text-xs sm:text-sm font-medium text-[#374151] shadow-2xs transition-all ${
+                disabled
+                  ? 'opacity-60 cursor-not-allowed'
+                  : 'hover:bg-gray-50 hover:border-gray-300 focus:outline-hidden focus:ring-2 focus:ring-[#408A71] focus:ring-offset-1 cursor-pointer'
+              }`}
+              aria-label="Continue with Google"
+            >
+              <GoogleIcon className="h-4 w-4" />
+              <span>Continue with Google</span>
+            </button>
+          )}
+        </>
+      )}
     </div>
   )
 }
 
 export default AuthSocialDivider
-

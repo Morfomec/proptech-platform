@@ -88,7 +88,6 @@ export const ForgotPasswordPage: React.FC = () => {
     return (
       <AuthCard
         title="Check Your Inbox"
-        subtitle="Password recovery instructions sent."
       >
         <div className="flex flex-col items-center text-center space-y-5 py-2">
           {/* Sent Mail Icon Badge */}
@@ -143,7 +142,6 @@ export const ForgotPasswordPage: React.FC = () => {
   return (
     <AuthCard
       title="Reset Password"
-      subtitle="Enter your email to receive password reset instructions."
     >
       {/* General Error Banner */}
       {generalError && (

@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views.authentication import (
     ChangePasswordView,
+    GoogleAuthView,
     LoginView,
     LogoutView,
     PasswordResetConfirmView,
@@ -22,6 +23,7 @@ urlpatterns = [
     path("verify-email/", VerifyEmailView.as_view(), name="verify-email"),
     path("resend-email-verification/", ResendEmailVerificationView.as_view(), name="resend-email-verification"),
     path("login/", LoginView.as_view(), name="login"),
+    path("google/", GoogleAuthView.as_view(), name="google-auth"),
     path("token/refresh/", RefreshTokenView.as_view(), name="token-refresh"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("password-reset/request/", PasswordResetRequestView.as_view(), name="password-reset-request"),

@@ -67,7 +67,6 @@ export function configureAuthBridge(handlers: {
 export const apiClient: AxiosInstance = axios.create({
   baseURL: envConfig.apiBaseUrl,
   headers: {
-    'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 })
@@ -84,6 +83,25 @@ interface RetryableRequestConfig extends InternalAxiosRequestConfig {
  */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // Prevent duplicate /api/v1 prefix when baseURL already includes /api/v1
+    if (config.url) {
+      if (config.url.startsWith('/api/v1/')) {
+        config.url = config.url.replace(/^\/api\/v1/, '')
+      } else if (config.url.startsWith('api/v1/')) {
+        config.url = config.url.replace(/^api\/v1/, '')
+      }
+    }
+
+    // When request body is FormData, remove default Content-Type: application/json
+    // so Axios and the browser automatically compute multipart/form-data with boundary
+    if (config.data instanceof FormData && config.headers) {
+      if ('delete' in config.headers && typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type')
+      } else {
+        delete (config.headers as Record<string, unknown>)['Content-Type']
+      }
+    }
+
     const token = getAccessToken()
     if (token) {
       if (config.headers && typeof config.headers.set === 'function') {

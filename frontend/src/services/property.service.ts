@@ -28,7 +28,7 @@ export const propertyService = {
    * Connects to GET /api/v1/properties/me/ (or GET /api/v1/properties/).
    */
   async getMyProperties(params?: FetchPropertiesParams): Promise<PaginatedPropertiesResponse> {
-    const response = await apiClient.get<PaginatedPropertiesResponse>('/api/v1/properties/me/', {
+    const response = await apiClient.get<PaginatedPropertiesResponse>('/properties/me/', {
       params: {
         page: params?.page ?? 1,
         page_size: params?.page_size ?? 20,
@@ -43,7 +43,7 @@ export const propertyService = {
    */
   async getProperty(propertyId: string): Promise<PropertyDetail> {
     const response = await apiClient.get<ApiResponse<PropertyDetail>>(
-      `/api/v1/properties/${propertyId}/`
+      `/properties/${propertyId}/`
     )
     if (!response.data.data) {
       throw new Error(response.data.message || 'Property not found')
@@ -57,7 +57,7 @@ export const propertyService = {
    */
   async createProperty(payload: CreatePropertyPayload): Promise<ApiResponse<CreatedPropertyData>> {
     const response = await apiClient.post<ApiResponse<CreatedPropertyData>>(
-      '/api/v1/properties/',
+      '/properties/',
       payload
     )
     return response.data
@@ -72,7 +72,7 @@ export const propertyService = {
     payload: UpdatePropertyPayload
   ): Promise<ApiResponse<PropertyDetail>> {
     const response = await apiClient.patch<ApiResponse<PropertyDetail>>(
-      `/api/v1/properties/${propertyId}/`,
+      `/properties/${propertyId}/`,
       payload
     )
     return response.data
@@ -83,7 +83,7 @@ export const propertyService = {
    * Connects to DELETE /api/v1/properties/{property_id}/.
    */
   async deleteProperty(propertyId: string): Promise<ApiResponse<void>> {
-    const response = await apiClient.delete<ApiResponse<void>>(`/api/v1/properties/${propertyId}/`)
+    const response = await apiClient.delete<ApiResponse<void>>(`/properties/${propertyId}/`)
     return response.data
   },
 
@@ -93,22 +93,37 @@ export const propertyService = {
    */
   async getPropertyImages(propertyId: string): Promise<PropertyImageItem[]> {
     const response = await apiClient.get<ApiResponse<PropertyImageItem[]>>(
-      `/api/v1/properties/${propertyId}/images/`
+      `/properties/${propertyId}/images/`
     )
     return response.data.data ?? []
   },
 
   /**
    * Add an image asset to a property's gallery.
+   * Supports either binary File uploads via FormData or JSON payloads with image_url.
    * Connects to POST /api/v1/properties/{property_id}/images/.
    */
   async addPropertyImage(
     propertyId: string,
-    payload: AddPropertyImagePayload
+    payload: AddPropertyImagePayload | FormData
   ): Promise<ApiResponse<PropertyImageItem>> {
+    let body: FormData | AddPropertyImagePayload = payload
+    if (!(payload instanceof FormData) && payload.file) {
+      const formData = new FormData()
+      formData.append('file', payload.file)
+      if (payload.caption) formData.append('caption', payload.caption)
+      if (payload.display_order !== undefined) {
+        formData.append('display_order', String(payload.display_order))
+      }
+      if (payload.is_primary !== undefined) {
+        formData.append('is_primary', String(payload.is_primary))
+      }
+      body = formData
+    }
+
     const response = await apiClient.post<ApiResponse<PropertyImageItem>>(
-      `/api/v1/properties/${propertyId}/images/`,
-      payload
+      `/properties/${propertyId}/images/`,
+      body
     )
     return response.data
   },
@@ -122,7 +137,7 @@ export const propertyService = {
     imageId: string
   ): Promise<ApiResponse<void>> {
     const response = await apiClient.delete<ApiResponse<void>>(
-      `/api/v1/properties/${propertyId}/images/${imageId}/`
+      `/properties/${propertyId}/images/${imageId}/`
     )
     return response.data
   },
@@ -136,7 +151,7 @@ export const propertyService = {
     imageId: string
   ): Promise<ApiResponse<PropertyImageItem>> {
     const response = await apiClient.post<ApiResponse<PropertyImageItem>>(
-      `/api/v1/properties/${propertyId}/images/${imageId}/primary/`
+      `/properties/${propertyId}/images/${imageId}/primary/`
     )
     return response.data
   },
@@ -146,7 +161,7 @@ export const propertyService = {
    * Connects to GET /api/v1/amenities/.
    */
   async getAmenities(): Promise<AmenityItem[]> {
-    const response = await apiClient.get<ApiResponse<AmenityItem[]>>('/api/v1/amenities/')
+    const response = await apiClient.get<ApiResponse<AmenityItem[]>>('/amenities/')
     return response.data.data ?? []
   },
 }

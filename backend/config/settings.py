@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.accounts.apps.AccountsConfig",
     "apps.core.apps.CoreConfig",
     "apps.properties.apps.PropertiesConfig",
+    "apps.listings.apps.ListingsConfig",
 ]
 
 
@@ -296,6 +297,15 @@ MEDIA_URL = "/media/"
 
 MEDIA_ROOT = BASE_DIR / "media"
 
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
 
 # ============================================================
 # EMAIL
@@ -329,3 +339,13 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
 SECURE_HSTS_SECONDS = 0
+
+
+# ============================================================
+# GOOGLE OAUTH
+# ============================================================
+
+GOOGLE_CLIENT_ID = env(
+    "GOOGLE_CLIENT_ID",
+    default="",
+)

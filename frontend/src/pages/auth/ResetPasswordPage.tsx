@@ -36,7 +36,6 @@ export const ResetPasswordPage: React.FC = () => {
     return (
       <AuthCard
         title="Invalid Reset Link"
-        subtitle="This password recovery link is incomplete."
       >
         <div className="flex flex-col items-center text-center space-y-5 py-2">
           {/* Warning Badge */}
@@ -90,7 +89,6 @@ export const ResetPasswordPage: React.FC = () => {
     return (
       <AuthCard
         title="Password Reset Complete"
-        subtitle="Your account is now secure."
       >
         <div className="flex flex-col items-center text-center space-y-5 py-2">
           {/* Success Checkmark Badge */}
@@ -203,7 +201,6 @@ export const ResetPasswordPage: React.FC = () => {
   return (
     <AuthCard
       title="Set New Password"
-      subtitle="Enter your new password to restore account access."
     >
       {/* General Error Banner */}
       {generalError && (

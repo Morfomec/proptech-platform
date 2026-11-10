@@ -23,14 +23,6 @@ export const LandingHero: React.FC<LandingHeroProps> = () => {
     }
   }
 
-  const handleScrollToProperties = (e: React.MouseEvent) => {
-    e.preventDefault()
-    const propertiesSection = document.getElementById('properties')
-    if (propertiesSection) {
-      propertiesSection.scrollIntoView({ behavior: 'smooth' })
-    }
-  }
-
   const handleOwnerClick = (e: React.MouseEvent) => {
     e.preventDefault()
     if (!isAuthenticated) {
@@ -69,12 +61,6 @@ export const LandingHero: React.FC<LandingHeroProps> = () => {
 
       {/* Hero Content */}
       <div className="relative z-10 max-w-4xl mx-auto px-6 py-20 sm:py-24 md:py-28 text-center flex flex-col items-center">
-        {/* Introductory Label */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-[#A5E0CB] text-xs font-semibold tracking-wider uppercase border border-white/15 mb-6 shadow-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#A5E0CB]" aria-hidden="true" />
-          FIND YOUR PLACE · MANAGE WITH EASE
-        </div>
-
         {/* Main Headline */}
         <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white mb-6 leading-[1.15] max-w-3xl">
           Find a Home. Manage Your Property.{' '}
@@ -89,13 +75,12 @@ export const LandingHero: React.FC<LandingHeroProps> = () => {
 
         {/* CTA Actions */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
-          <a
-            href="#properties"
-            onClick={handleScrollToProperties}
+          <Link
+            to="/properties"
             className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white px-8 py-3.5 text-base font-semibold shadow-md transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#408A71]"
           >
             Find a Home
-          </a>
+          </Link>
 
           <Link
             to={ownerCta.to}

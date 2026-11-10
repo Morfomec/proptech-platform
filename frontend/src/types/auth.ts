@@ -62,6 +62,13 @@ export interface LoginRequest {
 }
 
 /**
+ * Request payload for POST /api/v1/auth/google/.
+ */
+export interface GoogleAuthRequest {
+  credential: string
+}
+
+/**
  * Data payload returned on successful login (POST /api/v1/auth/login/).
  */
 export interface LoginResponseData {

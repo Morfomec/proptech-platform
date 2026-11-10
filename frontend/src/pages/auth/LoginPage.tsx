@@ -38,7 +38,7 @@ function resolveDestination(from: LocationState['from']): string {
 }
 
 export const LoginPage: React.FC = () => {
-  const { login } = useAuth()
+  const { login, loginWithGoogle } = useAuth()
   const { addToast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
@@ -51,6 +51,7 @@ export const LoginPage: React.FC = () => {
   const [generalError, setGeneralError] = useState<string | null>(null)
   const [isUnverified, setIsUnverified] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
 
   const validateForm = (): boolean => {
     const errors: { email?: string; password?: string } = {}
@@ -134,12 +135,37 @@ export const LoginPage: React.FC = () => {
     }
   }
 
-  const handleGoogleClick = () => {
-    addToast({
-      title: 'Google Sign-In',
-      description: 'Google authentication will be available in an upcoming update.',
-      variant: 'info',
-    })
+  const handleGoogleSuccess = async (credential: string) => {
+    if (isSubmitting || isGoogleSubmitting) return
+
+    setGeneralError(null)
+    setIsUnverified(false)
+    setIsGoogleSubmitting(true)
+
+    try {
+      await loginWithGoogle(credential)
+
+      addToast({
+        title: 'Welcome back!',
+        description: 'You have signed in with Google successfully.',
+        variant: 'success',
+      })
+
+      const state = location.state as LocationState | undefined
+      const destination = resolveDestination(state?.from)
+      navigate(destination, { replace: true })
+    } catch (err: unknown) {
+      let errMsg = 'Google authentication failed. Please try again.'
+      if (axios.isAxiosError(err) && err.response?.data) {
+        const data = err.response.data as ApiErrorResponse
+        errMsg = data.message || errMsg
+      } else if (err instanceof Error) {
+        errMsg = err.message
+      }
+      setGeneralError(errMsg)
+    } finally {
+      setIsGoogleSubmitting(false)
+    }
   }
 
   const mailIcon = (
@@ -164,7 +190,6 @@ export const LoginPage: React.FC = () => {
   return (
     <AuthCard
       title="Welcome back"
-      subtitle="Please enter your details to sign in."
     >
       {/* General Error Banner */}
       {generalError && (
@@ -261,7 +286,12 @@ export const LoginPage: React.FC = () => {
       </form>
 
       {/* Social Divider & Google Button */}
-      <AuthSocialDivider onGoogleClick={handleGoogleClick} />
+      <AuthSocialDivider
+        onGoogleSuccess={handleGoogleSuccess}
+        isLoading={isGoogleSubmitting}
+        disabled={isSubmitting}
+        buttonText="signin_with"
+      />
 
       {/* Switch to Registration */}
       <div className="mt-4 text-center text-xs sm:text-sm text-[#6B7280]">

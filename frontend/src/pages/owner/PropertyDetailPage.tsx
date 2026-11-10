@@ -13,6 +13,7 @@ import { Modal } from '../../components/ui/modal'
 import { Input } from '../../components/ui/input'
 import { Checkbox } from '../../components/ui/checkbox'
 import { ConfirmationDialog } from '../../components/ui/confirmation-dialog'
+import { getMediaUrl } from '../../utils/imageUrl'
 
 const STATUS_CONFIG: Record<PropertyStatus, { variant: BadgeVariant; label: string }> = {
   draft: { variant: 'neutral', label: 'Draft' },
@@ -415,7 +416,7 @@ export const PropertyDetailPage: React.FC = () => {
               <div className="space-y-3">
                 <div className="relative aspect-16/10 w-full overflow-hidden rounded-xl bg-gray-900 flex items-center justify-center">
                   <img
-                    src={activeImage.image_url}
+                    src={getMediaUrl(activeImage.image_url)}
                     alt={activeImage.caption || property.title}
                     className="h-full w-full object-contain"
                   />
@@ -475,7 +476,7 @@ export const PropertyDetailPage: React.FC = () => {
                         }`}
                       >
                         <img
-                          src={img.image_url}
+                          src={getMediaUrl(img.image_url)}
                           alt={img.caption || `Thumbnail ${idx + 1}`}
                           className="h-full w-full object-cover"
                         />

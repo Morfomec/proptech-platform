@@ -1,5 +1,6 @@
 from .authentication import (
     ChangePasswordView,
+    GoogleAuthView,
     LoginView,
     LogoutView,
     PasswordResetConfirmView,
@@ -14,6 +15,7 @@ from .profile import ProfileView
 
 __all__ = [
     "ChangePasswordView",
+    "GoogleAuthView",
     "LoginView",
     "LogoutView",
     "PasswordResetConfirmView",

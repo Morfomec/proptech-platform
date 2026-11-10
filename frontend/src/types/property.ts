@@ -105,11 +105,16 @@ export interface PropertyListItem {
   title: string
   category: PropertyCategory
   property_type: PropertyType | string
+  address_line_1?: string
   city: string
   locality: string
+  built_up_area?: string | number | null
+  bedrooms?: number | null
+  bathrooms?: string | number | null
   status: PropertyStatus
   primary_image_url: string | null
   created_at: string
+  updated_at?: string
 }
 
 /**
@@ -193,7 +198,8 @@ export interface UpdatePropertyPayload {
  * Request payload for POST /api/v1/properties/{property_id}/images/.
  */
 export interface AddPropertyImagePayload {
-  image_url: string
+  image_url?: string
+  file?: File
   caption?: string
   display_order?: number
   is_primary?: boolean

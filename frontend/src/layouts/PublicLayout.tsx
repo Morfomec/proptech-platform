@@ -1,5 +1,5 @@
 import React from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, ScrollRestoration } from 'react-router-dom'
 
 /**
  * PublicLayout
@@ -9,6 +9,7 @@ import { Outlet } from 'react-router-dom'
 export const PublicLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-background text-muted antialiased">
+      <ScrollRestoration />
       <Outlet />
     </div>
   )

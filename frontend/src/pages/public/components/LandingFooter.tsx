@@ -50,28 +50,28 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ isAuthenticated })
             </h4>
             <ul className="space-y-3 text-sm">
               <li>
-                <a
-                  href="#properties"
+                <Link
+                  to="/properties"
                   className="hover:text-[#408A71] transition-colors"
                 >
                   Browse Rentals
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#properties"
+                <Link
+                  to="/properties"
                   className="hover:text-[#408A71] transition-colors"
                 >
                   Featured Listings
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#properties"
+                <Link
+                  to="/properties"
                   className="hover:text-[#408A71] transition-colors"
                 >
                   Search by City
-                </a>
+                </Link>
               </li>
               <li>
                 <a

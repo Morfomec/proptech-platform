@@ -2,6 +2,7 @@ import apiClient from '../api/client'
 import type { ApiResponse } from '../types/api'
 import type {
   ChangePasswordRequest,
+  GoogleAuthRequest,
   LoginRequest,
   LoginResponseData,
   LogoutRequest,
@@ -31,6 +32,20 @@ export const authService = {
     const response = await apiClient.post<ApiResponse<LoginResponseData>>(
       '/auth/login/',
       credentials
+    )
+    return response.data
+  },
+
+  /**
+   * Authenticate or register a user using Google Identity Services credential.
+   * Dispatches POST /api/v1/auth/google/.
+   */
+  async loginWithGoogle(
+    payload: GoogleAuthRequest
+  ): Promise<ApiResponse<LoginResponseData>> {
+    const response = await apiClient.post<ApiResponse<LoginResponseData>>(
+      '/auth/google/',
+      payload
     )
     return response.data
   },

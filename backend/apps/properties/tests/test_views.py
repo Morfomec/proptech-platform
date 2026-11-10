@@ -1,8 +1,13 @@
 import uuid
 from decimal import Decimal
+from io import BytesIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from PIL import Image as PILImage
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -392,4 +397,105 @@ class PropertyAPITests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(res.data["success"])
         self.assertIn("property_type", res.data["errors"])
+
+    # ============================================================
+    # 8. Binary Image Uploads (JPG, PNG, WEBP, Validation & Cleanup)
+    # ============================================================
+    def _create_test_image_file(self, format="JPEG", filename="test.jpg"):
+        buffer = BytesIO()
+        img = PILImage.new("RGB", (100, 100), color="blue")
+        img.save(buffer, format=format)
+        buffer.seek(0)
+        content_type = f"image/{format.lower()}" if format.lower() != "jpg" else "image/jpeg"
+        return SimpleUploadedFile(filename, buffer.read(), content_type=content_type)
+
+    def test_upload_jpg_image_file(self):
+        self.client.force_authenticate(user=self.owner_a)
+        file = self._create_test_image_file(format="JPEG", filename="living_room.jpg")
+
+        url = reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+        res = self.client.post(
+            url,
+            {"file": file, "caption": "Spacious Living Room", "is_primary": True},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(res.data["success"])
+        data = res.data["data"]
+        self.assertTrue(data["is_primary"])
+        self.assertEqual(data["caption"], "Spacious Living Room")
+        self.assertIn(str(self.property_a.id), data["image_url"])
+        self.assertTrue(data["image_url"].endswith(".jpg"))
+
+    def test_upload_png_image_file(self):
+        self.client.force_authenticate(user=self.owner_a)
+        file = self._create_test_image_file(format="PNG", filename="floor_plan.png")
+
+        url = reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+        res = self.client.post(
+            url,
+            {"file": file, "caption": "Floor Plan"},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.data["data"]
+        self.assertTrue(data["image_url"].endswith(".png"))
+
+    def test_upload_webp_image_file(self):
+        self.client.force_authenticate(user=self.owner_a)
+        file = self._create_test_image_file(format="WEBP", filename="terrace.webp")
+
+        url = reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+        res = self.client.post(
+            url,
+            {"file": file, "caption": "Terrace View"},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.data["data"]
+        self.assertTrue(data["image_url"].endswith(".webp"))
+
+    def test_upload_oversized_image_rejected(self):
+        self.client.force_authenticate(user=self.owner_a)
+        oversized_data = b"x" * (10 * 1024 * 1024 + 1024)  # 10MB + 1KB
+        file = SimpleUploadedFile("huge.jpg", oversized_data, content_type="image/jpeg")
+
+        url = reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+        res = self.client.post(url, {"file": file}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", res.data["errors"])
+        self.assertIn("10 MB", str(res.data["errors"]["file"]))
+
+    def test_upload_corrupted_image_rejected(self):
+        self.client.force_authenticate(user=self.owner_a)
+        corrupted_file = SimpleUploadedFile("corrupt.jpg", b"not-a-valid-image", content_type="image/jpeg")
+
+        url = reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+        res = self.client.post(url, {"file": corrupted_file}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", res.data["errors"])
+
+    def test_upload_unsupported_file_extension_rejected(self):
+        self.client.force_authenticate(user=self.owner_a)
+        file = SimpleUploadedFile("document.pdf", b"%PDF-1.4...", content_type="application/pdf")
+
+        url = reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+        res = self.client.post(url, {"file": file}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", res.data["errors"])
+        self.assertIn("Unsupported file extension", str(res.data["errors"]["file"]))
+
+    def test_cleanup_on_database_failure(self):
+        self.client.force_authenticate(user=self.owner_a)
+        file = self._create_test_image_file(format="JPEG", filename="test_cleanup.jpg")
+
+        # Mock PropertyImage.save to raise an unexpected database exception
+        with patch.object(PropertyImage, "save", side_effect=RuntimeError("Simulated DB error")):
+            url = reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+            with self.assertRaises(RuntimeError):
+                self.client.post(url, {"file": file}, format="multipart")
+
+        # Ensure no orphaned image record exists
+        self.assertFalse(PropertyImage.objects.filter(caption="test_cleanup").exists())
+
 
