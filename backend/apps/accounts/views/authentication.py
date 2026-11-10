@@ -11,6 +11,7 @@ from apps.accounts.services.email_verification import verify_email_token
 from apps.accounts.serializers.resend_email_verification import ResendEmailVerificationSerializer
 from apps.accounts.services.resend_email_verification import resend_email_verification
 from apps.accounts.serializers.login import LoginSerializer
+from apps.accounts.serializers.google_auth import GoogleAuthSerializer
 from apps.accounts.serializers.refresh_token import RefreshTokenSerializer
 from apps.accounts.serializers.logout import LogoutSerializer
 from apps.accounts.serializers.password_reset import (
@@ -18,6 +19,7 @@ from apps.accounts.serializers.password_reset import (
     PasswordResetRequestSerializer,
 )
 from apps.accounts.services.authentication import authenticate_user
+from apps.accounts.services.google_auth import authenticate_google_user
 from apps.accounts.services.change_password import change_password
 from apps.accounts.services.refresh_token import refresh_token
 from apps.accounts.services.logout import logout_user
@@ -176,7 +178,7 @@ class ResendEmailVerificationView(APIView):
         serializer = ResendEmailVerificationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        resend_verification_email(
+        resend_email_verification(
             email=serializer.validated_data["email"]
         )
 
@@ -239,6 +241,75 @@ class LoginView(APIView):
             {
                 "success": True,
                 "message": "Login successful.",
+                "data": {
+                    "access": result["access"],
+                    "refresh": result["refresh"],
+                    "user": {
+                        "id": str(user.id),
+                        "email": user.email,
+                        "first_name": user.first_name,
+                        "last_name": user.last_name,
+                        "is_tenant": user.is_tenant,
+                        "is_owner": user.is_owner,
+                        "is_platform_admin": user.is_platform_admin,
+                    },
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class GoogleAuthView(APIView):
+    """
+    Authenticate or register a user using Google Identity Services ID token.
+    Public endpoint: POST /api/v1/auth/google/
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = GoogleAuthSerializer
+
+    @extend_schema(
+        request=GoogleAuthSerializer,
+        responses={
+            200: inline_serializer(
+                name="GoogleAuthResponse",
+                fields={
+                    "success": serializers.BooleanField(),
+                    "message": serializers.CharField(),
+                    "data": inline_serializer(
+                        name="GoogleAuthData",
+                        fields={
+                            "access": serializers.CharField(),
+                            "refresh": serializers.CharField(),
+                            "user": inline_serializer(
+                                name="GoogleAuthUserData",
+                                fields={
+                                    "id": serializers.UUIDField(),
+                                    "email": serializers.EmailField(),
+                                    "first_name": serializers.CharField(),
+                                    "last_name": serializers.CharField(),
+                                    "is_tenant": serializers.BooleanField(),
+                                    "is_owner": serializers.BooleanField(),
+                                    "is_platform_admin": serializers.BooleanField(),
+                                },
+                            ),
+                        },
+                    ),
+                },
+            ),
+        },
+    )
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        result = authenticate_google_user(credential=serializer.validated_data["credential"])
+        user = result["user"]
+
+        return Response(
+            {
+                "success": True,
+                "message": "Google authentication successful.",
                 "data": {
                     "access": result["access"],
                     "refresh": result["refresh"],

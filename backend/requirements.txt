@@ -6,3 +6,5 @@ djangorestframework-simplejwt
 drf-spectacular
 django-cors-headers
 Pillow
+google-auth
+requests

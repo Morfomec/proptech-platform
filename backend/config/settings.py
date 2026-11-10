@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     # Local applications
     "apps.accounts.apps.AccountsConfig",
     "apps.core.apps.CoreConfig",
+    "apps.properties.apps.PropertiesConfig",
+    "apps.listings.apps.ListingsConfig",
 ]
 
 
@@ -237,6 +239,16 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "PropertyCategoryEnum": "apps.properties.models.property.PropertyCategory.choices",
+        "AmenityCategoryEnum": "apps.properties.models.amenity.AmenityCategory.choices",
+        "PropertyStatusEnum": "apps.properties.models.property.PropertyStatus.choices",
+        "ListingStatusEnum": "apps.listings.models.listing.ListingStatus.choices",
+        "ListingCreateStatusEnum": [
+            ("draft", "draft"),
+            ("published", "published"),
+        ],
+    },
 }
 
 
@@ -246,17 +258,27 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:5173"],
+    default=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
 )
 
 FRONTEND_URL = env(
     "FRONTEND_URL",
-    default="http://localhost:5173" if DEBUG else "",
+    default="http://localhost:5174" if DEBUG else "",
 )
 
 CSRF_TRUSTED_ORIGINS = env.list(
     "CSRF_TRUSTED_ORIGINS",
-    default=[],
+    default=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
 )
 
 
@@ -284,6 +306,15 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 
 MEDIA_ROOT = BASE_DIR / "media"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 
 # ============================================================
@@ -318,3 +349,13 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
 SECURE_HSTS_SECONDS = 0
+
+
+# ============================================================
+# GOOGLE OAUTH
+# ============================================================
+
+GOOGLE_CLIENT_ID = env(
+    "GOOGLE_CLIENT_ID",
+    default="",
+)

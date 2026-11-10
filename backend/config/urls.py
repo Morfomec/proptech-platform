@@ -15,6 +15,8 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import (
@@ -29,6 +31,12 @@ urlpatterns = [
 
     # Authentication & Accounts API
     path("api/v1/auth/", include("apps.accounts.urls")),
+
+    # Properties & Amenities API
+    path("api/v1/", include("apps.properties.urls")),
+
+    # Listings API
+    path("api/v1/", include("apps.listings.urls")),
 
     # OpenAPI Schema
     path(
@@ -51,3 +59,6 @@ urlpatterns = [
         name="redoc",
     ),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

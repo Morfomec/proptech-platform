@@ -9,6 +9,7 @@ from .refresh_token import RefreshTokenSerializer
 from .registration import RegistrationSerializer
 from .resend_email_verification import ResendEmailVerificationSerializer
 from .profile import ProfileSerializer
+from .google_auth import GoogleAuthSerializer
 
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "RegistrationSerializer",
     "ResendEmailVerificationSerializer",
     "ProfileSerializer",
+    "GoogleAuthSerializer",
 ]
 

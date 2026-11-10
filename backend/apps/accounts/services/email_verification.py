@@ -123,7 +123,7 @@ def send_verification_email(user, raw_token):
             raise ImproperlyConfigured(
                 "FRONTEND_URL must be explicitly configured in production to send verification emails."
             )
-        frontend_url = "http://localhost:5173"
+        frontend_url = "http://localhost:5174"
 
     verification_url = f"{frontend_url}/verify-email?uid={user.pk}&token={raw_token}"
 

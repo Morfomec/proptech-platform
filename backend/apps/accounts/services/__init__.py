@@ -20,11 +20,14 @@ from .registration import DuplicateEmailError, register_user
 from .resend_email_verification import resend_email_verification
 from .token_blacklist import blacklist_user_refresh_tokens
 from .profile import update_user_profile
+from .google_auth import authenticate_google_user, verify_google_id_token
 
 __all__ = [
     "DuplicateEmailError",
     "InvalidCurrentPasswordError",
     "authenticate_user",
+    "authenticate_google_user",
+    "verify_google_id_token",
     "blacklist_user_refresh_tokens",
     "change_password",
     "confirm_password_reset",
