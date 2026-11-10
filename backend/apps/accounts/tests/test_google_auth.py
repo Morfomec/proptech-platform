@@ -1,5 +1,6 @@
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -11,6 +12,7 @@ from apps.accounts.models import SocialAccount, UserProfile
 User = get_user_model()
 
 
+@override_settings(GOOGLE_CLIENT_ID="test-proptech-client-id.apps.googleusercontent.com")
 class GoogleAuthAPITests(APITestCase):
     def setUp(self):
         self.google_auth_url = reverse("accounts:google-auth")
@@ -287,4 +289,13 @@ class GoogleAuthAPITests(APITestCase):
         self.assertEqual(profile_res.status_code, status.HTTP_200_OK)
         self.assertTrue(profile_res.data["success"])
         self.assertEqual(profile_res.data["data"]["email"], "google_user@example.com")
+
+    # 13. Unconfigured GOOGLE_CLIENT_ID rejected safely
+    @override_settings(GOOGLE_CLIENT_ID="")
+    def test_missing_google_client_id_config_rejected(self):
+        response = self.client.post(self.google_auth_url, {"credential": self.valid_credential})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(response.data["success"])
+        self.assertIn("unavailable", response.data["message"].lower())
+
 

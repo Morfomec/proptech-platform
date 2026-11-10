@@ -340,7 +340,7 @@ class PropertyDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_primary_image_url(self, obj):
+    def get_primary_image_url(self, obj) -> str | None:
         primary_image = obj.images.filter(is_primary=True).first()
         if primary_image:
             image_url = primary_image.image_url
@@ -383,7 +383,7 @@ class PropertyListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_primary_image_url(self, obj):
+    def get_primary_image_url(self, obj) -> str | None:
         primary_image = obj.images.filter(is_primary=True).first()
         if primary_image:
             image_url = primary_image.image_url
