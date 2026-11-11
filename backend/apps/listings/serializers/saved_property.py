@@ -3,8 +3,9 @@ from typing import Any, Dict, Optional
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.listings.models import Listing, ListingStatus, SavedProperty
+from apps.listings.models import Listing, SavedProperty
 from apps.listings.serializers.listing import ListingPropertyListSerializer
+from apps.listings.services.listing_service import get_public_listings_queryset
 
 
 class SavedPropertyActiveListingSerializer(serializers.ModelSerializer):
@@ -71,7 +72,7 @@ class SavedPropertySerializer(serializers.ModelSerializer):
         if hasattr(obj.property, "active_published_listings"):
             active_list = obj.property.active_published_listings
             return active_list[0] if active_list else None
-        return obj.property.listings.filter(status=ListingStatus.PUBLISHED).first()
+        return get_public_listings_queryset(obj.property.listings.all()).first()
 
     @extend_schema_field(serializers.BooleanField())
     def get_is_available(self, obj) -> bool:
@@ -81,7 +82,10 @@ class SavedPropertySerializer(serializers.ModelSerializer):
     def get_property(self, obj) -> Dict[str, Any]:
         active_listing = self._get_active_listing(obj)
         if active_listing is not None:
-            return ListingPropertyListSerializer(obj.property).data
+            return ListingPropertyListSerializer(
+                obj.property,
+                context=self.context,
+            ).data
 
         return {
             "id": str(obj.property.id),

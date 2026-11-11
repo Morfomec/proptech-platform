@@ -86,11 +86,6 @@ class BasePropertyValidatorMixin:
             except Exception:
                 raise serializers.ValidationError({"longitude": "Invalid longitude value."})
 
-        if status != PropertyStatus.DRAFT and (not has_lat or not has_lng):
-            raise serializers.ValidationError(
-                {"coordinates": "Coordinates are required when property is not in draft status."}
-            )
-
     def validate_built_up_area_val(self, built_up_area):
         if built_up_area is not None:
             try:

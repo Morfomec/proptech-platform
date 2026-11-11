@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.postgres",
 
     # Third-party
     "rest_framework",
@@ -59,6 +60,9 @@ INSTALLED_APPS = [
     "apps.core.apps.CoreConfig",
     "apps.properties.apps.PropertiesConfig",
     "apps.listings.apps.ListingsConfig",
+    "apps.leasing.apps.LeasingConfig",
+    "apps.documents.apps.DocumentsConfig",
+    "apps.notifications.apps.NotificationsConfig",
 ]
 
 
@@ -212,6 +216,22 @@ REST_FRAMEWORK = {
             "THROTTLE_RATE_PASSWORD_RESET_REQUEST",
             default="3/hour",
         ),
+        "login": env(
+            "THROTTLE_RATE_LOGIN",
+            default="10/minute",
+        ),
+        "google_auth": env(
+            "THROTTLE_RATE_GOOGLE_AUTH",
+            default="10/minute",
+        ),
+        "token_refresh": env(
+            "THROTTLE_RATE_TOKEN_REFRESH",
+            default="30/minute",
+        ),
+        "password_reset_confirm": env(
+            "THROTTLE_RATE_PASSWORD_RESET_CONFIRM",
+            default="5/minute",
+        ),
     },
 }
 
@@ -248,6 +268,21 @@ SPECTACULAR_SETTINGS = {
             ("draft", "draft"),
             ("published", "published"),
         ],
+        "ApplicationStatusEnum": "apps.leasing.models.application.ApplicationStatus.choices",
+        "ApplicationReviewStatusEnum": [
+            ("under_review", "under_review"),
+            ("approved", "approved"),
+            ("rejected", "rejected"),
+        ],
+        "TenancyStatusEnum": "apps.leasing.models.tenancy.TenancyStatus.choices",
+        "DocumentTypeEnum": (
+            "apps.documents.models.document.DocumentType.choices"
+        ),
+        "DocumentStatusEnum": (
+            "apps.documents.models.document.DocumentStatus.choices"
+        ),
+        "NotificationTypeEnum": "apps.notifications.models.NotificationType",
+        "RelatedObjectTypeEnum": "apps.notifications.models.RelatedObjectType",
     },
 }
 
@@ -306,6 +341,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 
 MEDIA_ROOT = BASE_DIR / "media"
+
+PRIVATE_MEDIA_ROOT = BASE_DIR / "private_media"
 
 STORAGES = {
     "default": {

@@ -87,7 +87,7 @@ class ListingAPITests(APITestCase):
             parking_spaces=2,
             latitude=Decimal("11.2588"),
             longitude=Decimal("75.7804"),
-            status=PropertyStatus.DRAFT,
+            status=PropertyStatus.AVAILABLE,
         )
         self.property_a.amenities.add(self.amenity)
         self.image_a = PropertyImage.objects.create(
@@ -111,7 +111,11 @@ class ListingAPITests(APITestCase):
             state="Karnataka",
             pin_code="560045",
             country_code="IN",
-            status=PropertyStatus.DRAFT,
+            bedrooms=1,
+            bathrooms=Decimal("1.0"),
+            latitude=Decimal("13.0458"),
+            longitude=Decimal("77.6203"),
+            status=PropertyStatus.AVAILABLE,
         )
 
         # 4. Listings for Owner A's Property A
@@ -139,7 +143,11 @@ class ListingAPITests(APITestCase):
             district="Wayanad",
             state="Kerala",
             pin_code="673577",
-            status=PropertyStatus.DRAFT,
+            bedrooms=2,
+            bathrooms=Decimal("2.0"),
+            latitude=Decimal("11.5564"),
+            longitude=Decimal("76.1333"),
+            status=PropertyStatus.AVAILABLE,
         )
 
         self.draft_listing = Listing.objects.create(
@@ -163,7 +171,11 @@ class ListingAPITests(APITestCase):
             district="Bengaluru Urban",
             state="Karnataka",
             pin_code="560038",
-            status=PropertyStatus.DRAFT,
+            bedrooms=3,
+            bathrooms=Decimal("3.0"),
+            latitude=Decimal("12.9784"),
+            longitude=Decimal("77.6408"),
+            status=PropertyStatus.AVAILABLE,
         )
         self.closed_listing = Listing.objects.create(
             property=self.property_b_closed,
@@ -434,9 +446,7 @@ class ListingAPITests(APITestCase):
         self.assertIn("at least one uploaded image", str(errors["property"]))
 
     def test_publish_draft_listing_with_images_succeeds(self):
-        # Attach image to property_a2 (which explicitly has no coordinates)
-        self.assertIsNone(self.property_a2.latitude)
-        self.assertIsNone(self.property_a2.longitude)
+        # Attach image to property_a2 (available property)
         PropertyImage.objects.create(
             property=self.property_a2,
             image_url="https://images.example.com/wayanad/retreat.jpg",
@@ -508,3 +518,338 @@ class ListingAPITests(APITestCase):
         # Owner B attempts close on Owner A's listing -> 404
         res_close = self.client.post(reverse("listings:listing-close", kwargs={"pk": self.published_listing.id}))
         self.assertEqual(res_close.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_create_listing_with_publish_true_rejects_unavailable_property(self):
+        PropertyImage.objects.create(
+            property=self.property_b,
+            image_url="https://images.example.com/bengaluru/studio.jpg",
+            is_primary=True,
+        )
+        self.client.force_authenticate(user=self.owner_b)
+
+        for disallowed_status in (
+            PropertyStatus.OCCUPIED,
+            PropertyStatus.MAINTENANCE,
+            PropertyStatus.INACTIVE,
+        ):
+            with self.subTest(property_status=disallowed_status):
+                Property.objects.filter(pk=self.property_b.pk).update(status=disallowed_status)
+                payload = {
+                    "property_id": str(self.property_b.id),
+                    "title": "Unavailable Property Listing",
+                    "monthly_rent": "22000.00",
+                    "publish": True,
+                }
+                res = self.client.post(reverse("listings:listing-list"), payload, format="json")
+                self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertFalse(res.data["success"])
+                self.assertIn("property", res.data["errors"])
+
+    def test_publish_endpoint_rejects_unavailable_property(self):
+        PropertyImage.objects.create(
+            property=self.property_a2,
+            image_url="https://images.example.com/wayanad/retreat.jpg",
+            is_primary=True,
+        )
+        self.client.force_authenticate(user=self.owner_a)
+        url = reverse("listings:listing-publish", kwargs={"pk": self.draft_listing.id})
+
+        for disallowed_status in (
+            PropertyStatus.OCCUPIED,
+            PropertyStatus.MAINTENANCE,
+            PropertyStatus.INACTIVE,
+        ):
+            with self.subTest(property_status=disallowed_status):
+                Property.objects.filter(pk=self.property_a2.pk).update(status=disallowed_status)
+                res = self.client.post(url)
+                self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertFalse(res.data["success"])
+                self.assertIn("property", res.data["errors"])
+                self.draft_listing.refresh_from_db()
+                self.assertEqual(self.draft_listing.status, ListingStatus.DRAFT)
+
+    def test_publishing_via_api_transitions_draft_property_without_coordinates_to_available(self):
+        Property.objects.filter(pk=self.property_b.pk).update(
+            status=PropertyStatus.DRAFT,
+            latitude=None,
+            longitude=None,
+        )
+        self.client.force_authenticate(user=self.owner_b)
+
+        # Missing image -> 400 and property stays in draft
+        payload = {
+            "property_id": str(self.property_b.id),
+            "title": "No Coords Studio",
+            "monthly_rent": "18000.00",
+            "publish": True,
+        }
+        res_fail = self.client.post(reverse("listings:listing-list"), payload, format="json")
+        self.assertEqual(res_fail.status_code, status.HTTP_400_BAD_REQUEST)
+        self.property_b.refresh_from_db()
+        self.assertEqual(self.property_b.status, PropertyStatus.DRAFT)
+
+        # With image & publish=True -> 201 and property transitions to available
+        PropertyImage.objects.create(
+            property=self.property_b,
+            image_url="https://images.example.com/bengaluru/studio.jpg",
+            is_primary=True,
+        )
+        res_ok = self.client.post(reverse("listings:listing-list"), payload, format="json")
+        self.assertEqual(res_ok.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res_ok.data["data"]["status"], ListingStatus.PUBLISHED)
+        self.property_b.refresh_from_db()
+        self.assertEqual(self.property_b.status, PropertyStatus.AVAILABLE)
+
+    def test_admin_has_read_only_oversight_and_cannot_mutate_owner_listings(self):
+        PropertyImage.objects.create(
+            property=self.property_a2,
+            image_url="https://images.example.com/wayanad/retreat.jpg",
+            is_primary=True,
+        )
+        self.client.force_authenticate(user=self.admin_user)
+
+        # Admin can retrieve draft and closed listings for read-only oversight.
+        res_get_draft = self.client.get(
+            reverse("listings:listing-detail", kwargs={"pk": self.draft_listing.id})
+        )
+        self.assertEqual(res_get_draft.status_code, status.HTTP_200_OK)
+
+        # Admin cannot create a listing for another owner's property.
+        res_create = self.client.post(
+            reverse("listings:listing-list"),
+            {
+                "property_id": str(self.property_b.id),
+                "title": "Admin Listing",
+                "monthly_rent": "25000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(res_create.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Admin cannot update another owner's listing (PATCH or PUT).
+        res_patch = self.client.patch(
+            reverse("listings:listing-detail", kwargs={"pk": self.draft_listing.id}),
+            {"title": "Admin Edited Title"},
+            format="json",
+        )
+        self.assertEqual(res_patch.status_code, status.HTTP_403_FORBIDDEN)
+        self.draft_listing.refresh_from_db()
+        self.assertEqual(self.draft_listing.title, "Rustic Plantation Cottage for Rent")
+
+        # Admin cannot publish, pause, or close another owner's listing.
+        res_publish = self.client.post(
+            reverse("listings:listing-publish", kwargs={"pk": self.draft_listing.id})
+        )
+        self.assertEqual(res_publish.status_code, status.HTTP_403_FORBIDDEN)
+        self.draft_listing.refresh_from_db()
+        self.assertEqual(self.draft_listing.status, ListingStatus.DRAFT)
+
+        res_pause = self.client.post(
+            reverse("listings:listing-pause", kwargs={"pk": self.published_listing.id})
+        )
+        self.assertEqual(res_pause.status_code, status.HTTP_403_FORBIDDEN)
+        self.published_listing.refresh_from_db()
+        self.assertEqual(self.published_listing.status, ListingStatus.PUBLISHED)
+
+        res_close = self.client.post(
+            reverse("listings:listing-close", kwargs={"pk": self.published_listing.id})
+        )
+        self.assertEqual(res_close.status_code, status.HTTP_403_FORBIDDEN)
+        self.published_listing.refresh_from_db()
+        self.assertEqual(self.published_listing.status, ListingStatus.PUBLISHED)
+
+    def test_mutation_responses_include_absolute_image_urls_matching_retrieve(self):
+        PropertyImage.objects.create(
+            property=self.property_b,
+            image_url="/media/properties/relative_sample.jpg",
+            is_primary=True,
+        )
+        self.client.force_authenticate(user=self.owner_b)
+
+        create_res = self.client.post(
+            reverse("listings:listing-list"),
+            {
+                "property_id": str(self.property_b.id),
+                "title": "Relative Media URL Listing",
+                "monthly_rent": "25000.00",
+                "publish": False,
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        listing_id = create_res.data["data"]["id"]
+        expected_url = "http://testserver/media/properties/relative_sample.jpg"
+        self.assertEqual(create_res.data["data"]["property"]["primary_image_url"], expected_url)
+
+        update_res = self.client.patch(
+            reverse("listings:listing-detail", kwargs={"pk": listing_id}),
+            {"title": "Updated Media URL Listing"},
+            format="json",
+        )
+        self.assertEqual(update_res.data["data"]["property"]["primary_image_url"], expected_url)
+
+        publish_res = self.client.post(reverse("listings:listing-publish", kwargs={"pk": listing_id}))
+        self.assertEqual(publish_res.data["data"]["property"]["primary_image_url"], expected_url)
+
+        pause_res = self.client.post(reverse("listings:listing-pause", kwargs={"pk": listing_id}))
+        self.assertEqual(pause_res.data["data"]["property"]["primary_image_url"], expected_url)
+
+        close_res = self.client.post(reverse("listings:listing-close", kwargs={"pk": listing_id}))
+        self.assertEqual(close_res.data["data"]["property"]["primary_image_url"], expected_url)
+
+    def test_public_visibility_policy_enforced_across_property_and_listing_states(self):
+        """
+        Verify canonical public visibility rules across list, search, detail, owner, and admin views:
+        - Only available properties with published listings and >= 1 image appear publicly.
+        - Draft, inactive, maintenance, occupied properties and draft/paused/closed listings are hidden (404).
+        - Owner management endpoints and admin oversight remain intact.
+        """
+        non_public_listings = {}
+        for prop_status in (
+            PropertyStatus.DRAFT,
+            PropertyStatus.INACTIVE,
+            PropertyStatus.MAINTENANCE,
+            PropertyStatus.OCCUPIED,
+        ):
+            prop = Property.objects.create(
+                owner=self.owner_b,
+                title=f"Hidden {prop_status.title()} Villa",
+                category=PropertyCategory.RESIDENTIAL,
+                property_type=PropertyType.VILLA,
+                address_line_1="Hidden Street 1",
+                locality="Hidden",
+                city="Bengaluru",
+                district="Bengaluru Urban",
+                state="Karnataka",
+                pin_code="560001",
+                bedrooms=3,
+                bathrooms=Decimal("3.0"),
+                status=prop_status,
+            )
+            PropertyImage.objects.create(
+                property=prop,
+                image_url=f"https://images.example.com/{prop_status}.jpg",
+                is_primary=True,
+            )
+            non_public_listings[f"prop_{prop_status}"] = Listing.objects.create(
+                property=prop,
+                title=f"Secret {prop_status} Listing",
+                monthly_rent=Decimal("32000.00"),
+                status=ListingStatus.PUBLISHED,
+            )
+
+        # Available property with paused listing
+        paused_prop = Property.objects.create(
+            owner=self.owner_b,
+            title="Available Property Paused Listing",
+            category=PropertyCategory.RESIDENTIAL,
+            property_type=PropertyType.APARTMENT,
+            address_line_1="Paused Ave",
+            locality="Indiranagar",
+            city="Bengaluru",
+            district="Bengaluru Urban",
+            state="Karnataka",
+            pin_code="560038",
+            bedrooms=2,
+            bathrooms=Decimal("2.0"),
+            status=PropertyStatus.AVAILABLE,
+        )
+        PropertyImage.objects.create(
+            property=paused_prop,
+            image_url="https://images.example.com/paused_prop.jpg",
+            is_primary=True,
+        )
+        non_public_listings["paused"] = Listing.objects.create(
+            property=paused_prop,
+            title="Paused Listing",
+            monthly_rent=Decimal("29000.00"),
+            status=ListingStatus.PAUSED,
+        )
+
+        # Available property with published listing but NO images (violates publication eligibility)
+        no_image_prop = Property.objects.create(
+            owner=self.owner_b,
+            title="No Image Property",
+            category=PropertyCategory.RESIDENTIAL,
+            property_type=PropertyType.APARTMENT,
+            address_line_1="Imageless St",
+            locality="Koramangala",
+            city="Bengaluru",
+            district="Bengaluru Urban",
+            state="Karnataka",
+            pin_code="560034",
+            bedrooms=2,
+            bathrooms=Decimal("2.0"),
+            status=PropertyStatus.AVAILABLE,
+        )
+        non_public_listings["no_image"] = Listing.objects.create(
+            property=no_image_prop,
+            title="No Image Listing",
+            monthly_rent=Decimal("26000.00"),
+            status=ListingStatus.PUBLISHED,
+        )
+
+        # 1. Public list & search exclude all hidden property/listing combinations
+        for client_user in (None, self.tenant_user, self.owner_a):
+            if client_user is None:
+                self.client.force_authenticate(user=None)
+            else:
+                self.client.force_authenticate(user=client_user)
+
+            list_res = self.client.get(reverse("listings:listing-list"))
+            self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+            returned_ids = {item["id"] for item in list_res.data["results"]}
+
+            self.assertIn(str(self.published_listing.id), returned_ids)
+            self.assertNotIn(str(self.draft_listing.id), returned_ids)
+            self.assertNotIn(str(self.closed_listing.id), returned_ids)
+            for key, hidden_listing in non_public_listings.items():
+                with self.subTest(user=getattr(client_user, "email", "anon"), case=key):
+                    self.assertNotIn(str(hidden_listing.id), returned_ids)
+
+            # 2. Direct detail access by Listing ID or Property ID returns 404
+            for key, hidden_listing in non_public_listings.items():
+                if client_user == self.owner_b:
+                    continue
+                for lookup_id in (hidden_listing.id, hidden_listing.property_id):
+                    detail_res = self.client.get(
+                        reverse("listings:listing-detail", kwargs={"pk": lookup_id})
+                    )
+                    self.assertEqual(detail_res.status_code, status.HTTP_404_NOT_FOUND)
+
+        # 3. Owner B retains full access to their own hidden/draft/inactive/maintenance/occupied listings & properties
+        self.client.force_authenticate(user=self.owner_b)
+        me_listings_res = self.client.get(reverse("listings:listing-me"))
+        self.assertEqual(me_listings_res.status_code, status.HTTP_200_OK)
+        me_listing_ids = {item["id"] for item in me_listings_res.data["results"]}
+        for hidden_listing in non_public_listings.values():
+            self.assertIn(str(hidden_listing.id), me_listing_ids)
+            own_detail_res = self.client.get(
+                reverse("listings:listing-detail", kwargs={"pk": hidden_listing.id})
+            )
+            self.assertEqual(own_detail_res.status_code, status.HTTP_200_OK)
+
+        me_props_res = self.client.get(reverse("properties:property-my-properties"))
+        self.assertEqual(me_props_res.status_code, status.HTTP_200_OK)
+        me_prop_statuses = {item["status"] for item in me_props_res.data["results"]}
+        self.assertTrue(
+            {
+                PropertyStatus.DRAFT,
+                PropertyStatus.INACTIVE,
+                PropertyStatus.MAINTENANCE,
+                PropertyStatus.OCCUPIED,
+                PropertyStatus.AVAILABLE,
+            }.issubset(me_prop_statuses)
+        )
+
+        # 4. Admin retains read-only oversight on /listings/me/ and /listings/{id}/
+        self.client.force_authenticate(user=self.admin_user)
+        admin_me_res = self.client.get(reverse("listings:listing-me"))
+        self.assertEqual(admin_me_res.status_code, status.HTTP_200_OK)
+        admin_me_ids = {item["id"] for item in admin_me_res.data["results"]}
+        for hidden_listing in non_public_listings.values():
+            self.assertIn(str(hidden_listing.id), admin_me_ids)
+            admin_det = self.client.get(
+                reverse("listings:listing-detail", kwargs={"pk": hidden_listing.id})
+            )
+            self.assertEqual(admin_det.status_code, status.HTTP_200_OK)

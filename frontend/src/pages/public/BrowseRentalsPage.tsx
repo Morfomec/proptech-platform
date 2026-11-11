@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams, useLocation } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useAuth } from '../../hooks/useAuth'
+import { useOwnedPropertyIds } from '../../hooks/useOwnedPropertyIds'
+import { useSavedPropertiesToggle } from '../../hooks/useSavedPropertiesToggle'
 import LandingHeader from './components/LandingHeader'
 import LandingFooter from './components/LandingFooter'
-import { Badge } from '../../components/ui/badge'
+import {
+  PropertyListingCard,
+  PropertyListingCardSkeleton,
+} from '../../components/property/PropertyListingCard'
 import { listingService } from '../../services/listing.service'
-import { getMediaUrl } from '../../utils/imageUrl'
 import type {
   ListingFilterParams,
   ListingSortOption,
@@ -42,9 +46,18 @@ const RENT_BUDGET_PRESETS = [
 
 const PAGE_SIZE = 9
 
-export const BrowseRentalsPage: React.FC = () => {
+export interface BrowseRentalsPageProps {
+  workspaceMode?: 'public' | 'tenant'
+}
+
+export const BrowseRentalsPage: React.FC<BrowseRentalsPageProps> = ({
+  workspaceMode = 'public',
+}) => {
+  const isTenantWorkspace = workspaceMode === 'tenant'
+  const detailBasePath = isTenantWorkspace ? '/app/tenant/properties' : '/properties'
   const { isAuthenticated } = useAuth()
-  const navigate = useNavigate()
+  const ownedPropertyIds = useOwnedPropertyIds()
+  const { isPropertySaved, handleToggleSave } = useSavedPropertiesToggle()
   const location = useLocation()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -67,7 +80,6 @@ export const BrowseRentalsPage: React.FC = () => {
 
   // Dropdown open states
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
-  const [optimisticOverrides, setOptimisticOverrides] = useState<Record<string, boolean>>({})
 
   // Scroll to top on page mount or route change
   useEffect(() => {
@@ -85,6 +97,20 @@ export const BrowseRentalsPage: React.FC = () => {
     document.addEventListener('mousedown', handleOutsideClick)
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [])
+
+  // Apply header search updates when submitted from workspace top bar
+  const headerSearchState = location.state as { headerSearch?: string; searchTs?: number } | null
+  const [lastSearchTs, setLastSearchTs] = useState<number | null>(null)
+  if (
+    headerSearchState?.searchTs &&
+    headerSearchState.searchTs !== lastSearchTs &&
+    typeof headerSearchState.headerSearch === 'string'
+  ) {
+    setLastSearchTs(headerSearchState.searchTs)
+    setSearchInput(headerSearchState.headerSearch)
+    setActiveSearch(headerSearchState.headerSearch)
+    setCurrentPage(1)
+  }
 
   // Sync state changes into query parameters
   useEffect(() => {
@@ -134,67 +160,6 @@ export const BrowseRentalsPage: React.FC = () => {
     staleTime: 1000 * 60 * 2, // 2 minutes
   })
 
-  // Query: Saved Properties (only if authenticated)
-  const { data: savedData } = useQuery({
-    queryKey: ['saved-properties'],
-    queryFn: () => listingService.getSavedProperties(),
-    enabled: isAuthenticated,
-    staleTime: 1000 * 60 * 5,
-  })
-
-  // Derive saved property IDs from backend response
-  const savedPropertyIds = useMemo(() => {
-    const ids = new Set<string>()
-    if (savedData?.results) {
-      savedData.results.forEach((item) => {
-        if (item.property_id) {
-          ids.add(item.property_id)
-        }
-      })
-    }
-    return ids
-  }, [savedData])
-
-  const isPropertySaved = (propertyId: string): boolean => {
-    if (propertyId in optimisticOverrides) {
-      return optimisticOverrides[propertyId]
-    }
-    return savedPropertyIds.has(propertyId)
-  }
-
-  // Bookmark Toggle Mutation
-  const toggleSaveMutation = useMutation({
-    mutationFn: async ({ propertyId, isSaved }: { propertyId: string; isSaved: boolean }) => {
-      if (isSaved) {
-        return listingService.removeSavedProperty(propertyId)
-      } else {
-        return listingService.saveProperty(propertyId)
-      }
-    },
-    onMutate: async ({ propertyId, isSaved }) => {
-      setOptimisticOverrides((prev) => ({ ...prev, [propertyId]: !isSaved }))
-    },
-    onError: (_err, { propertyId, isSaved }) => {
-      setOptimisticOverrides((prev) => ({ ...prev, [propertyId]: isSaved }))
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-properties'] })
-    },
-  })
-
-  const handleHeartClick = (e: React.MouseEvent, propertyId: string) => {
-    e.stopPropagation()
-    if (!isAuthenticated) {
-      navigate('/login', {
-        state: { from: location.pathname + location.search },
-      })
-      return
-    }
-
-    const isSaved = isPropertySaved(propertyId)
-    toggleSaveMutation.mutate({ propertyId, isSaved })
-  }
-
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setActiveSearch(searchInput)
@@ -229,12 +194,6 @@ export const BrowseRentalsPage: React.FC = () => {
   const totalCount = listingsData?.count || 0
   const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1
 
-  const formatPrice = (amount: string | number) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount
-    if (isNaN(num)) return amount
-    return `₹${num.toLocaleString('en-IN')}`
-  }
-
   // Active Rent Filter Label
   const rentFilterLabel = useMemo(() => {
     if (minRentInput && maxRentInput) {
@@ -257,16 +216,40 @@ export const BrowseRentalsPage: React.FC = () => {
   const showGeneralError = isError && !isNotFoundError
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FDFDFD] text-[#111827] antialiased">
-      {/* 1. Consistent Top Header with dynamic navigation */}
-      <LandingHeader activeNav="properties" />
+    <div
+      className={
+        isTenantWorkspace
+          ? 'text-[#111827] antialiased pb-8'
+          : 'flex flex-col min-h-screen bg-[#FDFDFD] text-[#111827] antialiased'
+      }
+    >
+      {/* 1. Consistent Top Header with dynamic navigation (public mode only) */}
+      {!isTenantWorkspace && <LandingHeader activeNav="properties" />}
 
       {/* 2. Main Properties Marketplace Content */}
-      <main className="flex-grow max-w-7xl mx-auto px-6 py-8 md:py-12 w-full">
+      <main
+        className={
+          isTenantWorkspace
+            ? 'w-full'
+            : 'flex-grow max-w-7xl mx-auto px-6 py-8 md:py-12 w-full'
+        }
+      >
         {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#111827] tracking-tight">
-            Explore Properties
+        <div
+          className={
+            isTenantWorkspace
+              ? 'border-b border-[#E5E7EB] pb-3.5 mb-4'
+              : 'border-b border-[#E5E7EB] pb-3.5 mb-5'
+          }
+        >
+          <h1
+            className={
+              isTenantWorkspace
+                ? 'text-xl font-medium tracking-tight text-[#111827] mb-0'
+                : 'text-xl sm:text-2xl font-medium tracking-tight text-[#111827] mb-0'
+            }
+          >
+            {isTenantWorkspace ? 'Browse Properties' : 'Explore Properties'}
           </h1>
         </div>
 
@@ -667,20 +650,9 @@ export const BrowseRentalsPage: React.FC = () => {
 
         {/* 3. Listings Grid / Loading / Empty / Error States */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs animate-pulse"
-              >
-                <div className="aspect-[16/10] bg-gray-200 w-full" />
-                <div className="p-5 space-y-3">
-                  <div className="h-5 bg-gray-200 rounded w-3/4" />
-                  <div className="h-4 bg-gray-100 rounded w-1/2" />
-                  <div className="h-4 bg-gray-100 rounded w-full" />
-                  <div className="h-9 bg-gray-100 rounded-xl w-full pt-2" />
-                </div>
-              </div>
+              <PropertyListingCardSkeleton key={i} />
             ))}
           </div>
         ) : showGeneralError ? (
@@ -731,198 +703,22 @@ export const BrowseRentalsPage: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
             {displayedListings.map((listing) => {
               const prop = listing.property
-              const isSaved = isPropertySaved(prop?.id || listing.property_id)
-              const imageUrl = prop?.primary_image_url ? getMediaUrl(prop.primary_image_url) : null
-
-              // Specifications: clean handling for both residential and commercial
-              const isCommercial = prop?.category === 'commercial' || !prop?.bedrooms
-              const bedsText = isCommercial
-                ? PROPERTY_TYPE_LABELS[prop?.property_type || ''] || 'Commercial'
-                : `${prop?.bedrooms} BHK`
-              const bathsText = prop?.bathrooms ? `${prop.bathrooms} ${prop.bathrooms === 1 ? 'Bath' : 'Baths'}` : null
-              const sqftText = prop?.built_up_area
-                ? `${typeof prop.built_up_area === 'number' ? prop.built_up_area.toLocaleString('en-IN') : prop.built_up_area} sq ft`
-                : null
-
-              const typeBadgeLabel =
-                PROPERTY_TYPE_LABELS[prop?.property_type] ||
-                prop?.property_type ||
-                (isCommercial ? 'Commercial' : 'Residential')
-              const furnishingBadgeLabel = prop?.furnishing_status
-                ? FURNISHING_LABELS[prop.furnishing_status]
-                : null
-
+              const propertyId = prop?.id || listing.property_id
               return (
-                <div
+                <PropertyListingCard
                   key={listing.id}
-                  className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col group"
-                >
-                  {/* Property Image & Heart Button */}
-                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-100">
-                    <Link
-                      to={`/properties/${listing.id}`}
-                      state={{ from: 'properties' }}
-                      className="block w-full h-full"
-                    >
-                      {imageUrl ? (
-                        <img
-                          src={imageUrl}
-                          alt={listing.title}
-                          loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center bg-gray-50 text-gray-400">
-                          <svg
-                            className="h-10 w-10 text-gray-300 mb-1"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            strokeWidth="1.5"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-                            />
-                          </svg>
-                          <span className="text-xs font-medium text-gray-400">No photo uploaded</span>
-                        </div>
-                      )}
-                    </Link>
-
-                    {/* Bookmark Heart Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleHeartClick(e, prop?.id || listing.property_id)}
-                      title={isSaved ? 'Remove from saved' : 'Save property'}
-                      aria-label={isSaved ? 'Remove from saved properties' : 'Save this property'}
-                      className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all shadow-md z-10 ${
-                        isSaved
-                          ? 'bg-white text-red-500 hover:scale-110'
-                          : 'bg-white/90 text-gray-500 hover:text-red-500 hover:bg-white hover:scale-105'
-                      }`}
-                    >
-                      <svg
-                        className={`w-5 h-5 transition-colors ${
-                          isSaved ? 'fill-red-500 text-red-500' : 'fill-none stroke-current'
-                        }`}
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* Card Content Body */}
-                  <div className="p-5 flex flex-col flex-grow justify-between">
-                    <div>
-                      {/* Title & Monthly Rent Row */}
-                      <div className="flex items-start justify-between gap-3 mb-1">
-                        <Link to={`/properties/${listing.id}`} state={{ from: 'properties' }} className="line-clamp-1 flex-1">
-                          <h3 className="text-base sm:text-lg font-bold text-[#111827] group-hover:text-[#408A71] transition-colors">
-                            {listing.title}
-                          </h3>
-                        </Link>
-                        <div className="text-right shrink-0">
-                          <span className="text-base sm:text-lg font-extrabold text-[#111827]">
-                            {formatPrice(listing.monthly_rent)}
-                          </span>
-                          <span className="text-xs text-[#6B7280] font-normal">/mo</span>
-                        </div>
-                      </div>
-
-                      {/* Locality & City */}
-                      <p className="text-xs sm:text-sm text-[#6B7280] mb-3 flex items-center gap-1.5 truncate">
-                        <svg
-                          className="w-3.5 h-3.5 text-gray-400 shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.75}
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.75}
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
-                        <span className="truncate">
-                          {[prop?.locality, prop?.city].filter(Boolean).join(', ') || 'India'}
-                        </span>
-                      </p>
-
-                      {/* Property Specs (Bedrooms, Bathrooms, Sq Ft) */}
-                      <div className="text-xs font-medium text-[#4B5563] mb-3 flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1">
-                          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                          </svg>
-                          {bedsText}
-                        </span>
-                        {bathsText && (
-                          <>
-                            <span className="text-gray-300">&middot;</span>
-                            <span className="inline-flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              {bathsText}
-                            </span>
-                          </>
-                        )}
-                        {sqftText && (
-                          <>
-                            <span className="text-gray-300">&middot;</span>
-                            <span className="inline-flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                              </svg>
-                              {sqftText}
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Badges Row */}
-                      <div className="flex items-center gap-2 mb-4 flex-wrap">
-                        {furnishingBadgeLabel && (
-                          <Badge variant="neutral" size="sm" className="bg-[#F3F4F6] text-[#4B5563] border-gray-200">
-                            {furnishingBadgeLabel}
-                          </Badge>
-                        )}
-                        {typeBadgeLabel && (
-                          <Badge variant="neutral" size="sm" className="bg-[#F3F4F6] text-[#4B5563] border-gray-200">
-                            {typeBadgeLabel}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* View Details Action Button */}
-                    <Link
-                      to={`/properties/${listing.id}`}
-                      state={{ from: 'properties' }}
-                      className="w-full py-2.5 rounded-xl bg-[#ECF5F2] hover:bg-[#DDF0E8] text-[#408A71] text-xs sm:text-sm font-semibold transition-colors text-center focus:outline-none focus:ring-2 focus:ring-[#408A71]/20 block"
-                    >
-                      View Details
-                    </Link>
-                  </div>
-                </div>
+                  title={listing.title}
+                  detailTo={`${detailBasePath}/${listing.id}`}
+                  detailState={{ from: 'properties' }}
+                  property={prop}
+                  monthlyRent={listing.monthly_rent}
+                  isOwned={ownedPropertyIds.has(propertyId)}
+                  isSaved={isPropertySaved(propertyId)}
+                  onToggleSave={(e) => handleToggleSave(e, propertyId)}
+                />
               )
             })}
           </div>
@@ -1004,8 +800,8 @@ export const BrowseRentalsPage: React.FC = () => {
         )}
       </main>
 
-      {/* 6. Consistent Landing Footer */}
-      <LandingFooter isAuthenticated={isAuthenticated} />
+      {/* 6. Consistent Landing Footer (public mode only) */}
+      {!isTenantWorkspace && <LandingFooter isAuthenticated={isAuthenticated} />}
     </div>
   )
 }

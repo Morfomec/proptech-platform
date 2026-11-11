@@ -142,6 +142,7 @@ export const MyPropertiesPage: React.FC = () => {
           available_from: item.available_from,
           status: item.status,
           published_at: item.published_at,
+          property: item.property,
         }
       }
     })
@@ -390,11 +391,11 @@ export const MyPropertiesPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-8">
       {/* 1. Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#E5E7EB] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#E5E7EB] pb-3.5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#111827]">
+          <h1 className="text-xl font-medium tracking-tight text-[#111827] mb-0">
             My Properties
           </h1>
         </div>
@@ -663,7 +664,7 @@ export const MyPropertiesPage: React.FC = () => {
 
       {/* 6. Loading Skeletons */}
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {Array.from({ length: 6 }).map((_, idx) => (
             <PropertyCardSkeleton key={idx} />
           ))}
@@ -706,7 +707,7 @@ export const MyPropertiesPage: React.FC = () => {
 
       {/* 9. Property Cards Grid */}
       {!isLoading && !isError && paginatedProperties.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {paginatedProperties.map((property) => (
             <PropertyCard
               key={property.id}

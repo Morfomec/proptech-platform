@@ -17,6 +17,11 @@ export const useOverlay = ({
   containerRef,
 }: UseOverlayOptions) => {
   const previousActiveElementRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   // 1. Manage Body Scroll Lock
   useEffect(() => {
@@ -69,7 +74,7 @@ export const useOverlay = ({
       if (closeOnEscape && e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()
-        onClose?.()
+        onCloseRef.current?.()
         return
       }
 
@@ -108,5 +113,5 @@ export const useOverlay = ({
         previousActiveElementRef.current.focus()
       }
     }
-  }, [open, closeOnEscape, onClose, containerRef])
+  }, [open, closeOnEscape, containerRef])
 }

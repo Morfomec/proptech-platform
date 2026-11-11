@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.core.schemas import ApiErrorResponseSerializer, success_envelope
 from apps.accounts.serializers.change_password import ChangePasswordSerializer
 from apps.accounts.serializers.registration import RegistrationSerializer
 from apps.accounts.services.email_verification import verify_email_token
@@ -42,21 +43,27 @@ class RegistrationView(APIView):
     throttle_scope = "registration"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Register a new user account",
         request=RegistrationSerializer,
-        responses={201: inline_serializer(
-            name="RegistrationResponse",
-            fields={
-                "success": serializers.BooleanField(),
-                "message": serializers.CharField(),
-                "data": inline_serializer(
-                    name="RegistrationData",
-                    fields={
-                        "id": serializers.UUIDField(),
-                        "email": serializers.EmailField(),
-                    },
-                ),
-            },
-        )},
+        responses={
+            201: inline_serializer(
+                name="RegistrationResponse",
+                fields={
+                    "success": serializers.BooleanField(),
+                    "message": serializers.CharField(),
+                    "data": inline_serializer(
+                        name="RegistrationData",
+                        fields={
+                            "id": serializers.UUIDField(),
+                            "email": serializers.EmailField(),
+                        },
+                    ),
+                },
+            ),
+            400: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
+        },
     )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
@@ -96,6 +103,8 @@ class VerifyEmailView(APIView):
     throttle_scope = "email_verification"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Verify user email address",
         request=inline_serializer(
             name="VerifyEmailRequest",
             fields={
@@ -103,21 +112,25 @@ class VerifyEmailView(APIView):
                 "token": serializers.CharField(),
             },
         ),
-        responses={200: inline_serializer(
-            name="VerifyEmailResponse",
-            fields={
-                "success": serializers.BooleanField(),
-                "message": serializers.CharField(),
-                "data": inline_serializer(
-                    name="VerifyEmailData",
-                    fields={
-                        "id": serializers.UUIDField(),
-                        "email": serializers.EmailField(),
-                        "is_active": serializers.BooleanField(),
-                    },
-                ),
-            },
-        )},
+        responses={
+            200: inline_serializer(
+                name="VerifyEmailResponse",
+                fields={
+                    "success": serializers.BooleanField(),
+                    "message": serializers.CharField(),
+                    "data": inline_serializer(
+                        name="VerifyEmailData",
+                        fields={
+                            "id": serializers.UUIDField(),
+                            "email": serializers.EmailField(),
+                            "is_active": serializers.BooleanField(),
+                        },
+                    ),
+                },
+            ),
+            400: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
+        },
     )
     def post(self, request):
         user_id = request.data.get("user_id") or request.query_params.get("uid")
@@ -128,6 +141,7 @@ class VerifyEmailView(APIView):
                 {
                     "success": False,
                     "message": "Both user_id and token are required.",
+                    "errors": None,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -139,6 +153,7 @@ class VerifyEmailView(APIView):
                 {
                     "success": False,
                     "message": "Invalid or expired verification token.",
+                    "errors": None,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -163,15 +178,13 @@ class ResendEmailVerificationView(APIView):
     throttle_scope = "resend_email_verification"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Resend email verification link",
         request=ResendEmailVerificationSerializer,
         responses={
-            200: inline_serializer(
-                name="ResendVerificationResponse",
-                fields={
-                    "success": serializers.BooleanField(),
-                    "message": serializers.CharField(),
-                },
-            ),
+            200: success_envelope("ResendVerificationResponse"),
+            400: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):
@@ -189,6 +202,7 @@ class ResendEmailVerificationView(APIView):
                     "If an eligible account exists, "
                     "a verification email will be sent."
                 ),
+                "data": None,
             },
             status=status.HTTP_200_OK,
         )
@@ -198,8 +212,12 @@ class ResendEmailVerificationView(APIView):
 class LoginView(APIView):
     permission_classes = [AllowAny]
     serializer_class = LoginSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Authenticate with email and password",
         request=LoginSerializer,
         responses={
             200: inline_serializer(
@@ -228,6 +246,9 @@ class LoginView(APIView):
                     ),
                 },
             ),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):
@@ -267,8 +288,12 @@ class GoogleAuthView(APIView):
 
     permission_classes = [AllowAny]
     serializer_class = GoogleAuthSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "google_auth"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Authenticate with Google ID token",
         request=GoogleAuthSerializer,
         responses={
             200: inline_serializer(
@@ -297,6 +322,9 @@ class GoogleAuthView(APIView):
                     ),
                 },
             ),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):
@@ -335,8 +363,12 @@ class RefreshTokenView(APIView):
 
     permission_classes = [AllowAny]
     serializer_class = RefreshTokenSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "token_refresh"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Refresh JWT access and refresh tokens",
         request=RefreshTokenSerializer,
         responses={
             200: inline_serializer(
@@ -353,6 +385,9 @@ class RefreshTokenView(APIView):
                     ),
                 },
             ),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):
@@ -383,16 +418,13 @@ class LogoutView(APIView):
     serializer_class = LogoutSerializer
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Logout and blacklist refresh token",
         request=LogoutSerializer,
         responses={
-            200: inline_serializer(
-                name="LogoutResponse",
-                fields={
-                    "success": serializers.BooleanField(),
-                    "message": serializers.CharField(),
-                    "data": serializers.JSONField(allow_null=True),
-                },
-            ),
+            200: success_envelope("LogoutResponse"),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):
@@ -429,16 +461,13 @@ class PasswordResetRequestView(APIView):
     throttle_scope = "password_reset_request"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Request a password reset link",
         request=PasswordResetRequestSerializer,
         responses={
-            200: inline_serializer(
-                name="PasswordResetRequestResponse",
-                fields={
-                    "success": serializers.BooleanField(),
-                    "message": serializers.CharField(),
-                    "data": serializers.JSONField(allow_null=True),
-                },
-            ),
+            200: success_envelope("PasswordResetRequestResponse"),
+            400: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):
@@ -470,18 +499,17 @@ class PasswordResetConfirmView(APIView):
 
     permission_classes = [AllowAny]
     serializer_class = PasswordResetConfirmSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_confirm"
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Confirm password reset",
         request=PasswordResetConfirmSerializer,
         responses={
-            200: inline_serializer(
-                name="PasswordResetConfirmResponse",
-                fields={
-                    "success": serializers.BooleanField(),
-                    "message": serializers.CharField(),
-                    "data": serializers.JSONField(allow_null=True),
-                },
-            ),
+            200: success_envelope("PasswordResetConfirmResponse"),
+            400: ApiErrorResponseSerializer,
+            429: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):
@@ -499,7 +527,7 @@ class PasswordResetConfirmView(APIView):
                 {
                     "success": False,
                     "message": "Invalid or expired password reset token.",
-                    "data": None,
+                    "errors": None,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -527,16 +555,13 @@ class ChangePasswordView(APIView):
     serializer_class = ChangePasswordSerializer
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Change authenticated user password",
         request=ChangePasswordSerializer,
         responses={
-            200: inline_serializer(
-                name="ChangePasswordResponse",
-                fields={
-                    "success": serializers.BooleanField(),
-                    "message": serializers.CharField(),
-                    "data": serializers.JSONField(allow_null=True),
-                },
-            ),
+            200: success_envelope("ChangePasswordResponse"),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
         },
     )
     def post(self, request):

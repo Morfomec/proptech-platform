@@ -24,3 +24,16 @@ export interface ApiErrorResponse {
   errors?: Record<string, string[]> | Record<string, unknown> | string[] | null
 }
 
+/**
+ * Standard paginated list envelope returned by DRF StandardPagination.
+ */
+export interface PaginatedResponse<T> {
+  success: true
+  message: string
+  count: number
+  next: string | null
+  previous: string | null
+  results: T[]
+  data?: T[]
+}
+

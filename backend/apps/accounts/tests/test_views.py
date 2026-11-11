@@ -15,6 +15,9 @@ User = get_user_model()
 
 class AuthenticationViewsTests(APITestCase):
     def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
         self.register_url = reverse("accounts:register")
         self.verify_url = reverse("accounts:verify-email")
 
@@ -223,6 +226,9 @@ class AuthenticationViewsTests(APITestCase):
 class RefreshTokenViewTests(APITestCase):
     def setUp(self):
         from datetime import timedelta
+        from django.core.cache import cache
+
+        cache.clear()
         self.refresh_url = reverse("accounts:token-refresh")
         self.user = User.objects.create_user(
             email="token_user@example.com",
@@ -751,8 +757,10 @@ class PasswordResetRequestViewTests(APITestCase):
 
 class PasswordResetConfirmViewTests(APITestCase):
     def setUp(self):
+        from django.core.cache import cache
         from apps.accounts.services.password_reset import generate_password_reset_token
 
+        cache.clear()
         self.confirm_url = reverse("accounts:password-reset-confirm")
         self.login_url = reverse("accounts:login")
         self.refresh_url = reverse("accounts:token-refresh")
@@ -1331,6 +1339,32 @@ class ProfileViewTests(APITestCase):
         self.assertFalse(data["is_owner"])
         self.assertFalse(data["is_platform_admin"])
         self.assertIsNotNone(data["email_verified_at"])
+        self.assertTrue(data["has_usable_password"])
+        self.assertEqual(data["auth_providers"], ["password"])
+
+    def test_get_profile_google_only_user_reports_auth_method(self):
+        from apps.accounts.models import SocialAccount
+
+        google_user = User.objects.create_user(
+            email="google_only_view@example.com",
+            password=None,
+            is_active=True,
+            is_tenant=True,
+        )
+        google_user.set_unusable_password()
+        google_user.save(update_fields=["password"])
+        SocialAccount.objects.create(
+            user=google_user,
+            provider=SocialAccount.Provider.GOOGLE,
+            provider_user_id="google-view-sub-1",
+        )
+        self.client.force_authenticate(user=google_user)
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data["data"]
+        self.assertFalse(data["has_usable_password"])
+        self.assertEqual(data["auth_providers"], ["google"])
 
     def test_get_profile_does_not_expose_another_users_profile(self):
         from apps.accounts.models import UserProfile
@@ -1470,6 +1504,8 @@ class ProfileViewTests(APITestCase):
             ("is_tenant", False),
             ("is_platform_admin", True),
             ("email_verified_at", "2026-01-01T00:00:00Z"),
+            ("has_usable_password", False),
+            ("auth_providers", ["google"]),
         ]:
             response = self.client.patch(self.url, {field: value}, format="json")
             self.assertEqual(
@@ -1524,3 +1560,276 @@ class ProfileViewTests(APITestCase):
         self.assertEqual(other_user.last_name, "IsolatedLast")
         self.assertEqual(other_profile.phone_number, "+17770001111")
         self.assertEqual(other_profile.bio, "Isolated bio.")
+
+
+class ResendEmailVerificationViewTests(APITestCase):
+    def setUp(self):
+        self.url = reverse("accounts:resend-email-verification")
+
+    def test_resend_verification_returns_generic_200_for_eligible_and_unknown_email(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        User.objects.create_user(
+            email="unverified_api@example.com",
+            password="Password123!",
+            is_active=False,
+            email_verified_at=None,
+        )
+
+        res_eligible = self.client.post(
+            self.url,
+            {"email": "unverified_api@example.com"},
+            format="json",
+        )
+        res_unknown = self.client.post(
+            self.url,
+            {"email": "missing@example.com"},
+            format="json",
+        )
+
+        self.assertEqual(res_eligible.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_unknown.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_eligible.data["message"], res_unknown.data["message"])
+        cache.clear()
+
+    def test_resend_verification_invalid_email_and_rate_limiting(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        invalid_res = self.client.post(
+            self.url,
+            {"email": "not-an-email"},
+            format="json",
+        )
+        self.assertEqual(invalid_res.status_code, status.HTTP_400_BAD_REQUEST)
+        cache.clear()
+
+        # Rate limit is 3/hour
+        for _ in range(3):
+            res = self.client.post(
+                self.url,
+                {"email": "ratelimit@example.com"},
+                format="json",
+            )
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        throttled = self.client.post(
+            self.url,
+            {"email": "ratelimit@example.com"},
+            format="json",
+        )
+        self.assertEqual(throttled.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        cache.clear()
+
+
+class AuthEndpointThrottlingTests(APITestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.login_url = reverse("accounts:login")
+        self.google_auth_url = reverse("accounts:google-auth")
+        self.refresh_url = reverse("accounts:token-refresh")
+        self.reset_confirm_url = reverse("accounts:password-reset-confirm")
+        self.register_url = reverse("accounts:register")
+
+        self.user = User.objects.create_user(
+            email="throttle_auth@example.com",
+            password="StrongPassword123!",
+            first_name="Throttle",
+            last_name="Tester",
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+
+    def tearDown(self):
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def test_login_view_rate_limiting_and_non_enumeration(self):
+        # Configured rate is 10/minute; requests below limit succeed/fail normally.
+        for i in range(10):
+            email = self.user.email if i == 0 else f"unknown_{i}@example.com"
+            password = "StrongPassword123!" if i == 0 else "WrongPassword123!"
+            expected = status.HTTP_200_OK if i == 0 else status.HTTP_401_UNAUTHORIZED
+            res = self.client.post(
+                self.login_url,
+                {"email": email, "password": password},
+                format="json",
+            )
+            self.assertEqual(res.status_code, expected)
+
+        # 11th request returns 429 regardless of whether account exists.
+        throttled_existing = self.client.post(
+            self.login_url,
+            {"email": self.user.email, "password": "StrongPassword123!"},
+            format="json",
+        )
+        throttled_unknown = self.client.post(
+            self.login_url,
+            {"email": "missing_user@example.com", "password": "AnyPassword123!"},
+            format="json",
+        )
+
+        self.assertEqual(throttled_existing.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(throttled_unknown.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertFalse(throttled_existing.data["success"])
+        self.assertIsNone(throttled_existing.data["errors"])
+        self.assertNotIn(self.user.email, throttled_existing.data["message"])
+
+    def test_refresh_token_view_rate_limiting(self):
+        current_refresh = str(RefreshToken.for_user(self.user))
+
+        # Configured rate is 30/minute: rotating refreshes within limit succeed.
+        for _ in range(30):
+            res = self.client.post(
+                self.refresh_url,
+                {"refresh": current_refresh},
+                format="json",
+            )
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            current_refresh = res.data["data"]["refresh"]
+
+        # 31st request within minute window is throttled.
+        throttled = self.client.post(
+            self.refresh_url,
+            {"refresh": current_refresh},
+            format="json",
+        )
+        self.assertEqual(throttled.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertFalse(throttled.data["success"])
+        self.assertIsNone(throttled.data["errors"])
+
+    def test_password_reset_confirm_view_rate_limiting_and_non_enumeration(self):
+        from apps.accounts.services.password_reset import generate_password_reset_token
+
+        raw_token = generate_password_reset_token(self.user)
+
+        # Configured rate is 5/minute: 4 invalid attempts + 1 valid confirmation succeed.
+        for _ in range(4):
+            bad_res = self.client.post(
+                self.reset_confirm_url,
+                {
+                    "uid": str(self.user.id),
+                    "token": "wrong-token",
+                    "new_password": "NewStrongPassword123!",
+                    "confirm_password": "NewStrongPassword123!",
+                },
+                format="json",
+            )
+            self.assertEqual(bad_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        ok_res = self.client.post(
+            self.reset_confirm_url,
+            {
+                "uid": str(self.user.id),
+                "token": raw_token,
+                "new_password": "NewStrongPassword123!",
+                "confirm_password": "NewStrongPassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(ok_res.status_code, status.HTTP_200_OK)
+
+        # 6th request returns 429 regardless of whether uid exists.
+        throttled = self.client.post(
+            self.reset_confirm_url,
+            {
+                "uid": "00000000-0000-0000-0000-000000000000",
+                "token": "wrong-token",
+                "new_password": "NewStrongPassword123!",
+                "confirm_password": "NewStrongPassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(throttled.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertFalse(throttled.data["success"])
+        self.assertIsNone(throttled.data["errors"])
+
+    def test_throttle_scopes_operate_independently(self):
+        from unittest.mock import patch
+
+        # Exhaust the "login" scope (10/minute).
+        for _ in range(10):
+            res = self.client.post(
+                self.login_url,
+                {"email": self.user.email, "password": "WrongPassword123!"},
+                format="json",
+            )
+            self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.assertEqual(
+            self.client.post(
+                self.login_url,
+                {"email": self.user.email, "password": "StrongPassword123!"},
+                format="json",
+            ).status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+        # Other scopes remain unaffected and functional.
+        refresh_token_str = str(RefreshToken.for_user(self.user))
+        self.assertEqual(
+            self.client.post(
+                self.refresh_url,
+                {"refresh": refresh_token_str},
+                format="json",
+            ).status_code,
+            status.HTTP_200_OK,
+        )
+
+        from apps.accounts.services.password_reset import generate_password_reset_token
+
+        reset_token = generate_password_reset_token(self.user)
+        self.assertEqual(
+            self.client.post(
+                self.reset_confirm_url,
+                {
+                    "uid": str(self.user.id),
+                    "token": reset_token,
+                    "new_password": "AnotherStrongPassword123!",
+                    "confirm_password": "AnotherStrongPassword123!",
+                },
+                format="json",
+            ).status_code,
+            status.HTTP_200_OK,
+        )
+
+        with self.settings(GOOGLE_CLIENT_ID="test-client-id.apps.googleusercontent.com"):
+            with patch(
+                "apps.accounts.services.google_auth.id_token.verify_oauth2_token",
+                return_value={
+                    "iss": "https://accounts.google.com",
+                    "sub": "sub-scope-test",
+                    "email": "scope_google@example.com",
+                    "email_verified": True,
+                    "given_name": "Scope",
+                    "family_name": "Tester",
+                    "aud": "test-client-id.apps.googleusercontent.com",
+                },
+            ):
+                self.assertEqual(
+                    self.client.post(
+                        self.google_auth_url,
+                        {"credential": "valid-google-token"},
+                        format="json",
+                    ).status_code,
+                    status.HTTP_200_OK,
+                )
+
+        self.assertEqual(
+            self.client.post(
+                self.register_url,
+                {
+                    "first_name": "Scope",
+                    "last_name": "User",
+                    "email": "scope_reg@example.com",
+                    "password": "StrongPassword123!",
+                    "password_confirm": "StrongPassword123!",
+                },
+                format="json",
+            ).status_code,
+            status.HTTP_201_CREATED,
+        )

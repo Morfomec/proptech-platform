@@ -4,6 +4,11 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.schemas import (
+    ApiErrorResponseSerializer,
+    paginated_envelope,
+    success_envelope,
+)
 from apps.listings.models import SavedProperty
 from apps.listings.serializers import (
     SavedPropertyCreateSerializer,
@@ -19,9 +24,33 @@ from apps.properties.models import Property
 
 
 @extend_schema_view(
-    list=extend_schema(tags=["Saved Properties"], summary="List saved properties for authenticated user"),
-    create=extend_schema(tags=["Saved Properties"], summary="Save/bookmark a property"),
-    destroy=extend_schema(tags=["Saved Properties"], summary="Remove a saved property bookmark"),
+    list=extend_schema(
+        tags=["Saved Properties"],
+        summary="List saved properties for authenticated user",
+        responses={
+            200: SavedPropertySerializer(many=True),
+            401: ApiErrorResponseSerializer,
+        },
+    ),
+    create=extend_schema(
+        tags=["Saved Properties"],
+        summary="Save/bookmark a property",
+        request=SavedPropertyCreateSerializer,
+        responses={
+            201: success_envelope("SavedPropertyCreateResponse", SavedPropertySerializer),
+            200: success_envelope("SavedPropertyAlreadySavedResponse", SavedPropertySerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+        },
+    ),
+    destroy=extend_schema(
+        tags=["Saved Properties"],
+        summary="Remove a saved property bookmark",
+        responses={
+            200: success_envelope("SavedPropertyDeleteResponse"),
+            401: ApiErrorResponseSerializer,
+        },
+    ),
 )
 class SavedPropertyViewSet(viewsets.GenericViewSet):
     """
@@ -83,7 +112,10 @@ class SavedPropertyViewSet(viewsets.GenericViewSet):
             msg = exc.message_dict if hasattr(exc, "message_dict") else str(exc)
             raise ValidationError(msg)
 
-        response_serializer = SavedPropertySerializer(saved_prop)
+        response_serializer = SavedPropertySerializer(
+            saved_prop,
+            context=self.get_serializer_context(),
+        )
         status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
         message = "Property saved successfully." if created else "Property is already in your saved list."
 
@@ -105,6 +137,7 @@ class SavedPropertyViewSet(viewsets.GenericViewSet):
             {
                 "success": True,
                 "message": "Property removed from saved properties." if deleted else "Property was not in saved properties.",
+                "data": None,
             },
             status=status.HTTP_200_OK,
         )

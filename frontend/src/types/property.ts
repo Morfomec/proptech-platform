@@ -191,6 +191,7 @@ export interface UpdatePropertyPayload {
   furnishing_status?: FurnishingStatus
   parking_spaces?: number
   parking_details?: string
+  status?: PropertyStatus
   amenity_ids?: string[]
 }
 

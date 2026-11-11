@@ -62,7 +62,7 @@ export const LandingHero: React.FC<LandingHeroProps> = () => {
       {/* Hero Content */}
       <div className="relative z-10 max-w-4xl mx-auto px-6 py-20 sm:py-24 md:py-28 text-center flex flex-col items-center">
         {/* Main Headline */}
-        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white mb-6 leading-[1.15] max-w-3xl">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight text-white mb-6 leading-[1.15] max-w-3xl">
           Find a Home. Manage Your Property.{' '}
           <span className="text-[#A5E0CB]">All in One Place.</span>
         </h1>

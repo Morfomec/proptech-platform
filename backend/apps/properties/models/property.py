@@ -205,12 +205,6 @@ class Property(BaseModel):
             except Exception:
                 errors["longitude"] = "Invalid longitude value."
 
-        # Coordinates required before publishing (non-draft)
-        if self.status != PropertyStatus.DRAFT and (not has_lat or not has_lng):
-            errors["coordinates"] = (
-                "Coordinates are required when property is not in draft status."
-            )
-
         # 3. Built-up area validation (> 0 when supplied)
         if self.built_up_area is not None:
             try:

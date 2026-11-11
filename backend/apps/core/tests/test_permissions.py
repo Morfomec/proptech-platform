@@ -7,6 +7,7 @@ from django.test import RequestFactory, TestCase
 
 from apps.core.permissions import (
     IsAdmin,
+    IsNotAdmin,
     IsObjectOwner,
     IsOwner,
     IsOwnerOrReadOnly,
@@ -543,3 +544,29 @@ class CorePermissionsRegressionTests(TestCase):
         self.assertFalse(
             perm.has_object_permission(self._make_request("GET", self.owner_user), None, obj_none_parent)
         )
+
+    # ==========================================
+    # 14. IsNotAdmin & read-only admin object policy
+    # ==========================================
+    def test_is_not_admin_permission(self):
+        perm = IsNotAdmin()
+
+        self.assertFalse(perm.has_permission(self._make_request("POST", self.admin_user), None))
+        self.assertTrue(perm.has_permission(self._make_request("POST", self.owner_user), None))
+        self.assertTrue(perm.has_permission(self._make_request("POST", self.tenant_user), None))
+        self.assertTrue(perm.has_permission(self._make_request("POST", self.dual_user), None))
+        self.assertFalse(perm.has_permission(self._make_request("POST", self.anon_user), None))
+
+    def test_platform_admin_is_read_only_for_is_object_owner(self):
+        perm = IsObjectOwner()
+        obj = Mock(owner=self.owner_user, spec=["owner"])
+
+        for method in ("GET", "HEAD", "OPTIONS"):
+            self.assertTrue(
+                perm.has_object_permission(self._make_request(method, self.admin_user), None, obj)
+            )
+
+        for method in ("POST", "PUT", "PATCH", "DELETE"):
+            self.assertFalse(
+                perm.has_object_permission(self._make_request(method, self.admin_user), None, obj)
+            )

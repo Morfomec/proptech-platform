@@ -1,14 +1,19 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.db.models import Q
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from apps.core.permissions import IsAdmin, IsObjectOwner, IsOwner
+from apps.core.permissions import IsAdmin, IsNotAdmin, IsObjectOwner, IsOwner
+from apps.core.schemas import (
+    ApiErrorResponseSerializer,
+    paginated_envelope,
+    success_envelope,
+)
 from apps.listings.filters import (
     ListingFilterParamsSerializer,
     apply_listing_filters,
@@ -23,6 +28,8 @@ from apps.listings.serializers import (
 from apps.listings.services import (
     close_listing,
     create_listing,
+    get_public_listings_queryset,
+    get_visible_listings_for_user,
     pause_listing,
     publish_listing,
     update_listing,
@@ -42,11 +49,54 @@ from apps.properties.models import Property
         tags=["Listings"],
         summary="List published listings (Public)",
         parameters=[ListingFilterParamsSerializer],
+        responses={
+            200: ListingListSerializer(many=True),
+            400: ApiErrorResponseSerializer,
+        },
     ),
-    retrieve=extend_schema(tags=["Listings"], summary="Get published listing details"),
-    create=extend_schema(tags=["Listings"], summary="Create a new listing (Owner)"),
-    update=extend_schema(tags=["Listings"], summary="Update listing details (Owner)"),
-    partial_update=extend_schema(tags=["Listings"], summary="Partially update listing details (Owner)"),
+    retrieve=extend_schema(
+        tags=["Listings"],
+        summary="Get listing details",
+        responses={
+            200: success_envelope("ListingDetailResponse", ListingDetailSerializer),
+            404: ApiErrorResponseSerializer,
+        },
+    ),
+    create=extend_schema(
+        tags=["Listings"],
+        summary="Create a new listing (Owner)",
+        request=ListingCreateSerializer,
+        responses={
+            201: success_envelope("ListingCreateResponse", ListingDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+        },
+    ),
+    update=extend_schema(
+        tags=["Listings"],
+        summary="Update listing details (Owner)",
+        request=ListingUpdateSerializer,
+        responses={
+            200: success_envelope("ListingUpdateResponse", ListingDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    ),
+    partial_update=extend_schema(
+        tags=["Listings"],
+        summary="Partially update listing details (Owner)",
+        request=ListingUpdateSerializer,
+        responses={
+            200: success_envelope("ListingPartialUpdateResponse", ListingDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    ),
 )
 class ListingViewSet(viewsets.ModelViewSet):
     """
@@ -62,9 +112,11 @@ class ListingViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:
             return [AllowAny()]
-        if self.action in ["create", "me"]:
+        if self.action == "me":
             return [IsAuthenticated(), (IsOwner | IsAdmin)()]
-        return [IsAuthenticated(), (IsOwner | IsAdmin)(), IsObjectOwner()]
+        if self.action == "create":
+            return [IsAuthenticated(), IsOwner(), IsNotAdmin()]
+        return [IsAuthenticated(), IsOwner(), IsNotAdmin(), IsObjectOwner()]
 
     def get_base_queryset(self):
         return (
@@ -80,8 +132,8 @@ class ListingViewSet(viewsets.ModelViewSet):
         user = self.request.user
 
         if self.action == "list":
-            # Public feed strictly exposes published listings
-            return self.get_base_queryset().filter(status=ListingStatus.PUBLISHED)
+            # Public feed strictly enforces marketplace visibility rules
+            return get_public_listings_queryset(self.get_base_queryset())
 
         if self.action == "me":
             # Owner feed lists all listings for the requesting owner's properties
@@ -92,21 +144,16 @@ class ListingViewSet(viewsets.ModelViewSet):
             return self.get_base_queryset().filter(property__owner=user)
 
         if self.action == "retrieve":
-            # Public retrieval is restricted to published listings;
+            # Public retrieval is restricted to publicly discoverable listings;
             # Authenticated owners can also retrieve their own non-published listings.
-            if not user or not user.is_authenticated:
-                return self.get_base_queryset().filter(status=ListingStatus.PUBLISHED)
-            if getattr(user, "is_platform_admin", False):
-                return self.get_base_queryset()
-            return self.get_base_queryset().filter(
-                Q(status=ListingStatus.PUBLISHED) | Q(property__owner=user)
+            return get_visible_listings_for_user(
+                user=user,
+                queryset=self.get_base_queryset(),
             )
 
-        # Mutation actions (update, publish, pause, close) scoped to owner's properties
+        # Mutation actions (update, publish, pause, close) scoped strictly to owner's properties
         if not user or not user.is_authenticated:
             return Listing.objects.none()
-        if getattr(user, "is_platform_admin", False):
-            return self.get_base_queryset()
         return self.get_base_queryset().filter(property__owner=user)
 
     def get_serializer_class(self):
@@ -134,7 +181,7 @@ class ListingViewSet(viewsets.ModelViewSet):
         filter_serializer = ListingFilterParamsSerializer(data=request.query_params)
         filter_serializer.is_valid(raise_exception=True)
 
-        base_queryset = self.get_base_queryset().filter(status=ListingStatus.PUBLISHED)
+        base_queryset = self.get_queryset()
         queryset = apply_listing_filters(base_queryset, filter_serializer.validated_data)
 
         page = self.paginate_queryset(queryset)
@@ -164,12 +211,38 @@ class ListingViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @extend_schema(
+        tags=["Listings"],
+        summary="List authenticated owner's listings",
+        parameters=[
+            OpenApiParameter(
+                name="status",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter owner listings by status (single or comma-separated: draft, published, paused, closed).",
+            ),
+        ],
+        responses={
+            200: paginated_envelope("ListingMeListResponse", ListingListSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+        },
+    )
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request, *args, **kwargs):
         """
         Retrieve all listings belonging to properties owned by the authenticated owner.
         """
         queryset = self.filter_queryset(self.get_queryset())
+        status_param = request.query_params.get("status")
+        if status_param:
+            statuses = [s.strip() for s in status_param.split(",") if s.strip()]
+            invalid = [s for s in statuses if s not in ListingStatus.values]
+            if not statuses or invalid:
+                raise ValidationError({"status": ["Invalid listing status filter."]})
+            queryset = queryset.filter(status__in=statuses)
 
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -200,11 +273,8 @@ class ListingViewSet(viewsets.ModelViewSet):
         except (Property.DoesNotExist, ValueError):
             raise ValidationError({"property_id": "Specified property does not exist."})
 
-        # Strict ownership verification: tenant or cross-owner cannot create listings on this property
-        if not (
-            getattr(request.user, "is_platform_admin", False)
-            or property_instance.owner_id == request.user.id
-        ):
+        # Strict ownership verification: tenant, cross-owner, or admin cannot create listings on this property
+        if property_instance.owner_id != request.user.id:
             raise PermissionDenied("You can only create listings for properties you own.")
 
         try:
@@ -227,7 +297,10 @@ class ListingViewSet(viewsets.ModelViewSet):
                 {"property": "An active open listing already exists for this property."}
             )
 
-        response_serializer = ListingDetailSerializer(listing_instance)
+        response_serializer = ListingDetailSerializer(
+            listing_instance,
+            context=self.get_serializer_context(),
+        )
         return Response(
             {
                 "success": True,
@@ -255,7 +328,10 @@ class ListingViewSet(viewsets.ModelViewSet):
             msg = exc.message_dict if hasattr(exc, "message_dict") else str(exc)
             raise ValidationError(msg)
 
-        response_serializer = ListingDetailSerializer(updated_listing)
+        response_serializer = ListingDetailSerializer(
+            updated_listing,
+            context=self.get_serializer_context(),
+        )
         return Response(
             {
                 "success": True,
@@ -265,6 +341,18 @@ class ListingViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @extend_schema(
+        tags=["Listings"],
+        summary="Publish a listing",
+        request=None,
+        responses={
+            200: success_envelope("ListingPublishResponse", ListingDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
     @action(detail=True, methods=["post"], url_path="publish")
     def publish(self, request, pk=None):
         """
@@ -289,7 +377,10 @@ class ListingViewSet(viewsets.ModelViewSet):
                 {"property": "Another active listing is already open for this property."}
             )
 
-        serializer = ListingDetailSerializer(listing)
+        serializer = ListingDetailSerializer(
+            listing,
+            context=self.get_serializer_context(),
+        )
         return Response(
             {
                 "success": True,
@@ -299,6 +390,18 @@ class ListingViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @extend_schema(
+        tags=["Listings"],
+        summary="Pause a published listing",
+        request=None,
+        responses={
+            200: success_envelope("ListingPauseResponse", ListingDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
     @action(detail=True, methods=["post"], url_path="pause")
     def pause(self, request, pk=None):
         """
@@ -316,7 +419,10 @@ class ListingViewSet(viewsets.ModelViewSet):
             msg = exc.message_dict if hasattr(exc, "message_dict") else str(exc)
             raise ValidationError(msg)
 
-        serializer = ListingDetailSerializer(listing)
+        serializer = ListingDetailSerializer(
+            listing,
+            context=self.get_serializer_context(),
+        )
         return Response(
             {
                 "success": True,
@@ -326,6 +432,18 @@ class ListingViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @extend_schema(
+        tags=["Listings"],
+        summary="Close an open listing",
+        request=None,
+        responses={
+            200: success_envelope("ListingCloseResponse", ListingDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request, pk=None):
         """
@@ -343,7 +461,10 @@ class ListingViewSet(viewsets.ModelViewSet):
             msg = exc.message_dict if hasattr(exc, "message_dict") else str(exc)
             raise ValidationError(msg)
 
-        serializer = ListingDetailSerializer(listing)
+        serializer = ListingDetailSerializer(
+            listing,
+            context=self.get_serializer_context(),
+        )
         return Response(
             {
                 "success": True,

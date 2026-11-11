@@ -1,5 +1,6 @@
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -15,6 +16,7 @@ User = get_user_model()
 @override_settings(GOOGLE_CLIENT_ID="test-proptech-client-id.apps.googleusercontent.com")
 class GoogleAuthAPITests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.google_auth_url = reverse("accounts:google-auth")
         self.login_url = reverse("accounts:login")
 
@@ -297,5 +299,29 @@ class GoogleAuthAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertFalse(response.data["success"])
         self.assertIn("unavailable", response.data["message"].lower())
+
+    # 14. Rate limiting on GoogleAuthView
+    @patch("apps.accounts.services.google_auth.id_token.verify_oauth2_token")
+    def test_google_auth_rate_limiting(self, mock_verify):
+        cache.clear()
+        mock_verify.return_value = self.valid_google_payload
+
+        # Configured rate is 10/minute: all 10 requests succeed.
+        for _ in range(10):
+            response = self.client.post(
+                self.google_auth_url,
+                {"credential": self.valid_credential},
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # 11th request exceeds limit -> 429 with standard envelope.
+        throttled = self.client.post(
+            self.google_auth_url,
+            {"credential": self.valid_credential},
+        )
+        self.assertEqual(throttled.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertFalse(throttled.data["success"])
+        self.assertIsNone(throttled.data["errors"])
+        cache.clear()
 
 

@@ -122,14 +122,21 @@ class PropertySerializerTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("latitude", serializer.errors)
 
-        # Non-draft status requires coordinates
+        # Non-draft status without coordinates -> valid (coordinates are optional)
+        ok_payload = self.valid_payload.copy()
+        ok_payload["status"] = PropertyStatus.AVAILABLE
+        ok_payload["latitude"] = None
+        ok_payload["longitude"] = None
+        serializer = PropertyCreateSerializer(data=ok_payload)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        # Longitude out of bounds
         bad_payload = self.valid_payload.copy()
-        bad_payload["status"] = PropertyStatus.AVAILABLE
-        bad_payload["latitude"] = None
-        bad_payload["longitude"] = None
+        bad_payload["latitude"] = "12.9121"
+        bad_payload["longitude"] = "-185.0000"
         serializer = PropertyCreateSerializer(data=bad_payload)
         self.assertFalse(serializer.is_valid())
-        self.assertIn("coordinates", serializer.errors)
+        self.assertIn("longitude", serializer.errors)
 
     def test_invalid_specifications(self):
         # Built up area <= 0

@@ -2,42 +2,30 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../hooks/useAuth'
+import { useOwnedPropertyIds } from '../../hooks/useOwnedPropertyIds'
 import LandingHeader from './components/LandingHeader'
 import LandingFooter from './components/LandingFooter'
-import { Badge } from '../../components/ui/badge'
+import {
+  PropertyListingCard,
+  PropertyListingCardSkeleton,
+} from '../../components/property/PropertyListingCard'
 import { listingService } from '../../services/listing.service'
-import { getMediaUrl } from '../../utils/imageUrl'
 import type { SavedPropertyItem, PublicListingProperty } from '../../types/listing'
 
 type SavedSortOption = 'recently_saved' | 'oldest_saved' | 'rent_asc' | 'rent_desc'
 
-const PROPERTY_TYPE_LABELS: Record<string, string> = {
-  apartment: 'Apartment',
-  independent_house: 'Independent House',
-  villa: 'Villa',
-  studio_apartment: 'Studio Apartment',
-  office: 'Commercial Office',
-  shop: 'Shop',
-  showroom: 'Showroom',
-  warehouse: 'Warehouse',
-  other: 'Commercial Space',
+export interface SavedPropertiesPageProps {
+  workspaceMode?: 'public' | 'tenant'
 }
 
-const FURNISHING_LABELS: Record<string, string> = {
-  fully_furnished: 'Fully Furnished',
-  semi_furnished: 'Semi-Furnished',
-  unfurnished: 'Unfurnished',
-}
-
-const formatPrice = (amount?: string | number | null) => {
-  if (amount === undefined || amount === null || amount === '') return null
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount
-  if (isNaN(num)) return amount
-  return `₹${num.toLocaleString('en-IN')}`
-}
-
-export const SavedPropertiesPage: React.FC = () => {
+export const SavedPropertiesPage: React.FC<SavedPropertiesPageProps> = ({
+  workspaceMode = 'public',
+}) => {
+  const isTenantWorkspace = workspaceMode === 'tenant'
+  const browsePath = isTenantWorkspace ? '/app/tenant/properties' : '/properties'
+  const detailBasePath = isTenantWorkspace ? '/app/tenant/properties' : '/properties'
   const { isAuthenticated, isInitializing } = useAuth()
+  const ownedPropertyIds = useOwnedPropertyIds()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -163,22 +151,46 @@ export const SavedPropertiesPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col justify-between">
-      {/* Top Navigation */}
-      <LandingHeader activeNav="saved" />
+    <div
+      className={
+        isTenantWorkspace
+          ? 'pb-8'
+          : 'min-h-screen bg-[#F9FAFB] flex flex-col justify-between'
+      }
+    >
+      {/* Top Navigation (public mode only) */}
+      {!isTenantWorkspace && <LandingHeader activeNav="saved" />}
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 w-full flex-1">
+      <main
+        className={
+          isTenantWorkspace
+            ? 'w-full'
+            : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 w-full flex-1'
+        }
+      >
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#111827] tracking-tight">
+        <div
+          className={
+            isTenantWorkspace
+              ? 'border-b border-[#E5E7EB] pb-3.5 mb-4'
+              : 'border-b border-[#E5E7EB] pb-3.5 mb-5'
+          }
+        >
+          <h1
+            className={
+              isTenantWorkspace
+                ? 'text-xl font-medium tracking-tight text-[#111827] mb-0'
+                : 'text-xl sm:text-2xl font-medium tracking-tight text-[#111827] mb-0'
+            }
+          >
             Saved Properties
           </h1>
         </div>
 
         {/* Controls Toolbar: Search & Sort */}
         {isAuthenticated && (
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/90 shadow-2xs mb-5 flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Search Input */}
             <div className="relative w-full sm:w-80 md:w-96">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
@@ -304,24 +316,10 @@ export const SavedPropertiesPage: React.FC = () => {
             </button>
           </div>
         ) : isLoading && currentPage === 1 ? (
-          /* Loading Skeletons in Responsive 2-column Grid */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs animate-pulse flex flex-col"
-              >
-                <div className="aspect-[16/10] bg-gray-200 w-full" />
-                <div className="p-5 space-y-3.5 flex-1">
-                  <div className="flex justify-between items-center gap-4">
-                    <div className="h-5 bg-gray-200 rounded w-2/3" />
-                    <div className="h-5 bg-gray-200 rounded w-1/4" />
-                  </div>
-                  <div className="h-4 bg-gray-100 rounded w-1/2" />
-                  <div className="h-4 bg-gray-100 rounded w-4/5" />
-                  <div className="h-10 bg-gray-100 rounded-xl w-full pt-2" />
-                </div>
-              </div>
+          /* Loading Skeletons matching 3-column Listing Grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <PropertyListingCardSkeleton key={i} />
             ))}
           </div>
         ) : filteredAndSortedItems.length === 0 ? (
@@ -355,10 +353,10 @@ export const SavedPropertiesPage: React.FC = () => {
               </button>
             ) : (
               <Link
-                to="/properties"
+                to={browsePath}
                 className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white text-sm font-semibold transition-colors shadow-xs cursor-pointer"
               >
-                <span>Browse Rentals</span>
+                <span>Browse Properties</span>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
@@ -366,225 +364,30 @@ export const SavedPropertiesPage: React.FC = () => {
             )}
           </div>
         ) : (
-          /* Responsive Two-Column Property Card Grid on Desktop */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+          /* Responsive 3-Column Property Card Grid matching Browse Listings */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredAndSortedItems.map((item) => {
               const prop = item.property as PublicListingProperty
               const listing = item.listing
               const isAvailable = item.is_available && listing && listing.status === 'published'
-              const detailTarget = `/properties/${listing?.id || item.property_id}`
-
-              // Specifications
-              const isCommercial = prop?.category === 'commercial' || !prop?.bedrooms
-              const bedsText = isCommercial
-                ? PROPERTY_TYPE_LABELS[prop?.property_type || ''] || 'Commercial'
-                : prop?.bedrooms
-                  ? `${prop.bedrooms} BHK`
-                  : null
-              const bathsText = prop?.bathrooms
-                ? `${prop.bathrooms} ${parseFloat(String(prop.bathrooms)) === 1 ? 'Bath' : 'Baths'}`
-                : null
-              const sqftText = prop?.built_up_area
-                ? `${typeof prop.built_up_area === 'number' ? prop.built_up_area.toLocaleString('en-IN') : prop.built_up_area} sq ft`
-                : null
-
-              const typeBadgeLabel =
-                PROPERTY_TYPE_LABELS[prop?.property_type] ||
-                prop?.property_type ||
-                (isCommercial ? 'Commercial' : 'Residential')
-              const furnishingBadgeLabel = prop?.furnishing_status
-                ? FURNISHING_LABELS[prop.furnishing_status]
-                : null
-
-              const locationText =
-                [prop?.locality, prop?.city].filter(Boolean).join(', ') ||
-                prop?.address_line_1 ||
-                'Location available on request'
-
+              const detailTarget = `${detailBasePath}/${listing?.id || item.property_id}`
               const displayTitle = listing?.title || prop?.title || 'Property'
-              const imageUrl = prop?.primary_image_url ? getMediaUrl(prop.primary_image_url) : null
 
               return (
-                <div
+                <PropertyListingCard
                   key={item.id}
-                  className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col group"
-                >
-                  {/* Property Image & Save/Unsave Indicator */}
-                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-100">
-                    <Link to={detailTarget} state={{ from: 'saved' }} className="block w-full h-full">
-                      {imageUrl ? (
-                        <img
-                          src={imageUrl}
-                          alt={displayTitle}
-                          loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center bg-gray-50 text-gray-400">
-                          <svg
-                            className="h-10 w-10 text-gray-300 mb-1"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            strokeWidth="1.5"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-                            />
-                          </svg>
-                          <span className="text-xs font-medium text-gray-400">No photo uploaded</span>
-                        </div>
-                      )}
-                    </Link>
-
-                    {/* Status Badge (if unavailable) */}
-                    {!isAvailable && (
-                      <div className="absolute top-3 left-3">
-                        <Badge variant="warning" size="sm" className="font-semibold shadow-xs">
-                          Currently Unavailable
-                        </Badge>
-                      </div>
-                    )}
-
-                    {/* Save/Unsave Indicator Heart Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleRemove(e, item.property_id)}
-                      title="Remove from saved properties"
-                      aria-label="Remove from saved properties"
-                      className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/95 text-red-500 hover:scale-110 flex items-center justify-center transition-all shadow-md z-10 cursor-pointer"
-                    >
-                      <svg
-                        className="w-5 h-5 fill-red-500 text-red-500"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* Card Content Body */}
-                  <div className="p-5 sm:p-6 flex flex-col flex-grow justify-between">
-                    <div>
-                      {/* Property Title & Monthly Rent */}
-                      <div className="flex items-start justify-between gap-3 mb-1.5">
-                        <Link to={detailTarget} state={{ from: 'saved' }} className="flex-1">
-                          <h3 className="text-base sm:text-lg font-bold text-[#111827] group-hover:text-[#408A71] transition-colors line-clamp-1">
-                            {displayTitle}
-                          </h3>
-                        </Link>
-                        {listing?.monthly_rent ? (
-                          <div className="text-right shrink-0">
-                            <span className="text-base sm:text-lg font-extrabold text-[#111827]">
-                              {formatPrice(listing.monthly_rent)}
-                            </span>
-                            <span className="text-xs text-[#6B7280] font-normal">/month</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs font-medium text-gray-500">Unlisted</span>
-                        )}
-                      </div>
-
-                      {/* Property Location */}
-                      <p className="text-xs sm:text-sm text-[#6B7280] mb-3.5 flex items-center gap-1.5 truncate">
-                        <svg
-                          className="w-3.5 h-3.5 text-gray-400 shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.75}
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.75}
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
-                        <span className="truncate">{locationText}</span>
-                      </p>
-
-                      {/* Supported Property Specifications */}
-                      <div className="text-xs font-medium text-[#4B5563] mb-3 flex items-center gap-2 flex-wrap">
-                        {bedsText && (
-                          <span className="inline-flex items-center gap-1">
-                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                            </svg>
-                            {bedsText}
-                          </span>
-                        )}
-                        {bathsText && (
-                          <>
-                            <span className="text-gray-300">&middot;</span>
-                            <span className="inline-flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              {bathsText}
-                            </span>
-                          </>
-                        )}
-                        {sqftText && (
-                          <>
-                            <span className="text-gray-300">&middot;</span>
-                            <span className="inline-flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                              </svg>
-                              {sqftText}
-                            </span>
-                          </>
-                        )}
-                        {prop?.parking_spaces ? (
-                          <>
-                            <span className="text-gray-300">&middot;</span>
-                            <span className="inline-flex items-center gap-1 text-gray-500">
-                              Parking: {prop.parking_spaces}
-                            </span>
-                          </>
-                        ) : null}
-                      </div>
-
-                      {/* Badges: Category & Furnishing */}
-                      <div className="flex items-center gap-2 mb-4 flex-wrap">
-                        {typeBadgeLabel && (
-                          <Badge variant="neutral" size="sm" className="bg-[#F3F4F6] text-[#4B5563] border-gray-200">
-                            {typeBadgeLabel}
-                          </Badge>
-                        )}
-                        {furnishingBadgeLabel && (
-                          <Badge variant="neutral" size="sm" className="bg-[#F3F4F6] text-[#4B5563] border-gray-200">
-                            {furnishingBadgeLabel}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* View Details Button */}
-                    <div className="pt-2 border-t border-gray-100">
-                      <Link
-                        to={detailTarget}
-                        state={{ from: 'saved' }}
-                        className="w-full py-2.5 rounded-xl bg-[#ECF5F2] hover:bg-[#DDF0E8] text-[#408A71] text-xs sm:text-sm font-semibold transition-colors text-center block focus:outline-none focus:ring-2 focus:ring-[#408A71]/20 cursor-pointer"
-                      >
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+                  title={displayTitle}
+                  detailTo={detailTarget}
+                  detailState={{ from: 'saved' }}
+                  property={prop}
+                  monthlyRent={listing?.monthly_rent}
+                  isOwned={ownedPropertyIds.has(item.property_id)}
+                  isUnavailable={!isAvailable}
+                  isSaved
+                  saveButtonLabel="Remove from saved properties"
+                  onToggleSave={(e) => handleRemove(e, item.property_id)}
+                  showParking
+                />
               )
             })}
           </div>
@@ -617,8 +420,8 @@ export const SavedPropertiesPage: React.FC = () => {
         )}
       </main>
 
-      {/* Footer */}
-      <LandingFooter isAuthenticated={isAuthenticated} />
+      {/* Footer (public mode only) */}
+      {!isTenantWorkspace && <LandingFooter isAuthenticated={isAuthenticated} />}
     </div>
   )
 }

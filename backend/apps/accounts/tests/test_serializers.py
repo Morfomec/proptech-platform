@@ -414,6 +414,8 @@ class ProfileSerializerTests(TestCase):
         self.assertFalse(data["is_owner"])
         self.assertFalse(data["is_platform_admin"])
         self.assertIsNotNone(data["email_verified_at"])
+        self.assertTrue(data["has_usable_password"])
+        self.assertEqual(data["auth_providers"], ["password"])
 
     def test_correctly_serializes_user_profile_fields(self):
         from apps.accounts.serializers.profile import ProfileSerializer
@@ -569,6 +571,38 @@ class ProfileSerializerTests(TestCase):
         self.assertNotIn("is_owner", serializer.validated_data)
         self.assertNotIn("is_platform_admin", serializer.validated_data)
         self.assertNotIn("email_verified_at", serializer.validated_data)
+        self.assertNotIn("has_usable_password", serializer.validated_data)
+        self.assertNotIn("auth_providers", serializer.validated_data)
+
+    def test_serializes_google_only_and_hybrid_auth_capabilities(self):
+        from apps.accounts.models import SocialAccount, User
+        from apps.accounts.serializers.profile import ProfileSerializer
+
+        google_only_user = User.objects.create_user(
+            email="google_only_serializer@example.com",
+            password=None,
+            is_active=True,
+        )
+        google_only_user.set_unusable_password()
+        google_only_user.save(update_fields=["password"])
+        SocialAccount.objects.create(
+            user=google_only_user,
+            provider=SocialAccount.Provider.GOOGLE,
+            provider_user_id="google-only-sub-1",
+        )
+
+        google_only_data = ProfileSerializer(google_only_user).data
+        self.assertFalse(google_only_data["has_usable_password"])
+        self.assertEqual(google_only_data["auth_providers"], ["google"])
+
+        SocialAccount.objects.create(
+            user=self.user,
+            provider=SocialAccount.Provider.GOOGLE,
+            provider_user_id="hybrid-google-sub-1",
+        )
+        hybrid_data = ProfileSerializer(self.user).data
+        self.assertTrue(hybrid_data["has_usable_password"])
+        self.assertEqual(hybrid_data["auth_providers"], ["password", "google"])
 
 
 

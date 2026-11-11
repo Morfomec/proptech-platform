@@ -20,3 +20,8 @@ class PropertyOwnershipError(ValidationError):
     """Raised when an attempt is made to alter property ownership improperly."""
     pass
 
+
+class PropertyProtectedError(ValidationError):
+    """Raised when attempting to delete a property with protected relationships."""
+    pass
+

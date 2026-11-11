@@ -1,5 +1,7 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useUnreadNotificationCount } from '../../hooks/useTenantWorkspace'
+import { WorkspaceSwitcher } from '../workspace/WorkspaceSwitcher'
 
 export interface OwnerSidebarProps {
   isOpen: boolean
@@ -18,6 +20,8 @@ interface NavItem {
 export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) => {
   const location = useLocation()
   const currentPath = location.pathname
+  const { data: unreadData } = useUnreadNotificationCount()
+  const unreadCount = unreadData?.data?.unread_count ?? 0
 
   const mainNavItems: NavItem[] = [
     {
@@ -71,12 +75,82 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
       ),
       isActiveCheck: (p) => p.startsWith('/app/owner/properties'),
     },
+    {
+      label: 'Applications',
+      path: '/app/owner/applications',
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+          <rect width="6" height="4" x="9" y="3" rx="1" />
+          <path d="m9 14 2 2 4-4" />
+        </svg>
+      ),
+      isActiveCheck: (p) => p.startsWith('/app/owner/applications'),
+    },
+    {
+      label: 'Tenancies',
+      path: '/app/owner/tenancies',
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+          <path d="M16 13H8" />
+          <path d="M16 17H8" />
+          <path d="M10 9H8" />
+        </svg>
+      ),
+      isActiveCheck: (p) => p.startsWith('/app/owner/tenancies'),
+    },
+    {
+      label: 'Documents',
+      path: '/app/owner/documents',
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
+        </svg>
+      ),
+      isActiveCheck: (p) => p.startsWith('/app/owner/documents'),
+    },
   ]
 
   const bottomNavItems: NavItem[] = [
     {
       label: 'Notifications',
-      path: '/app/owner/dashboard',
+      path: '/app/owner/notifications',
+      badge: unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined,
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -97,7 +171,7 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
     },
     {
       label: 'Settings',
-      path: '/app/profile',
+      path: '/app/owner/settings',
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -115,7 +189,7 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
           <circle cx="12" cy="12" r="3" />
         </svg>
       ),
-      isActiveCheck: (p) => p === '/app/profile',
+      isActiveCheck: (p) => p === '/app/owner/settings' || p === '/app/profile',
     },
   ]
 
@@ -163,9 +237,9 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
               </div>
               {item.badge && (
                 <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  className={`text-[11px] font-medium min-w-[20px] h-5 inline-flex items-center justify-center px-1.5 rounded-full tabular-nums ${
                     item.label === 'Notifications'
-                      ? 'bg-[#408A71] text-white'
+                      ? 'bg-[#EF4444] text-white'
                       : 'bg-gray-100 text-gray-600'
                   }`}
                 >
@@ -183,7 +257,7 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
     <div className="flex h-full flex-col justify-between bg-white text-[#111827]">
       {/* Top Brand Section */}
       <div>
-        <div className="flex h-16 items-center justify-between border-b border-[#E5E7EB] px-5">
+        <div className="flex h-20 items-center justify-between border-b border-[#E5E7EB] px-5">
           <Link
             to="/"
             onClick={onClose}
@@ -236,8 +310,15 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
           </button>
         </div>
 
+        {/* Sidebar Workspace Switcher */}
+        <WorkspaceSwitcher
+          currentWorkspace="owner"
+          variant="sidebar"
+          onSwitch={onClose}
+        />
+
         {/* Main Navigation */}
-        <nav className="p-3 pt-4" aria-label="Owner Workspace Navigation">
+        <nav className="p-3 pt-3" aria-label="Owner Workspace Navigation">
           {renderNavList(mainNavItems)}
         </nav>
       </div>

@@ -48,7 +48,11 @@ export const listingService = {
    * Retrieve all listings for properties owned by the authenticated owner.
    * Connects to GET /api/v1/listings/me/.
    */
-  async getOwnerListings(params?: { page?: number; page_size?: number }): Promise<PaginatedListingsResponse> {
+  async getOwnerListings(params?: {
+    page?: number
+    page_size?: number
+    status?: string
+  }): Promise<PaginatedListingsResponse> {
     const response = await apiClient.get<PaginatedListingsResponse>('/listings/me/', {
       params,
     })

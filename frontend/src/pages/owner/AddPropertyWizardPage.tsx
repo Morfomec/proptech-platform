@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useAuth } from '../../hooks/useAuth'
 import { OWNER_PROPERTIES_QUERY_KEY } from '../../hooks/useOwnerProperties'
+import { OWNER_LISTINGS_QUERY_KEY } from '../../hooks/useOwnerListings'
 import { propertyService } from '../../services/property.service'
 import { listingService } from '../../services/listing.service'
 import type {
@@ -11,6 +12,7 @@ import type {
   CreatePropertyPayload,
   FurnishingStatus,
   PropertyCategory,
+  PropertyStatus,
 } from '../../types/property'
 import type { CreateListingPayload, PublicListingItem } from '../../types/listing'
 
@@ -184,12 +186,15 @@ export const AddPropertyWizardPage: React.FC = () => {
   // Success screen state
   const [successData, setSuccessData] = useState<{
     mode: 'published' | 'draft'
+    listingStatus?: 'published' | 'draft' | 'paused' | 'closed' | null
+    propertyStatus?: PropertyStatus | null
     propertyId: string
     listingId?: string
     title: string
     location: string
     primaryImageUrl?: string
     monthlyRent?: number | string
+    securityDeposit?: number | string
   } | null>(null)
 
   // Form Fields State
@@ -620,6 +625,7 @@ export const AddPropertyWizardPage: React.FC = () => {
 
       // 4. Create or Update Listing (Operation 3)
       let activeListingId: string | null = persistedListingId
+      let resolvedListingStatus = (listingStatus as 'published' | 'draft' | 'paused' | 'closed' | null) ?? null
       const shouldCreateListing = wantsPublish || Boolean(monthlyRent.trim())
 
       if (shouldCreateListing) {
@@ -641,19 +647,22 @@ export const AddPropertyWizardPage: React.FC = () => {
             }
             const listingRes = await listingService.createListing(listingPayload)
             activeListingId = listingRes.data?.id || null
+            resolvedListingStatus = listingRes.data?.status ?? (wantsPublish ? 'published' : 'draft')
             if (activeListingId) {
               setPersistedListingId(activeListingId)
             }
           } else {
-            await listingService.updateListing(activeListingId, {
+            const updatedListingRes = await listingService.updateListing(activeListingId, {
               title: title.trim(),
               description: description.trim() || undefined,
               monthly_rent: rentAmount,
               security_deposit: depositAmount,
               available_from: availFrom,
             })
+            resolvedListingStatus = updatedListingRes.data?.status ?? resolvedListingStatus
             if (wantsPublish) {
-              await listingService.publishListing(activeListingId)
+              const publishedRes = await listingService.publishListing(activeListingId)
+              resolvedListingStatus = publishedRes.data?.status ?? 'published'
             }
           }
         } catch (listingErr) {
@@ -679,15 +688,24 @@ export const AddPropertyWizardPage: React.FC = () => {
         try {
           const verifyRes = await listingService.getListing(activeListingId)
           if (verifyRes.data?.status !== 'published') {
-            await listingService.publishListing(activeListingId)
+            const pubRes = await listingService.publishListing(activeListingId)
+            resolvedListingStatus = pubRes.data?.status ?? 'published'
+          } else {
+            resolvedListingStatus = 'published'
           }
         } catch (verifyErr) {
           console.warn('Listing status confirmation warning:', verifyErr)
         }
       }
 
+      if (resolvedListingStatus) {
+        setListingStatus(resolvedListingStatus)
+      }
+
       // 6. Invalidate caches and refresh owner session
       await queryClient.invalidateQueries({ queryKey: [OWNER_PROPERTIES_QUERY_KEY] })
+      await queryClient.invalidateQueries({ queryKey: [OWNER_LISTINGS_QUERY_KEY] })
+      await queryClient.invalidateQueries({ queryKey: ['owner-property', activePropertyId] })
       await refreshProfile()
 
       // 7. Presentation Success View
@@ -695,13 +713,16 @@ export const AddPropertyWizardPage: React.FC = () => {
         nextImages.find((img) => img.is_primary && img.uploaded)?.image_url ||
         nextImages.find((img) => img.uploaded)?.image_url
       setSuccessData({
-        mode: wantsPublish ? 'published' : 'draft',
+        mode: wantsPublish || resolvedListingStatus === 'published' ? 'published' : 'draft',
+        listingStatus: resolvedListingStatus,
+        propertyStatus: existingProperty?.status ?? 'draft',
         propertyId: activePropertyId,
         listingId: activeListingId ?? undefined,
         title: title.trim(),
         location: [locality, city].filter(Boolean).join(', ') || cleanAddressLine1,
         primaryImageUrl: primaryPhoto,
         monthlyRent: monthlyRent.trim() ? parseFloat(monthlyRent) : undefined,
+        securityDeposit: securityDeposit.trim() ? parseFloat(securityDeposit) : undefined,
       })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err: unknown) {
@@ -729,7 +750,13 @@ export const AddPropertyWizardPage: React.FC = () => {
 
   // Success Confirmation Screen
   if (successData) {
-    return <PropertySuccessView isEditMode={isEditMode} data={successData} />
+    return (
+      <PropertySuccessView
+        isEditMode={isEditMode}
+        data={successData}
+        onEditAgain={isEditMode ? () => setSuccessData(null) : undefined}
+      />
+    )
   }
 
   // Loading state for edit mode
@@ -816,7 +843,7 @@ export const AddPropertyWizardPage: React.FC = () => {
             </svg>
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">
+            <h1 className="text-xl font-medium tracking-tight text-[#111827] mb-0">
               {isEditMode ? `Edit Property: ${title || 'Property'}` : 'Add New Property'}
             </h1>
           </div>

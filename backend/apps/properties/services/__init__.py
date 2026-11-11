@@ -7,6 +7,7 @@ from .exceptions import (
     InvalidAmenityError,
     PropertyNotFoundError,
     PropertyOwnershipError,
+    PropertyProtectedError,
     PropertyServiceError,
 )
 from .image_service import (
@@ -34,5 +35,6 @@ __all__ = [
     "PropertyNotFoundError",
     "InvalidAmenityError",
     "PropertyOwnershipError",
+    "PropertyProtectedError",
 ]
 
