@@ -1,4 +1,5 @@
 from django.core.exceptions import ObjectDoesNotExist
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.leasing.models import (
@@ -69,7 +70,8 @@ class ApplicationListSerializer(serializers.ModelSerializer):
         full_name = f"{obj.applicant.first_name} {obj.applicant.last_name}".strip()
         return full_name or obj.applicant.email
 
-    def get_tenancy_id(self, obj):
+    @extend_schema_field(serializers.UUIDField(allow_null=True))
+    def get_tenancy_id(self, obj) -> str | None:
         try:
             return str(obj.tenancy.id)
         except ObjectDoesNotExist:
