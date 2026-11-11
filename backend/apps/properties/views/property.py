@@ -2,10 +2,15 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.response import Response
 
-from apps.core.permissions import IsAdmin, IsObjectOwner, IsOwner
+from apps.core.permissions import IsAdmin, IsNotAdmin, IsObjectOwner, IsOwner
+from apps.core.schemas import (
+    ApiErrorResponseSerializer,
+    paginated_envelope,
+    success_envelope,
+)
 from apps.properties.models import Property
 from apps.properties.serializers import (
     PropertyCreateSerializer,
@@ -25,12 +30,71 @@ from apps.properties.services import (
 
 
 @extend_schema_view(
-    list=extend_schema(tags=["Properties"], summary="List owner properties"),
-    retrieve=extend_schema(tags=["Properties"], summary="Get property details"),
-    create=extend_schema(tags=["Properties"], summary="Create a new property"),
-    update=extend_schema(tags=["Properties"], summary="Update property"),
-    partial_update=extend_schema(tags=["Properties"], summary="Partially update property"),
-    destroy=extend_schema(tags=["Properties"], summary="Delete property"),
+    list=extend_schema(
+        tags=["Properties"],
+        summary="List owner properties",
+        responses={
+            200: PropertyListSerializer(many=True),
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+        },
+    ),
+    retrieve=extend_schema(
+        tags=["Properties"],
+        summary="Get property details",
+        responses={
+            200: success_envelope("PropertyDetailResponse", PropertyDetailSerializer),
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    ),
+    create=extend_schema(
+        tags=["Properties"],
+        summary="Create a new property",
+        request=PropertyCreateSerializer,
+        responses={
+            201: success_envelope("PropertyCreateResponse", PropertyDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+        },
+    ),
+    update=extend_schema(
+        tags=["Properties"],
+        summary="Update property",
+        request=PropertyUpdateSerializer,
+        responses={
+            200: success_envelope("PropertyUpdateResponse", PropertyDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    ),
+    partial_update=extend_schema(
+        tags=["Properties"],
+        summary="Partially update property",
+        request=PropertyUpdateSerializer,
+        responses={
+            200: success_envelope("PropertyPartialUpdateResponse", PropertyDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    ),
+    destroy=extend_schema(
+        tags=["Properties"],
+        summary="Delete property",
+        responses={
+            200: success_envelope("PropertyDeleteResponse"),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    ),
 )
 class PropertyViewSet(viewsets.ModelViewSet):
     """
@@ -44,8 +108,16 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action == "create":
-            return [IsAuthenticated()]
-        return [IsAuthenticated(), (IsOwner | IsAdmin)(), IsObjectOwner()]
+            return [IsAuthenticated(), IsNotAdmin()]
+
+        is_read_action = (
+            self.action in ["list", "my_properties", "retrieve"]
+            or (self.action == "images" and self.request.method in SAFE_METHODS)
+        )
+        if is_read_action:
+            return [IsAuthenticated(), (IsOwner | IsAdmin)(), IsObjectOwner()]
+
+        return [IsAuthenticated(), IsOwner(), IsNotAdmin(), IsObjectOwner()]
 
     def get_queryset(self):
         user = self.request.user
@@ -58,7 +130,11 @@ class PropertyViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
-        if getattr(user, "is_platform_admin", False):
+        is_read_action = (
+            self.action in ["list", "my_properties", "retrieve"]
+            or (self.action == "images" and self.request.method in SAFE_METHODS)
+        )
+        if is_read_action and getattr(user, "is_platform_admin", False):
             return base_qs
 
         return base_qs.filter(owner=user)
@@ -83,7 +159,10 @@ class PropertyViewSet(viewsets.ModelViewSet):
             amenity_ids=amenity_ids,
         )
 
-        response_serializer = PropertyDetailSerializer(property_instance)
+        response_serializer = PropertyDetailSerializer(
+            property_instance,
+            context=self.get_serializer_context(),
+        )
         return Response(
             {
                 "success": True,
@@ -111,6 +190,15 @@ class PropertyViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @extend_schema(
+        tags=["Properties"],
+        summary="List authenticated owner's properties",
+        responses={
+            200: paginated_envelope("PropertyMeListResponse", PropertyListSerializer),
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+        },
+    )
     @action(detail=False, methods=["get"], url_path="me")
     def my_properties(self, request, *args, **kwargs):
         """
@@ -141,9 +229,13 @@ class PropertyViewSet(viewsets.ModelViewSet):
             property_instance=instance,
             validated_data=serializer.validated_data,
             amenity_ids=amenity_ids,
+            actor=request.user,
         )
 
-        response_serializer = PropertyDetailSerializer(updated_property)
+        response_serializer = PropertyDetailSerializer(
+            updated_property,
+            context=self.get_serializer_context(),
+        )
         return Response(
             {
                 "success": True,
@@ -155,11 +247,12 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        delete_property(property_instance=instance)
+        delete_property(property_instance=instance, actor=request.user)
         return Response(
             {
                 "success": True,
                 "message": "Property deleted successfully.",
+                "data": None,
             },
             status=status.HTTP_200_OK,
         )
@@ -167,6 +260,30 @@ class PropertyViewSet(viewsets.ModelViewSet):
     # ============================================================
     # Image Management Endpoints
     # ============================================================
+    @extend_schema(
+        methods=["GET"],
+        tags=["Properties"],
+        summary="List property images",
+        responses={
+            200: success_envelope("PropertyImageListResponse", PropertyImageSerializer(many=True)),
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
+    @extend_schema(
+        methods=["POST"],
+        tags=["Properties"],
+        summary="Add a property image",
+        request=PropertyImageSerializer,
+        responses={
+            201: success_envelope("PropertyImageCreateResponse", PropertyImageSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
     @action(
         detail=True,
         methods=["get", "post"],
@@ -182,7 +299,11 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
         if request.method == "GET":
             images = prop.images.all().order_by("display_order", "-created_at")
-            serializer = PropertyImageSerializer(images, many=True)
+            serializer = PropertyImageSerializer(
+                images,
+                many=True,
+                context=self.get_serializer_context(),
+            )
             return Response(
                 {
                     "success": True,
@@ -208,11 +329,24 @@ class PropertyViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "message": "Property image added successfully.",
-                "data": PropertyImageSerializer(image).data,
+                "data": PropertyImageSerializer(
+                    image,
+                    context=self.get_serializer_context(),
+                ).data,
             },
             status=status.HTTP_201_CREATED,
         )
 
+    @extend_schema(
+        tags=["Properties"],
+        summary="Delete a property image",
+        responses={
+            200: success_envelope("PropertyImageDeleteResponse"),
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
     @action(detail=True, methods=["delete"], url_path="images/(?P<image_id>[0-9a-f-]+)")
     def delete_image(self, request, pk=None, image_id=None):
         """
@@ -226,6 +360,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
                 {
                     "success": False,
                     "message": "Property image not found.",
+                    "errors": None,
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -235,10 +370,22 @@ class PropertyViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "message": "Property image deleted successfully.",
+                "data": None,
             },
             status=status.HTTP_200_OK,
         )
 
+    @extend_schema(
+        tags=["Properties"],
+        summary="Set primary property image",
+        request=None,
+        responses={
+            200: success_envelope("PropertyPrimaryImageResponse", PropertyImageSerializer),
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
     @action(detail=True, methods=["post", "patch"], url_path="images/(?P<image_id>[0-9a-f-]+)/primary")
     def set_primary_image(self, request, pk=None, image_id=None):
         """
@@ -252,6 +399,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
                 {
                     "success": False,
                     "message": "Property image not found.",
+                    "errors": None,
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -261,7 +409,10 @@ class PropertyViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "message": "Primary image set successfully.",
-                "data": PropertyImageSerializer(updated_image).data,
+                "data": PropertyImageSerializer(
+                    updated_image,
+                    context=self.get_serializer_context(),
+                ).data,
             },
             status=status.HTTP_200_OK,
         )

@@ -39,7 +39,7 @@ export const RentalTermsSection: React.FC<RentalTermsSectionProps> = ({
       }
       action={
         formattedRentPreview ? (
-          <span className="text-xs font-bold text-[#408A71] bg-[#ECF5F2] px-2 py-0.5 rounded border border-[#408A71]/20">
+          <span className="text-xs font-medium text-[#111827] bg-gray-100 px-2.5 py-1 rounded-md border border-[#E5E7EB] tabular-nums">
             {formattedRentPreview}/mo
           </span>
         ) : undefined

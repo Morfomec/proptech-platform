@@ -14,24 +14,32 @@ Establishing an explicit API contract prior to backend implementation serves sev
 - **Predictable Error and Data Schemas**: Standardized JSON envelopes, authentication schemes, and status codes prevent integration friction across module boundaries.
 
 > [!IMPORTANT]
-> **API Implementation Status**: This collection is a **design specification and API contract proposal**. Backend implementation is currently in the initial development phase; endpoints are **not yet operational** on a live server. Do not assume endpoints are implemented merely because they are defined in the Postman collection.
+> **API Implementation Status**: Core MVP endpoints for Authentication & Accounts, Properties & Amenities, Listings & Saved Properties, Leasing (Applications & Tenancies), Documents, and Notifications are implemented and documented live via OpenAPI at `/api/schema/` (Swagger UI at `/api/docs/`, ReDoc at `/api/redoc/`). Subscriptions, Rent & Ledger, and dedicated Administration REST endpoints remain planned/pending implementation.
 
 ---
 
 ## 2. Current MVP Modules
 
-The MVP architecture partitions the application into dedicated domain modules as documented in [Module Boundaries](../module-boundaries.md) and [System Architecture](../system-architecture.md). The updated functional domains in accordance with the DBML Version 02 schema are:
+The MVP architecture partitions the application into dedicated domain modules as documented in [Module Boundaries](../module-boundaries.md) and [System Architecture](../system-architecture.md). The functional domains in accordance with the DBML Version 02 schema are:
 
-| Module | Scope in API Contract | Key Endpoints / Resources |
+| Module | Scope in API Contract | Implemented Endpoints (under `/api/v1`) |
 | :--- | :--- | :--- |
-| **Authentication & Accounts** | User registration, authentication, token refresh, password recovery, social authentication (Google OAuth 2.0), and user profiles. | `/auth/register/`, `/auth/login/`, `/auth/logout/`, `/auth/refresh/`, `/auth/google/`, `/profile/me/` |
-| **Properties** | Property-centric real estate assets (residential and commercial), physical specs, coordinates, amenities catalogue, and property photo gallery. | `/properties/`, `/properties/me/`, `/properties/{property_uuid}/`, `/properties/{property_uuid}/images/`, `/amenities/` |
-| **Subscriptions** | Owner SaaS subscription tiers, active subscriptions, property quota tracking, and subscription payments. | `/subscriptions/`, `/subscription-plans/`, `/subscription-payments/` |
-| **Listings & Discovery** | Public rental marketplace listings, asking terms (rent, deposit, availability), moderation, search, and saved properties. | `/listings/`, `/listings/search`, `/listings/{listing_uuid}/`, `/listings/{listing_uuid}/publish/`, `/saved-properties/` |
-| **Leasing & Tenancies** | Rental applications, status history audit trails, and agreed tenancies with attached rental agreement documents. | `/applications/`, `/applications/{application_uuid}/status/`, `/tenancies/`, `/documents/` |
-| **Rent & Ledger** | Rent charges, manual payment logging, refund tracking, and payment allocations. | `/rent-charges/`, `/payments/`, `/payments/{payment_uuid}/refunds/`, `/payment-allocations/` |
-| **Notifications** | In-app user notifications and read receipts. | `/notifications/`, `/notifications/{notification_id}/read/` |
-| **Administration** | Platform oversight, user management, and moderation actions. | `/admin/users/`, `/admin/properties/`, `/admin/reports/` |
+| **Authentication & Accounts** | User registration, email verification, authentication, token refresh/rotation, logout, password recovery, Google OAuth 2.0, and user profiles. | `/auth/register/`, `/auth/verify-email/`, `/auth/resend-email-verification/`, `/auth/login/`, `/auth/google/`, `/auth/token/refresh/`, `/auth/logout/`, `/auth/password-reset/request/`, `/auth/password-reset/confirm/`, `/auth/change-password/`, `/auth/profile/` |
+| **Properties** | Property-centric real estate assets (residential and commercial), physical specs, coordinates, amenities catalogue, and property photo gallery. | `/properties/`, `/properties/me/`, `/properties/{property_uuid}/`, `/properties/{property_uuid}/images/`, `/properties/{property_uuid}/images/{image_uuid}/`, `/properties/{property_uuid}/images/{image_uuid}/primary/`, `/amenities/` |
+| **Listings & Discovery** | Public rental marketplace listings (with query search/filter/sort), asking terms, lifecycle actions, and saved properties. | `/listings/`, `/listings/me/`, `/listings/{listing_uuid}/`, `/listings/{listing_uuid}/publish/`, `/listings/{listing_uuid}/pause/`, `/listings/{listing_uuid}/close/`, `/saved-properties/`, `/saved-properties/{property_uuid}/` |
+| **Leasing & Tenancies** | Rental applications, status history audit trails, agreed tenancies, and attached private documents (including rental agreements). | `/applications/`, `/applications/me/`, `/applications/received/`, `/applications/{application_uuid}/`, `/applications/{application_uuid}/review/`, `/applications/{application_uuid}/withdraw/`, `/tenancies/`, `/tenancies/me/`, `/tenancies/managed/`, `/tenancies/{tenancy_uuid}/`, `/tenancies/{tenancy_uuid}/confirm/`, `/tenancies/{tenancy_uuid}/activate/`, `/tenancies/{tenancy_uuid}/cancel/`, `/tenancies/{tenancy_uuid}/end/`, `/documents/`, `/documents/{document_uuid}/`, `/documents/{document_uuid}/download/` |
+| **Notifications** | In-app user notifications, unread counts, and read receipts. | `/notifications/`, `/notifications/{notification_uuid}/`, `/notifications/unread-count/`, `/notifications/{notification_uuid}/read/`, `/notifications/read-all/` |
+| **Subscriptions** *(Planned)* | Owner SaaS subscription tiers, active subscriptions, property quota tracking, and subscription payments. | *Not yet exposed via REST API* |
+| **Rent & Ledger** *(Planned)* | Rent charges, manual payment logging, refund tracking, and payment allocations. | *Not yet exposed via REST API* |
+| **Administration** *(Oversight)* | Platform oversight via Django Admin (`/admin/`) and read-only API oversight on Properties, Listings, Applications, Tenancies, and Documents. | *Dedicated `/admin/...` REST endpoints not yet implemented* |
+
+### Implemented Query Filters
+
+- **Listings (`GET /api/v1/listings/me/`):** Supports optional `status` query filtering (`draft`, `published`, `paused`, `closed`, single or comma-separated) alongside standard pagination (`page`, `page_size`). Public `GET /api/v1/listings/` supports search, city/locality, category, property type, rent range, bedrooms, furnishing, availability date, and sorting.
+- **Received Applications (`GET /api/v1/applications/received/`):** Supports optional `status` query filtering (`submitted`, `under_review`, `approved`, `rejected`, `withdrawn`, single or comma-separated) and pagination.
+- **Managed Tenancies (`GET /api/v1/tenancies/managed/`):** Supports optional `status` query filtering (`pending`, `confirmed`, `active`, `ended`, `cancelled`) and pagination.
+- **Documents (`GET /api/v1/documents/`):** Supports optional `scope` (`all`, `property`, `application`, `tenancy`, `personal`) as well as UUID filters `property_id`, `application_id`, and `tenancy_id`, scoped strictly to documents accessible to the authenticated user.
+- **Notifications (`GET /api/v1/notifications/`):** Supports optional `is_read` boolean filtering (`true` / `false`) and pagination.
 
 > [!NOTE]
 > **API Contract Alignment**: The attached Postman collection was originally drafted prior to the consolidation of the property-centric schema. Certain legacy folders (e.g. standalone `/units/` and standalone `/agreements/`) reflect the pre-consolidation design. Backend serializers, viewsets, and updated Postman requests will follow the property-centric DBML schema (where properties are the direct rentable assets, pricing resides in listings and tenancies, and rental agreements are tenancy documents).
@@ -106,17 +114,45 @@ Based on the Postman collection specification, requests follow standard REST and
 - **Identifiers**: Primary and foreign keys are represented as UUID strings (e.g., `3fa85f64-5717-4562-b3fc-2c963f66afa6`).
 - **Timestamps**: Date and time values follow ISO 8601 formatting (e.g., `2026-10-29T10:00:00Z`).
 
-### HTTP Methods & Status Codes
-- `GET`: Read resources or collections (`200 OK`).
-- `POST`: Create new resources or trigger actions (`201 Created` or `200 OK`).
-- `PATCH`: Partially update existing resources (`200 OK`).
-- `PUT`: Complete resource replacement (`200 OK`).
-- `DELETE`: Remove resources (`204 No Content` or `200 OK`).
+### Response Envelopes & HTTP Status Codes
+- **Standard Success Envelope**:
+  ```json
+  {
+    "success": true,
+    "message": "Operation completed successfully.",
+    "data": {}
+  }
+  ```
+- **Standard Paginated List Envelope** (`StandardResultsSetPagination`):
+  ```json
+  {
+    "success": true,
+    "message": "Data retrieved successfully.",
+    "count": 20,
+    "next": null,
+    "previous": null,
+    "results": [],
+    "data": []
+  }
+  ```
+- **Standard Error Envelope**:
+  ```json
+  {
+    "success": false,
+    "message": "Request failed.",
+    "errors": {}
+  }
+  ```
+- `GET`: Read resources or collections (`200 OK`; binary `FileResponse` on `/documents/{id}/download/`).
+- `POST`: Create new resources (`201 Created`) or trigger actions (`200 OK`; `POST /saved-properties/` returns `201 Created` on create or `200 OK` if already saved).
+- `PATCH` / `PUT`: Update existing resources (`200 OK`).
+- `DELETE`: Remove resources (`200 OK` with standard JSON envelope).
 - Error codes follow standard HTTP semantics:
   - `400 Bad Request`: Validation errors or invalid payloads.
   - `401 Unauthorized`: Missing or invalid authentication token.
   - `403 Forbidden`: Authenticated user lacks permission for the resource.
   - `404 Not Found`: Resource does not exist.
+  - `429 Too Many Requests`: Scoped authentication rate limit exceeded.
 
 ---
 
@@ -134,5 +170,5 @@ When working with this collection, distinguish between the following three tiers
    - Certain collection folders include extended or advanced workflows (e.g., in-app messaging, automated trust scoring, or maintenance timelines) that are categorized in project planning for future phases beyond the immediate 3-week MVP.
 
 3. **Implemented Endpoints**:
-   - Endpoints are implemented only after the corresponding Django model, viewset, serializer, and URL route have been committed, migrated, and verified with automated test suites.
-   - At this stage of development, the backend implementation is underway and no live endpoints should be assumed operational until validated.
+   - Implemented endpoints for Authentication & Accounts, Properties, Listings & Saved Properties, Applications & Tenancies, Documents, and Notifications are backed by Django viewsets, serializers, services, migrations, and automated test suites, and are documented live via OpenAPI (`/api/schema/`, `/api/docs/`, `/api/redoc/`).
+   - Modules marked *Planned* (Subscriptions, Rent & Ledger, and dedicated `/admin/...` REST endpoints) remain unimplemented until their corresponding milestone work begins.

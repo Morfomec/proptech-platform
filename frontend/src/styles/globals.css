@@ -34,7 +34,7 @@ body {
   line-height: var(--line-height-normal);
 }
 
-/* Links */
+/* Links & Form Control Base Defaults */
 @layer base {
   a {
     color: var(--color-brand-action);
@@ -45,42 +45,41 @@ body {
   a:hover {
     color: var(--color-brand-hover);
   }
-}
 
-/* Form Controls & Button Defaults */
-button,
-input,
-optgroup,
-select,
-textarea {
-  font-family: inherit;
-  font-size: 100%;
-  line-height: inherit;
-  margin: 0;
-}
+  button,
+  input,
+  optgroup,
+  select,
+  textarea {
+    font-family: inherit;
+    font-size: 100%;
+    line-height: inherit;
+    margin: 0;
+  }
 
-button {
-  cursor: pointer;
-}
+  button {
+    cursor: pointer;
+  }
 
-input,
-textarea,
-select {
-  color: var(--color-heading);
-  background-color: var(--color-surface);
-}
+  input,
+  textarea,
+  select {
+    color: var(--color-heading);
+    background-color: var(--color-surface);
+  }
 
-input::placeholder,
-textarea::placeholder {
-  color: #6B7280;
-  opacity: 1;
-}
+  input::placeholder,
+  textarea::placeholder {
+    color: #6B7280;
+    opacity: 1;
+  }
 
-button:disabled,
-input:disabled,
-textarea:disabled,
-select:disabled {
-  cursor: not-allowed;
+  button:disabled,
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
 }
 
 /* Focus Visibility & Accessibility */

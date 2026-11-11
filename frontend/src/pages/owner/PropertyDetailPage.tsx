@@ -5,6 +5,9 @@ import axios from 'axios'
 import { propertyService } from '../../services/property.service'
 import type { PropertyImageItem, PropertyStatus } from '../../types/property'
 import { OWNER_PROPERTIES_QUERY_KEY } from '../../hooks/useOwnerProperties'
+import { OWNER_LISTINGS_QUERY_KEY } from '../../hooks/useOwnerListings'
+import { useToast } from '../../components/ui/toast'
+import { extractApiErrorMessage } from '../../utils/application'
 import { Button } from '../../components/ui/button'
 import { Badge, type BadgeVariant } from '../../components/ui/badge'
 import { Alert } from '../../components/ui/alert'
@@ -82,6 +85,11 @@ export const PropertyDetailPage: React.FC = () => {
   const [imageActionError, setImageActionError] = useState<string | null>(null)
   const [actionImageId, setActionImageId] = useState<string | null>(null)
 
+  // Controlled Property Status Transition State
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const { addToast } = useToast()
+
   // Fetch Property Details
   const {
     data: property,
@@ -113,6 +121,33 @@ export const PropertyDetailPage: React.FC = () => {
         setDeleteError('An unexpected error occurred while deleting the property.')
       }
       setIsDeleting(false)
+    }
+  }
+
+  // Handle Controlled Property Status Transition (validated by backend service layer)
+  const handleStatusTransition = async (targetStatus: PropertyStatus) => {
+    if (!propertyId || isUpdatingStatus) return
+    setIsUpdatingStatus(true)
+    setStatusError(null)
+
+    try {
+      await propertyService.updateProperty(propertyId, { status: targetStatus })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['property', propertyId] }),
+        queryClient.invalidateQueries({ queryKey: [OWNER_PROPERTIES_QUERY_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [OWNER_LISTINGS_QUERY_KEY] }),
+      ])
+      addToast({
+        title: 'Property Status Updated',
+        description: `Property is now marked as ${STATUS_CONFIG[targetStatus]?.label ?? targetStatus}.`,
+        variant: 'success',
+      })
+    } catch (err: unknown) {
+      setStatusError(
+        extractApiErrorMessage(err, 'Failed to update property status.')
+      )
+    } finally {
+      setIsUpdatingStatus(false)
     }
   }
 
@@ -299,7 +334,7 @@ export const PropertyDetailPage: React.FC = () => {
               {categoryLabel} &bull; {typeLabel}
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight">
+          <h1 className="text-xl font-medium text-[#111827] tracking-tight mb-0">
             {property.title}
           </h1>
           <p className="text-xs sm:text-sm text-[#6B7280] flex items-center gap-1.5">
@@ -715,7 +750,77 @@ export const PropertyDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* C. Quick Action Shortcuts */}
+          {/* C. Property Status Controls */}
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-[#111827]">Property Status</h3>
+              <Badge variant={statusBadge.variant} size="sm" dot>
+                {statusBadge.label}
+              </Badge>
+            </div>
+
+            {statusError && (
+              <Alert variant="error" title="Status update rejected">
+                {statusError}
+              </Alert>
+            )}
+
+            {property.status === 'occupied' ? (
+              <p className="text-xs text-[#6B7280]">
+                Property occupancy is managed automatically through active tenancies.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-[#6B7280]">
+                  {property.status === 'draft'
+                    ? 'Mark this property as available so its listing can be published.'
+                    : property.status === 'available'
+                      ? 'Move to maintenance or inactive if temporarily unavailable. Published listings will be paused automatically.'
+                      : 'Re-enable this property to make it eligible for listing publication.'}
+                </p>
+                <div className="flex flex-col gap-2 pt-1">
+                  {property.status !== 'available' && (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      className="w-full"
+                      isLoading={isUpdatingStatus}
+                      onClick={() => void handleStatusTransition('available')}
+                    >
+                      Mark as Available
+                    </Button>
+                  )}
+                  {property.status !== 'maintenance' && property.status !== 'draft' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={isUpdatingStatus}
+                      onClick={() => void handleStatusTransition('maintenance')}
+                    >
+                      Set Maintenance
+                    </Button>
+                  )}
+                  {property.status !== 'inactive' && property.status !== 'draft' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={isUpdatingStatus}
+                      onClick={() => void handleStatusTransition('inactive')}
+                    >
+                      Mark Inactive
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* D. Quick Action Shortcuts */}
           <div className="rounded-2xl border border-[#408A71]/20 bg-[#408A71]/5 p-5 space-y-3">
             <h3 className="text-sm font-bold text-[#111827]">Quick Actions</h3>
             <p className="text-xs text-[#6B7280]">

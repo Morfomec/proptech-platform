@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.schemas import ApiErrorResponseSerializer, success_envelope
 from apps.properties.models import Amenity
 from apps.properties.serializers import AmenitySerializer
 
@@ -19,7 +20,13 @@ class AmenityListView(APIView):
         tags=["Amenities"],
         summary="List active amenities",
         description="Retrieve all active amenities organized by category.",
-        responses={200: AmenitySerializer(many=True)},
+        responses={
+            200: success_envelope(
+                "AmenityListResponse",
+                AmenitySerializer(many=True),
+            ),
+            401: ApiErrorResponseSerializer,
+        },
     )
     def get(self, request):
         amenities = Amenity.objects.filter(is_active=True).order_by("category", "name")

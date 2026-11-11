@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 import { Avatar } from '../../../components/ui/avatar'
 import { Dropdown, type DropdownMenuItem } from '../../../components/ui/dropdown'
+import { resolveDefaultWorkspaceRoute, setStoredWorkspace } from '../../../utils/workspace'
 
 export interface LandingHeaderProps {
   activeNav?: string
@@ -107,8 +108,30 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
           />
         </svg>
       ),
-      onClick: () => navigate(user?.is_owner ? '/app/owner/dashboard' : '/app/owner/properties/new'),
+      onClick: () => navigate(resolveDefaultWorkspaceRoute(user)),
     },
+    ...(user?.is_tenant
+      ? [
+          {
+            id: 'tenant-workspace',
+            label: 'Tenant Workspace',
+            icon: (
+              <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                />
+              </svg>
+            ),
+            onClick: () => {
+              setStoredWorkspace('tenant')
+              navigate('/app/tenant/dashboard')
+            },
+          },
+        ]
+      : []),
     ...(user?.is_owner
       ? [
           {
@@ -124,7 +147,10 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
                 />
               </svg>
             ),
-            onClick: () => navigate('/app/owner/dashboard'),
+            onClick: () => {
+              setStoredWorkspace('owner')
+              navigate('/app/owner/dashboard')
+            },
           },
         ]
       : []),
@@ -226,7 +252,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
           )}
           {isAuthenticated && (
             <Link
-              to={user?.is_owner ? '/app/owner/dashboard' : '/app/dashboard'}
+              to="/app/dashboard"
               className="text-sm font-medium text-[#111827] hover:text-[#408A71] transition-colors"
             >
               Dashboard
@@ -439,7 +465,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
             )}
             {isAuthenticated && (
               <Link
-                to={user?.is_owner ? '/app/owner/dashboard' : '/app/dashboard'}
+                to="/app/dashboard"
                 onClick={() => setMobileMenuOpen(false)}
                 className="text-base font-medium text-[#111827] hover:text-[#408A71] py-2 transition-colors"
               >
@@ -486,7 +512,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
                 </Link>
 
                 <Link
-                  to={user?.is_owner ? '/app/owner/dashboard' : '/app/owner/properties/new'}
+                  to="/app/dashboard"
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#111827] hover:bg-gray-50 transition-colors"
                 >
@@ -501,10 +527,34 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
                   Dashboard
                 </Link>
 
+                {user?.is_tenant && (
+                  <Link
+                    to="/app/tenant/dashboard"
+                    onClick={() => {
+                      setStoredWorkspace('tenant')
+                      setMobileMenuOpen(false)
+                    }}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#408A71] hover:bg-[#F0FDF4] transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                      />
+                    </svg>
+                    Tenant Workspace
+                  </Link>
+                )}
+
                 {user?.is_owner && (
                   <Link
                     to="/app/owner/dashboard"
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={() => {
+                      setStoredWorkspace('owner')
+                      setMobileMenuOpen(false)
+                    }}
                     className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#408A71] hover:bg-[#F0FDF4] transition-colors"
                   >
                     <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">

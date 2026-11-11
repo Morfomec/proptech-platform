@@ -49,7 +49,7 @@ class ListingSearchAndFilterAPITests(APITestCase):
             bathrooms=Decimal("4.0"),
             furnishing_status=FurnishingStatus.FULLY_FURNISHED,
             parking_spaces=2,
-            status=PropertyStatus.DRAFT,
+            status=PropertyStatus.AVAILABLE,
         )
         PropertyImage.objects.create(
             property=self.prop1,
@@ -74,7 +74,12 @@ class ListingSearchAndFilterAPITests(APITestCase):
             bathrooms=Decimal("1.0"),
             furnishing_status=FurnishingStatus.SEMI_FURNISHED,
             parking_spaces=1,
-            status=PropertyStatus.DRAFT,
+            status=PropertyStatus.AVAILABLE,
+        )
+        PropertyImage.objects.create(
+            property=self.prop2,
+            image_url="https://images.example.com/prop2.jpg",
+            is_primary=True,
         )
 
         # Prop 3: Commercial Office in Kochi (Commercial, Unfurnished)
@@ -92,7 +97,12 @@ class ListingSearchAndFilterAPITests(APITestCase):
             pin_code="682011",
             bedrooms=None,
             furnishing_status=FurnishingStatus.UNFURNISHED,
-            status=PropertyStatus.DRAFT,
+            status=PropertyStatus.AVAILABLE,
+        )
+        PropertyImage.objects.create(
+            property=self.prop3,
+            image_url="https://images.example.com/prop3.jpg",
+            is_primary=True,
         )
 
         # Prop 4: Downtown Apartment in Kozhikode (2 BHK, Fully Furnished)
@@ -111,7 +121,12 @@ class ListingSearchAndFilterAPITests(APITestCase):
             bedrooms=2,
             bathrooms=Decimal("2.0"),
             furnishing_status=FurnishingStatus.FULLY_FURNISHED,
-            status=PropertyStatus.DRAFT,
+            status=PropertyStatus.AVAILABLE,
+        )
+        PropertyImage.objects.create(
+            property=self.prop4,
+            image_url="https://images.example.com/prop4.jpg",
+            is_primary=True,
         )
 
         # 3. Published Listings
@@ -495,7 +510,14 @@ class ListingSearchAndFilterAPITests(APITestCase):
                 district="Kozhikode",
                 state="Kerala",
                 pin_code="673001",
-                status=PropertyStatus.DRAFT,
+                bedrooms=2,
+                bathrooms=Decimal("2.0"),
+                status=PropertyStatus.AVAILABLE,
+            )
+            PropertyImage.objects.create(
+                property=prop,
+                image_url=f"https://images.example.com/batch_{i}.jpg",
+                is_primary=True,
             )
             Listing.objects.create(
                 property=prop,

@@ -17,6 +17,8 @@ class ProfileView(APIView):
     serializer_class = ProfileSerializer
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Retrieve authenticated user profile",
         responses={
             200: inline_serializer(
                 name="ProfileRetrieveResponse",
@@ -49,6 +51,8 @@ class ProfileView(APIView):
         )
 
     @extend_schema(
+        tags=["Authentication"],
+        summary="Update authenticated user profile",
         request=ProfileSerializer,
         responses={
             200: inline_serializer(

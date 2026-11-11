@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { WorkspaceSwitcher } from '../workspace/WorkspaceSwitcher'
+import { OwnerNotificationBell } from './OwnerNotificationBell'
 
 export interface OwnerHeaderProps {
   onOpenSidebar: () => void
@@ -48,7 +50,7 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({ onOpenSidebar }) => {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[#E5E7EB] bg-white px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-[#E5E7EB] bg-white px-4 sm:px-6 lg:px-8">
       {/* Mobile Hamburger & Logo */}
       <div className="flex items-center gap-3 lg:hidden">
         <button
@@ -116,66 +118,49 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({ onOpenSidebar }) => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search properties, locations..."
-            className="w-full pl-9 pr-4 py-2 bg-[#F3F4F6] hover:bg-[#EFF1F4] focus:bg-white text-xs text-[#111827] placeholder-[#9CA3AF] rounded-lg border border-transparent focus:border-[#408A71] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/20 transition-all"
+            className="w-full pl-9 pr-4 py-2 bg-[#F3F4F6] hover:bg-[#EBEEF2] focus:bg-white text-xs text-[#111827] placeholder-[#6B7280] rounded-lg border border-[#E5E7EB] focus:border-[#408A71] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/20 transition-all"
           />
         </form>
       </div>
 
       {/* Right Action Icons & User Dropdown */}
       <div className="flex items-center gap-3 sm:gap-4 ml-auto">
-        {/* Notification Bell */}
-        <button
-          type="button"
-          className="relative p-2 text-[#6B7280] hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-          title="Notifications"
-          aria-label="Notifications"
-        >
-          <svg
-            className="w-5 h-5"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-            />
-          </svg>
-        </button>
+        {/* Notification Bell Flyout */}
+        <OwnerNotificationBell onBeforeOpen={() => setIsDropdownOpen(false)} />
+
+        {/* Workspace Switcher (shown only when user has multiple authorized workspaces) */}
+        <WorkspaceSwitcher currentWorkspace="owner" />
 
         {/* Vertical Divider */}
-        <div className="h-6 w-px bg-[#E5E7EB]" />
+        <div className="h-7 w-px bg-[#E5E7EB]" />
 
         {/* User Profile Pill & Pull-Down Menu */}
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setIsDropdownOpen((prev) => !prev)}
-            className="flex items-center gap-2.5 p-1 sm:p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer group focus:outline-hidden"
+            className="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer group focus:outline-hidden"
             aria-expanded={isDropdownOpen}
             aria-haspopup="true"
           >
             {/* User Avatar */}
-            <div className="w-8 h-8 rounded-full bg-[#408A71]/15 text-[#408A71] font-bold text-xs flex items-center justify-center ring-2 ring-[#408A71]/20 group-hover:ring-[#408A71]/40 transition-all shrink-0">
+            <div className="w-9 h-9 rounded-full bg-[#408A71]/15 text-[#408A71] font-semibold text-sm flex items-center justify-center ring-2 ring-[#408A71]/20 group-hover:ring-[#408A71]/40 transition-all shrink-0">
               {userInitials}
             </div>
 
             {/* User Name & Role (desktop) */}
             <div className="hidden sm:flex flex-col text-left leading-tight">
-              <span className="text-xs font-bold text-[#111827] group-hover:text-[#408A71] transition-colors truncate max-w-[140px]">
+              <span className="text-sm font-medium text-[#111827] group-hover:text-[#408A71] transition-colors truncate max-w-[160px]">
                 {userFullName}
               </span>
-              <span className="text-[10px] font-medium text-[#6B7280]">
+              <span className="text-xs font-normal text-[#6B7280]">
                 Property Owner
               </span>
             </div>
 
             {/* Chevron icon */}
             <svg
-              className={`w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-[#4B5563] transition-transform duration-200 ${
+              className={`w-4 h-4 text-[#9CA3AF] group-hover:text-[#4B5563] transition-transform duration-200 ${
                 isDropdownOpen ? 'rotate-180 text-[#408A71]' : ''
               }`}
               xmlns="http://www.w3.org/2000/svg"
@@ -217,7 +202,7 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({ onOpenSidebar }) => {
               {/* Navigation Options */}
               <div className="py-1">
                 <Link
-                  to="/app/profile"
+                  to="/app/owner/settings"
                   onClick={() => setIsDropdownOpen(false)}
                   className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-[#374151] hover:bg-gray-50 hover:text-[#111827] transition-colors"
                 >

@@ -14,6 +14,9 @@ from apps.accounts.services.email_verification import (
     verify_email_token,
 )
 from apps.accounts.services.registration import register_user
+from apps.accounts.services.resend_email_verification import (
+    resend_email_verification,
+)
 
 User = get_user_model()
 
@@ -104,6 +107,45 @@ class EmailVerificationServiceTests(TestCase):
         with override_settings(DEBUG=False, FRONTEND_URL=""):
             with self.assertRaises(ImproperlyConfigured):
                 send_verification_email(self.user, "dummy_token")
+
+
+class ResendEmailVerificationServiceTests(TestCase):
+    def test_resend_for_eligible_inactive_unverified_user_dispatches_email(self):
+        user = User.objects.create_user(
+            email="pending_resend@example.com",
+            password="securepassword123",
+            is_active=False,
+            email_verified_at=None,
+        )
+
+        with patch(
+            "apps.accounts.services.resend_email_verification.send_verification_email"
+        ) as mock_send:
+            with self.captureOnCommitCallbacks(execute=True):
+                resend_email_verification("PENDING_RESEND@example.com")
+
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args[0][0], user)
+        self.assertTrue(
+            EmailVerificationToken.objects.filter(user=user).exists()
+        )
+
+    def test_resend_ignores_active_verified_or_nonexistent_accounts(self):
+        active_user = User.objects.create_user(
+            email="active_resend@example.com",
+            password="securepassword123",
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+
+        with patch(
+            "apps.accounts.services.resend_email_verification.send_verification_email"
+        ) as mock_send:
+            with self.captureOnCommitCallbacks(execute=True):
+                resend_email_verification(active_user.email)
+                resend_email_verification("nobody@example.com")
+
+        mock_send.assert_not_called()
 
 
 class RegistrationServiceTests(TestCase):

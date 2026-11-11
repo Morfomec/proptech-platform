@@ -1,12 +1,17 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Badge } from '../../../components/ui/badge'
 import { listingService } from '../../../services/listing.service'
-import { getMediaUrl } from '../../../utils/imageUrl'
+import { useOwnedPropertyIds } from '../../../hooks/useOwnedPropertyIds'
+import { useSavedPropertiesToggle } from '../../../hooks/useSavedPropertiesToggle'
+import {
+  PropertyListingCard,
+  PropertyListingCardSkeleton,
+} from '../../../components/property/PropertyListingCard'
 
 export const FeaturedRentals: React.FC = () => {
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({})
+  const ownedPropertyIds = useOwnedPropertyIds()
+  const { isPropertySaved, handleToggleSave } = useSavedPropertiesToggle()
 
   const { data, isLoading } = useQuery({
     queryKey: ['public-featured-listings'],
@@ -16,23 +21,13 @@ export const FeaturedRentals: React.FC = () => {
 
   const listings = data?.results || []
 
-  const handleImageError = (id: string) => {
-    setImageErrors((prev) => ({ ...prev, [id]: true }))
-  }
-
-  const formatPrice = (amount: string | number) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount
-    if (isNaN(num)) return amount
-    return `₹${num.toLocaleString('en-IN')}`
-  }
-
   return (
     <section id="properties" className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-6">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#111827] tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-medium text-[#111827] tracking-tight mb-0">
               Featured Rentals
             </h2>
           </div>
@@ -56,20 +51,9 @@ export const FeaturedRentals: React.FC = () => {
 
         {/* Content Section: Loading Skeletons, Empty State, or Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs animate-pulse"
-              >
-                <div className="aspect-[16/10] bg-gray-200 w-full" />
-                <div className="p-5 space-y-3">
-                  <div className="h-5 bg-gray-200 rounded w-3/4" />
-                  <div className="h-4 bg-gray-100 rounded w-1/2" />
-                  <div className="h-4 bg-gray-100 rounded w-full" />
-                  <div className="h-9 bg-gray-100 rounded-xl w-full pt-2" />
-                </div>
-              </div>
+              <PropertyListingCardSkeleton key={i} />
             ))}
           </div>
         ) : listings.length === 0 ? (
@@ -96,131 +80,22 @@ export const FeaturedRentals: React.FC = () => {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {listings.map((listing) => {
               const prop = listing.property
-              const propId = prop?.id || listing.id
-              const hasImgError = imageErrors[propId]
-              const currentImg =
-                !hasImgError && prop?.primary_image_url
-                  ? getMediaUrl(prop.primary_image_url)
-                  : null
-
-              const isCommercial = prop?.category === 'commercial' || !prop?.bedrooms
-              const locationText = [prop?.locality, prop?.city, prop?.state]
-                .filter(Boolean)
-                .join(', ') || prop?.address_line_1 || 'Location available on request'
-
+              const propertyId = prop?.id || listing.property_id
               return (
-                <div
+                <PropertyListingCard
                   key={listing.id}
-                  className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col group"
-                >
-                  {/* Property Image & Badge */}
-                  <Link
-                    to={`/properties/${listing.id}`}
-                    state={{ from: 'properties' }}
-                    className="relative aspect-[16/10] w-full overflow-hidden bg-gray-100 block"
-                  >
-                    {currentImg ? (
-                      <img
-                        src={currentImg}
-                        alt={listing.title || prop?.title || 'Property listing'}
-                        onError={() => handleImageError(propId)}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center bg-gray-50 text-gray-400">
-                        <svg
-                          className="h-10 w-10 text-gray-300 mb-1"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          strokeWidth="1.5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-                          />
-                        </svg>
-                        <span className="text-xs font-medium text-gray-400">No photo uploaded</span>
-                      </div>
-                    )}
-                    <div className="absolute top-3 left-3">
-                      <Badge variant="success" size="sm" className="font-bold tracking-wider uppercase shadow-xs">
-                        VERIFIED
-                      </Badge>
-                    </div>
-                  </Link>
-
-                  {/* Card Body */}
-                  <div className="p-5 flex flex-col flex-grow justify-between">
-                    <div>
-                      <Link to={`/properties/${listing.id}`} state={{ from: 'properties' }}>
-                        <h3 className="text-lg font-bold text-[#111827] group-hover:text-[#408A71] transition-colors line-clamp-1 mb-1">
-                          {listing.title || prop?.title || 'Rental Listing'}
-                        </h3>
-                      </Link>
-                      <p className="text-sm text-[#6B7280] mb-3 flex items-center gap-1.5">
-                        <svg
-                          className="w-4 h-4 text-gray-400 shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={1.75}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
-                        <span className="truncate">{locationText}</span>
-                      </p>
-
-                      {/* Property Specs */}
-                      <p className="text-xs font-medium text-[#6B7280] mb-4 pb-4 border-b border-gray-100">
-                        {isCommercial ? (
-                          <>
-                            <span className="capitalize">{prop?.property_type || 'Commercial'}</span>
-                            {prop?.built_up_area && ` · ${prop.built_up_area} sq ft`}
-                          </>
-                        ) : (
-                          <>
-                            {prop?.bedrooms || 0} {prop?.bedrooms === 1 ? 'Bed' : 'Beds'} &middot;{' '}
-                            {prop?.bathrooms || 0} {prop?.bathrooms === 1 ? 'Bath' : 'Baths'}
-                            {prop?.built_up_area && ` · ${prop.built_up_area} sq ft`}
-                          </>
-                        )}
-                      </p>
-                    </div>
-
-                    {/* Card Bottom: Price and CTA */}
-                    <div className="flex items-center justify-between pt-1">
-                      <div>
-                        <span className="text-xl font-extrabold text-[#111827]">
-                          {formatPrice(listing.monthly_rent)}
-                        </span>
-                        <span className="text-xs text-[#6B7280] font-normal">/month</span>
-                      </div>
-
-                      <Link
-                        to={`/properties/${listing.id}`}
-                        state={{ from: 'properties' }}
-                        className="text-sm font-semibold text-[#408A71] hover:text-[#34745C] hover:underline transition-colors focus:outline-hidden cursor-pointer"
-                      >
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+                  title={listing.title || prop?.title || 'Rental Listing'}
+                  detailTo={`/properties/${listing.id}`}
+                  detailState={{ from: 'properties' }}
+                  property={prop}
+                  monthlyRent={listing.monthly_rent}
+                  isOwned={ownedPropertyIds.has(propertyId)}
+                  isSaved={isPropertySaved(propertyId)}
+                  onToggleSave={(e) => handleToggleSave(e, propertyId)}
+                />
               )
             })}
           </div>

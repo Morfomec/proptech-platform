@@ -253,6 +253,71 @@ class PropertyAPITests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data["data"]["id"], str(self.property_a.id))
 
+        # Admin can list images for another owner's property (read-only)
+        res_imgs = self.client.get(
+            reverse("properties:property-images", kwargs={"pk": self.property_a.id})
+        )
+        self.assertEqual(res_imgs.status_code, status.HTTP_200_OK)
+
+    def test_admin_cannot_create_update_delete_properties_or_images(self):
+        img = PropertyImage.objects.create(
+            property=self.property_a,
+            image_url="https://storage.example.com/sunrise/admin-protected.jpg",
+            is_primary=True,
+        )
+        self.client.force_authenticate(user=self.admin_user)
+
+        # Admin cannot create a property
+        res_create = self.client.post(
+            reverse("properties:property-list"),
+            self.valid_creation_payload,
+            format="json",
+        )
+        self.assertEqual(res_create.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Property.objects.filter(owner=self.admin_user).exists())
+
+        # Admin cannot update another owner's property (PATCH or PUT)
+        res_patch = self.client.patch(
+            reverse("properties:property-detail", kwargs={"pk": self.property_a.id}),
+            {"title": "Admin Modified Title"},
+            format="json",
+        )
+        self.assertEqual(res_patch.status_code, status.HTTP_403_FORBIDDEN)
+        self.property_a.refresh_from_db()
+        self.assertEqual(self.property_a.title, "Sunrise Luxury Flat")
+
+        # Admin cannot delete another owner's property
+        res_del = self.client.delete(
+            reverse("properties:property-detail", kwargs={"pk": self.property_a.id})
+        )
+        self.assertEqual(res_del.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Property.objects.filter(pk=self.property_a.id).exists())
+
+        # Admin cannot add, set primary, or delete another owner's property image
+        res_add_img = self.client.post(
+            reverse("properties:property-images", kwargs={"pk": self.property_a.id}),
+            {"image_url": "https://storage.example.com/sunrise/extra.jpg"},
+            format="json",
+        )
+        self.assertEqual(res_add_img.status_code, status.HTTP_403_FORBIDDEN)
+
+        res_primary_img = self.client.post(
+            reverse(
+                "properties:property-set-primary-image",
+                kwargs={"pk": self.property_a.id, "image_id": img.id},
+            )
+        )
+        self.assertEqual(res_primary_img.status_code, status.HTTP_403_FORBIDDEN)
+
+        res_del_img = self.client.delete(
+            reverse(
+                "properties:property-delete-image",
+                kwargs={"pk": self.property_a.id, "image_id": img.id},
+            )
+        )
+        self.assertEqual(res_del_img.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(PropertyImage.objects.filter(pk=img.id).exists())
+
     def test_cross_owner_image_operations_rejected(self):
         # Create an image on Owner A's property
         img = PropertyImage.objects.create(
@@ -497,5 +562,72 @@ class PropertyAPITests(APITestCase):
 
         # Ensure no orphaned image record exists
         self.assertFalse(PropertyImage.objects.filter(caption="test_cleanup").exists())
+
+    def test_mutation_responses_include_absolute_media_urls_and_consistent_envelopes(self):
+        self.client.force_authenticate(user=self.owner_a)
+
+        # Upload a local binary image (stored under /media/...)
+        file = self._create_test_image_file(format="JPEG", filename="context_check.jpg")
+        img_res = self.client.post(
+            reverse("properties:property-images", kwargs={"pk": self.property_a.id}),
+            {"file": file, "is_primary": True},
+            format="multipart",
+        )
+        self.assertEqual(img_res.status_code, status.HTTP_201_CREATED)
+        img_id = img_res.data["data"]["id"]
+        self.assertTrue(img_res.data["data"]["image_url"].startswith("http://testserver/"))
+
+        # set_primary_image returns absolute URL
+        primary_res = self.client.post(
+            reverse(
+                "properties:property-set-primary-image",
+                kwargs={"pk": self.property_a.id, "image_id": img_id},
+            )
+        )
+        self.assertEqual(primary_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(primary_res.data["data"]["image_url"].startswith("http://testserver/"))
+
+        # update property returns absolute primary_image_url matching retrieve
+        patch_res = self.client.patch(
+            reverse("properties:property-detail", kwargs={"pk": self.property_a.id}),
+            {"title": "Updated Context Property"},
+            format="json",
+        )
+        retrieve_res = self.client.get(
+            reverse("properties:property-detail", kwargs={"pk": self.property_a.id})
+        )
+        self.assertEqual(
+            patch_res.data["data"]["primary_image_url"],
+            retrieve_res.data["data"]["primary_image_url"],
+        )
+        self.assertTrue(patch_res.data["data"]["primary_image_url"].startswith("http://testserver/"))
+
+        # missing image 404 uses standard error envelope with errors=None
+        missing_del = self.client.delete(
+            reverse(
+                "properties:property-delete-image",
+                kwargs={"pk": self.property_a.id, "image_id": uuid.uuid4()},
+            )
+        )
+        self.assertEqual(missing_del.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(missing_del.data["success"])
+        self.assertIn("errors", missing_del.data)
+        self.assertIsNone(missing_del.data["errors"])
+
+        # DELETE image and DELETE property include data=None
+        del_img_res = self.client.delete(
+            reverse(
+                "properties:property-delete-image",
+                kwargs={"pk": self.property_a.id, "image_id": img_id},
+            )
+        )
+        self.assertEqual(del_img_res.status_code, status.HTTP_200_OK)
+        self.assertIsNone(del_img_res.data["data"])
+
+        del_prop_res = self.client.delete(
+            reverse("properties:property-detail", kwargs={"pk": self.property_a.id})
+        )
+        self.assertEqual(del_prop_res.status_code, status.HTTP_200_OK)
+        self.assertIsNone(del_prop_res.data["data"])
 
 

@@ -37,6 +37,15 @@ urlpatterns = [
 
     # Listings API
     path("api/v1/", include("apps.listings.urls")),
+    
+    # Applications & Tenancies API
+    path("api/v1/", include("apps.leasing.urls")),
+
+    #Documents API
+    path("api/v1/",include("apps.documents.urls")),
+
+    #Notification API
+    path("api/v1/",include("apps.notifications.urls")),
 
     # OpenAPI Schema
     path(

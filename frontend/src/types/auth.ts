@@ -24,6 +24,8 @@ export interface UserProfile extends User {
   bio: string | null
   profile_image: string | null
   email_verified_at: string | null
+  has_usable_password: boolean
+  auth_providers: string[]
 }
 
 /**

@@ -1,21 +1,18 @@
 import React from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { resolveDefaultWorkspaceRoute } from '../../utils/workspace'
 
 /**
  * DashboardPage
- * Redirects authenticated users to their active workspace.
- * Owners land directly in the Owner Workspace (/app/owner/dashboard).
- * Non-owners are directed to property creation to initialize owner capabilities.
+ * Intelligent entry point for `/app/dashboard`.
+ * Routes users cleanly to their authorized workspace (honoring stored preference when eligible).
  */
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth()
+  const targetRoute = resolveDefaultWorkspaceRoute(user)
 
-  if (user?.is_owner) {
-    return <Navigate to="/app/owner/dashboard" replace />
-  }
-
-  return <Navigate to="/app/owner/properties/new" replace />
+  return <Navigate to={targetRoute} replace />
 }
 
 export default DashboardPage

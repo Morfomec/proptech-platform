@@ -148,6 +148,22 @@ class IsAdmin(BasePermission):
         )
 
 
+class IsNotAdmin(BasePermission):
+    """
+    Disallow platform administrators from performing write/create actions on
+    ordinary owner/tenant endpoints (read-only oversight policy).
+    """
+
+    message = "Platform administrators have read-only access and cannot perform this action."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and not getattr(request.user, "is_platform_admin", False)
+        )
+
+
 class IsOwnerOrReadOnly(BasePermission):
     """
     Allow read-only access to everyone permitted by authentication
@@ -211,7 +227,7 @@ class IsObjectOwner(BasePermission):
         if not (request.user and request.user.is_authenticated):
             return False
 
-        if getattr(request.user, "is_platform_admin", False):
+        if request.method in SAFE_METHODS and getattr(request.user, "is_platform_admin", False):
             return True
 
         return _check_object_ownership(request.user, obj)

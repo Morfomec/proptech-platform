@@ -61,10 +61,11 @@ class ListingServiceTests(TestCase):
             district="Kozhikode",
             state="Kerala",
             pin_code="673011",
-            status=PropertyStatus.DRAFT,
-            # Coordinates are explicitly omitted to verify they remain optional for publishing
-            latitude=None,
-            longitude=None,
+            latitude=Decimal("11.2588"),
+            longitude=Decimal("75.7804"),
+            bedrooms=3,
+            bathrooms=Decimal("2.0"),
+            status=PropertyStatus.AVAILABLE,
         )
         self.property_image = PropertyImage.objects.create(
             property=self.property,
@@ -83,9 +84,11 @@ class ListingServiceTests(TestCase):
             district="Malappuram",
             state="Kerala",
             pin_code="676121",
-            status=PropertyStatus.DRAFT,
-            latitude=None,
-            longitude=None,
+            latitude=Decimal("11.1202"),
+            longitude=Decimal("76.1199"),
+            bedrooms=2,
+            bathrooms=Decimal("2.0"),
+            status=PropertyStatus.AVAILABLE,
         )
         self.valid_payload = {
             "title": "Sea Breeze Villa for Rent",
@@ -350,20 +353,165 @@ class ListingServiceTests(TestCase):
         self.assertEqual(published.status, ListingStatus.PUBLISHED)
         self.assertIsNotNone(published.published_at)
 
-    def test_publishing_with_images_and_no_coordinates_succeeds(self):
-        # self.property has image but latitude and longitude are None
-        self.assertIsNone(self.property.latitude)
-        self.assertIsNone(self.property.longitude)
-        self.assertTrue(self.property.images.exists())
-
+    def test_cannot_publish_listing_for_occupied_maintenance_or_inactive_property(self):
         listing = create_listing(
             owner=self.owner,
             property_instance=self.property,
             validated_data=self.valid_payload,
             publish=False,
         )
-        published = publish_listing(owner=self.owner, listing_instance=listing)
+
+        for disallowed_status in (
+            PropertyStatus.OCCUPIED,
+            PropertyStatus.MAINTENANCE,
+            PropertyStatus.INACTIVE,
+        ):
+            with self.subTest(property_status=disallowed_status):
+                Property.objects.filter(pk=self.property.pk).update(status=disallowed_status)
+                listing.refresh_from_db()
+
+                with self.assertRaises(ListingStateError) as exc_context:
+                    publish_listing(owner=self.owner, listing_instance=listing)
+
+                self.assertIn("property", exc_context.exception.message_dict)
+                listing.refresh_from_db()
+                self.assertEqual(listing.status, ListingStatus.DRAFT)
+                self.assertIsNone(listing.published_at)
+
+    def test_cannot_create_and_publish_listing_for_unavailable_property(self):
+        for disallowed_status in (
+            PropertyStatus.OCCUPIED,
+            PropertyStatus.MAINTENANCE,
+            PropertyStatus.INACTIVE,
+        ):
+            with self.subTest(property_status=disallowed_status):
+                Property.objects.filter(pk=self.property.pk).update(status=disallowed_status)
+                self.property.refresh_from_db()
+
+                with self.assertRaises(ListingStateError) as exc_context:
+                    create_listing(
+                        owner=self.owner,
+                        property_instance=self.property,
+                        validated_data=self.valid_payload,
+                        publish=True,
+                    )
+
+                self.assertIn("property", exc_context.exception.message_dict)
+                self.assertFalse(Listing.objects.filter(property=self.property).exists())
+
+                # Passing status="published" in validated_data must also be rejected.
+                payload_with_status = {
+                    **self.valid_payload,
+                    "status": ListingStatus.PUBLISHED,
+                }
+                with self.assertRaises(ListingStateError):
+                    create_listing(
+                        owner=self.owner,
+                        property_instance=self.property,
+                        validated_data=payload_with_status,
+                        publish=False,
+                    )
+
+                self.assertFalse(Listing.objects.filter(property=self.property).exists())
+
+    def test_publishing_listing_transitions_draft_property_to_available_without_coordinates(self):
+        draft_prop = Property.objects.create(
+            owner=self.owner,
+            title="Draft Villa Without Coords",
+            category=PropertyCategory.COMMERCIAL,
+            property_type=PropertyType.OFFICE,
+            address_line_1="MG Road 10",
+            locality="Central",
+            city="Kozhikode",
+            district="Kozhikode",
+            state="Kerala",
+            pin_code="673001",
+            latitude=None,
+            longitude=None,
+            status=PropertyStatus.DRAFT,
+        )
+        PropertyImage.objects.create(
+            property=draft_prop,
+            image_url="https://images.example.com/office/main.jpg",
+            is_primary=True,
+        )
+
+        # Saving draft does not publish listing or promote property
+        draft_listing = create_listing(
+            owner=self.owner,
+            property_instance=draft_prop,
+            validated_data=self.valid_payload,
+            publish=False,
+        )
+        draft_prop.refresh_from_db()
+        self.assertEqual(draft_listing.status, ListingStatus.DRAFT)
+        self.assertEqual(draft_prop.status, PropertyStatus.DRAFT)
+
+        # Publishing transitions draft property -> available atomically
+        published = publish_listing(owner=self.owner, listing_instance=draft_listing)
+        draft_prop.refresh_from_db()
         self.assertEqual(published.status, ListingStatus.PUBLISHED)
+        self.assertEqual(draft_prop.status, PropertyStatus.AVAILABLE)
+
+    def test_create_listing_publish_true_promotes_draft_property_and_rolls_back_on_failure(self):
+        draft_prop = Property.objects.create(
+            owner=self.owner,
+            title="Draft Residential Missing Specs",
+            category=PropertyCategory.RESIDENTIAL,
+            property_type=PropertyType.APARTMENT,
+            address_line_1="Link Road 5",
+            locality="West Hill",
+            city="Kozhikode",
+            district="Kozhikode",
+            state="Kerala",
+            pin_code="673005",
+            bedrooms=None,
+            bathrooms=None,
+            status=PropertyStatus.DRAFT,
+        )
+
+        # Missing image -> fails and preserves DRAFT status
+        with self.assertRaises(PropertyImageRequiredError):
+            create_listing(
+                owner=self.owner,
+                property_instance=draft_prop,
+                validated_data=self.valid_payload,
+                publish=True,
+            )
+        draft_prop.refresh_from_db()
+        self.assertEqual(draft_prop.status, PropertyStatus.DRAFT)
+        self.assertFalse(Listing.objects.filter(property=draft_prop).exists())
+
+        # Add image, but incomplete residential specs fail property.full_clean() -> transaction rolls back
+        PropertyImage.objects.create(
+            property=draft_prop,
+            image_url="https://images.example.com/apt/main.jpg",
+            is_primary=True,
+        )
+        with self.assertRaises(ValidationError):
+            create_listing(
+                owner=self.owner,
+                property_instance=draft_prop,
+                validated_data=self.valid_payload,
+                publish=True,
+            )
+        draft_prop.refresh_from_db()
+        self.assertEqual(draft_prop.status, PropertyStatus.DRAFT)
+        self.assertFalse(Listing.objects.filter(property=draft_prop).exists())
+
+        # Complete specs (still without coordinates) -> succeeds & promotes DRAFT -> AVAILABLE
+        draft_prop.bedrooms = 2
+        draft_prop.bathrooms = Decimal("2.0")
+        draft_prop.save()
+        created = create_listing(
+            owner=self.owner,
+            property_instance=draft_prop,
+            validated_data=self.valid_payload,
+            publish=True,
+        )
+        draft_prop.refresh_from_db()
+        self.assertEqual(created.status, ListingStatus.PUBLISHED)
+        self.assertEqual(draft_prop.status, PropertyStatus.AVAILABLE)
 
     def test_publishing_when_review_status_is_pending_does_not_prevent_publication(self):
         listing = create_listing(
@@ -469,4 +617,38 @@ class ListingServiceTests(TestCase):
 
         with self.assertRaises(ListingNotFoundError):
             get_listing_by_id(listing_id="00000000-0000-0000-0000-000000000000")
+
+    def test_platform_admin_rejected_by_listing_service_mutations(self):
+        admin_user = User.objects.create_superuser(
+            email="listing_service_admin@example.com",
+            password="securepassword123",
+            first_name="Admin",
+            last_name="Listing",
+        )
+        listing = create_listing(
+            owner=self.owner,
+            property_instance=self.property,
+            validated_data=self.valid_payload,
+            publish=False,
+        )
+
+        with self.assertRaises(ListingOwnershipError):
+            create_listing(
+                owner=admin_user,
+                property_instance=self.property,
+                validated_data=self.valid_payload,
+            )
+
+        for action in (
+            lambda: update_listing(
+                owner=admin_user,
+                listing_instance=listing,
+                validated_data={"title": "Admin Edit"},
+            ),
+            lambda: publish_listing(owner=admin_user, listing_instance=listing),
+            lambda: pause_listing(owner=admin_user, listing_instance=listing),
+            lambda: close_listing(owner=admin_user, listing_instance=listing),
+        ):
+            with self.assertRaises(ListingOwnershipError):
+                action()
 

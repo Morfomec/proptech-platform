@@ -3,6 +3,10 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listingService } from '../../services/listing.service'
 import { useAuth } from '../../hooks/useAuth'
+import { useOwnedPropertyIds } from '../../hooks/useOwnedPropertyIds'
+import { useMyApplications } from '../../hooks/useTenantWorkspace'
+import { Badge } from '../../components/ui/badge'
+import { getApplicationStatusMeta } from '../../utils/application'
 import LandingHeader from './components/LandingHeader'
 import LandingFooter from './components/LandingFooter'
 import { getMediaUrl } from '../../utils/imageUrl'
@@ -26,12 +30,23 @@ const FURNISHING_LABELS: Record<string, string> = {
   unfurnished: 'Unfurnished',
 }
 
-export const PublicPropertyDetailPage: React.FC = () => {
+export interface PublicPropertyDetailPageProps {
+  workspaceMode?: 'public' | 'tenant'
+}
+
+export const PublicPropertyDetailPage: React.FC<PublicPropertyDetailPageProps> = ({
+  workspaceMode = 'public',
+}) => {
+  const isTenantWorkspace = workspaceMode === 'tenant'
+  const browsePath = isTenantWorkspace ? '/app/tenant/properties' : '/properties'
+  const savedPath = isTenantWorkspace ? '/app/tenant/saved-properties' : '/saved-properties'
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
+  const ownedPropertyIds = useOwnedPropertyIds()
+  const { data: myApplicationsData } = useMyApplications({ page: 1, page_size: 100 })
 
   // Gallery Modal & Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -66,7 +81,7 @@ export const PublicPropertyDetailPage: React.FC = () => {
 
   const isSaved = Boolean(
     listing?.property_id &&
-      savedData?.results?.some((item) => item.property_id === listing.property_id)
+    savedData?.results?.some((item) => item.property_id === listing.property_id)
   )
 
   // Save / Bookmark Mutation using existing SavedProperty API
@@ -91,6 +106,28 @@ export const PublicPropertyDetailPage: React.FC = () => {
     }
     saveMutation.mutate()
   }
+
+  const handleApplyClick = () => {
+    const targetListingId = listing?.id || id
+    const applyPath = targetListingId ? `/app/tenant/properties/${targetListingId}/apply` : '/app/tenant/properties'
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: applyPath } } })
+      return
+    }
+    navigate(applyPath)
+  }
+
+  const isOwnProperty = Boolean(
+    isAuthenticated &&
+      listing &&
+      ((user?.id && listing.owner?.id && user.id === listing.owner.id) ||
+        ownedPropertyIds.has(listing.property_id))
+  )
+
+  const existingApplication = useMemo(() => {
+    if (!listing || !isAuthenticated) return null
+    return (myApplicationsData?.results ?? []).find((a) => a.listing === listing.id) ?? null
+  }, [listing, isAuthenticated, myApplicationsData])
 
   // Format INR price helper
   const formatPrice = (amount: string | number | null | undefined) => {
@@ -136,9 +173,28 @@ export const PublicPropertyDetailPage: React.FC = () => {
   // Navigation source state passed via React Router location state
   const navSource = (location.state as { from?: 'properties' | 'saved' | 'owner' } | null)?.from ?? null
 
-  // Construct dynamic breadcrumb trail based strictly on navigation source
+  // Construct dynamic breadcrumb trail based strictly on workspace & navigation source
   const breadcrumbSegments = useMemo(() => {
     const propertyTitle = listing?.title || listing?.property?.title || 'Property Details'
+
+    if (isTenantWorkspace) {
+      if (navSource === 'saved') {
+        return {
+          trail: [
+            { label: 'Overview', path: '/app/tenant/dashboard' },
+            { label: 'Saved Properties', path: savedPath },
+          ],
+          current: propertyTitle,
+        }
+      }
+      return {
+        trail: [
+          { label: 'Overview', path: '/app/tenant/dashboard' },
+          { label: 'Browse Properties', path: browsePath },
+        ],
+        current: propertyTitle,
+      }
+    }
 
     if (navSource === 'owner') {
       return {
@@ -175,14 +231,20 @@ export const PublicPropertyDetailPage: React.FC = () => {
       trail: [{ label: 'Home', path: '/' }],
       current: propertyTitle,
     }
-  }, [navSource, listing?.title, listing?.property?.title])
+  }, [isTenantWorkspace, browsePath, savedPath, navSource, listing?.title, listing?.property?.title])
 
   // Loading State
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex flex-col">
-        <LandingHeader activeNav="properties" />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full animate-pulse">
+      <div className={isTenantWorkspace ? 'pb-8' : 'min-h-screen bg-white flex flex-col'}>
+        {!isTenantWorkspace && <LandingHeader activeNav="properties" />}
+        <main
+          className={
+            isTenantWorkspace
+              ? 'w-full animate-pulse'
+              : 'max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full animate-pulse'
+          }
+        >
           <div className="h-4 bg-gray-200 rounded w-64 mb-6" />
           <div className="h-[420px] bg-gray-200 rounded-2xl w-full mb-4" />
           <div className="grid grid-cols-2 gap-4 mb-8">
@@ -199,16 +261,22 @@ export const PublicPropertyDetailPage: React.FC = () => {
             <div className="h-80 bg-gray-100 rounded-2xl" />
           </div>
         </main>
-        <LandingFooter isAuthenticated={isAuthenticated} />
+        {!isTenantWorkspace && <LandingFooter isAuthenticated={isAuthenticated} />}
       </div>
     )
   }
 
+  const isListingPubliclyVisible = Boolean(
+    listing &&
+      listing.status === 'published' &&
+      listing.property?.status === 'available'
+  )
+
   // Error / Not Found State
-  if (isError || !listing) {
+  if (isError || !listing || (!isOwnProperty && !isListingPubliclyVisible)) {
     return (
-      <div className="min-h-screen bg-white flex flex-col">
-        <LandingHeader activeNav="properties" />
+      <div className={isTenantWorkspace ? 'pb-8' : 'min-h-screen bg-white flex flex-col'}>
+        {!isTenantWorkspace && <LandingHeader activeNav="properties" />}
         <main className="max-w-3xl mx-auto px-6 py-20 flex-1 flex flex-col items-center justify-center text-center">
           <div className="w-16 h-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -225,13 +293,13 @@ export const PublicPropertyDetailPage: React.FC = () => {
             This property listing might have been removed, closed, or the link may be outdated.
           </p>
           <Link
-            to="/properties"
+            to={browsePath}
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white font-semibold text-sm transition-colors"
           >
-            Browse Other Rentals
+            {isTenantWorkspace ? 'Back to Browse Properties' : 'Browse Other Rentals'}
           </Link>
         </main>
-        <LandingFooter isAuthenticated={isAuthenticated} />
+        {!isTenantWorkspace && <LandingFooter isAuthenticated={isAuthenticated} />}
       </div>
     )
   }
@@ -252,8 +320,8 @@ export const PublicPropertyDetailPage: React.FC = () => {
     images.length > 0
       ? images.map((i) => i.image_url)
       : primaryImg
-      ? [primaryImg]
-      : []
+        ? [primaryImg]
+        : []
 
   const locationText =
     [prop?.address_line_1, prop?.locality, prop?.city, prop?.district, prop?.state]
@@ -353,33 +421,57 @@ export const PublicPropertyDetailPage: React.FC = () => {
   const ownerAvatar = listing.owner?.avatar_url || null
   const ownerRole = listing.owner?.role || 'Property Owner'
 
-  return (
-    <div className="min-h-screen bg-[#FDFEFE] flex flex-col font-sans">
-      <LandingHeader activeNav="properties" />
+  const existingAppMeta = existingApplication
+    ? getApplicationStatusMeta(existingApplication.status)
+    : null
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex-1">
-        {/* 1. Breadcrumbs */}
-        <nav aria-label="Breadcrumb" className="mb-6">
-          <ol className="flex items-center space-x-2 text-xs sm:text-sm text-gray-500 font-medium truncate">
-            {breadcrumbSegments.trail.map((item) => (
-              <React.Fragment key={item.path}>
-                <li>
-                  <Link to={item.path} className="hover:text-[#408A71] transition-colors">
-                    {item.label}
-                  </Link>
-                </li>
-                <li className="text-gray-400" aria-hidden="true">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </li>
-              </React.Fragment>
-            ))}
-            <li className="text-gray-900 font-semibold truncate max-w-xs sm:max-w-md">
-              {breadcrumbSegments.current}
-            </li>
-          </ol>
-        </nav>
+  return (
+    <div className={isTenantWorkspace ? 'pb-10 font-sans' : 'min-h-screen bg-[#FDFEFE] flex flex-col font-sans'}>
+      {!isTenantWorkspace && <LandingHeader activeNav="properties" />}
+
+      <main
+        className={
+          isTenantWorkspace
+            ? 'w-full'
+            : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex-1'
+        }
+      >
+        {/* 1. Breadcrumbs & Workspace Back Navigation */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <nav aria-label="Breadcrumb">
+            <ol className="flex items-center space-x-2 text-xs sm:text-sm text-gray-500 font-medium truncate">
+              {breadcrumbSegments.trail.map((item) => (
+                <React.Fragment key={item.path}>
+                  <li>
+                    <Link to={item.path} className="hover:text-[#408A71] transition-colors">
+                      {item.label}
+                    </Link>
+                  </li>
+                  <li className="text-gray-400" aria-hidden="true">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </li>
+                </React.Fragment>
+              ))}
+              <li className="text-gray-900 font-semibold truncate max-w-xs sm:max-w-md">
+                {breadcrumbSegments.current}
+              </li>
+            </ol>
+          </nav>
+
+          {isTenantWorkspace && (
+            <Link
+              to={navSource === 'saved' ? savedPath : browsePath}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5E7EB] bg-white hover:bg-gray-50 text-xs font-semibold text-[#374151] transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>{navSource === 'saved' ? 'Back to Saved Properties' : 'Back to Browse Properties'}</span>
+            </Link>
+          )}
+        </div>
 
         {/* 2. Top Two-Column Section: Gallery (~60%) + Summary & Pricing (~40%) */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start mb-8 sm:mb-12">
@@ -394,11 +486,10 @@ export const PublicPropertyDetailPage: React.FC = () => {
                     setActivePhotoIndex(idx >= 0 ? idx : 0)
                     setLightboxOpen(true)
                   }}
-                  className={`relative w-full rounded-2xl overflow-hidden bg-gray-100 cursor-pointer group shadow-xs ${
-                    img2
-                      ? 'h-52 sm:h-64 md:h-[280px] lg:h-[340px] xl:h-[380px]'
-                      : 'h-60 sm:h-72 md:h-[340px] lg:h-[400px]'
-                  }`}
+                  className={`relative w-full rounded-2xl overflow-hidden bg-gray-100 cursor-pointer group shadow-xs ${img2
+                    ? 'h-52 sm:h-64 md:h-[280px] lg:h-[340px] xl:h-[380px]'
+                    : 'h-60 sm:h-72 md:h-[340px] lg:h-[400px]'
+                    }`}
                 >
                   <img
                     src={getMediaUrl(primaryImg)}
@@ -476,9 +567,18 @@ export const PublicPropertyDetailPage: React.FC = () => {
           {/* Right Column: Property Summary & Pricing Card (~40%) */}
           <div className="md:col-span-5">
             <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-5 sm:p-6 lg:p-7 space-y-4 sm:space-y-5">
+              {/* Ownership Badge (visible only to authenticated owner of this property) */}
+              {isOwnProperty && (
+                <div>
+                  <Badge variant="success" size="sm" dot>
+                    Your Property
+                  </Badge>
+                </div>
+              )}
+
               {/* Property Title & Location */}
               <div>
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#111827] tracking-tight leading-tight">
+                <h1 className="text-xl font-medium text-[#111827] tracking-tight leading-tight mb-0">
                   {listing.title || prop?.title}
                 </h1>
                 <p className="flex items-center gap-1.5 text-xs sm:text-sm text-[#408A71] font-medium mt-1.5">
@@ -492,24 +592,24 @@ export const PublicPropertyDetailPage: React.FC = () => {
               {/* Monthly Rent */}
               <div className="pt-0.5">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#408A71] tracking-tight">
+                  <span className="text-2xl sm:text-3xl font-medium text-[#111827] tracking-tight">
                     {formatPrice(listing.monthly_rent)}
                   </span>
-                  <span className="text-xs sm:text-sm font-medium text-[#6B7280]">/ month</span>
+                  <span className="text-xs sm:text-sm font-normal text-[#6B7280]">/ month</span>
                 </div>
               </div>
 
               {/* Supported Specifications */}
               {specItems.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 py-3 border-y border-gray-100">
+                <div className="grid grid-cols-2 gap-x-5 gap-y-4 py-4 border-y border-gray-100">
                   {specItems.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-[#ECF5F2] text-[#408A71] flex items-center justify-center shrink-0">
+                    <div key={index} className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-[#ECF5F2] text-[#408A71] flex items-center justify-center shrink-0">
                         {item.icon}
                       </div>
                       <div className="min-w-0">
                         <div className="text-[10px] text-[#6B7280] font-medium truncate uppercase tracking-wider">{item.label}</div>
-                        <div className="text-xs font-bold text-[#111827] truncate">{item.value}</div>
+                        <div className="text-xs sm:text-sm font-medium text-[#111827] truncate">{item.value}</div>
                       </div>
                     </div>
                   ))}
@@ -532,34 +632,94 @@ export const PublicPropertyDetailPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Action Button: Save Property */}
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={handleSaveToggle}
-                  disabled={saveMutation.isPending}
-                  className={`w-full py-2.5 sm:py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] shadow-xs ${
-                    isSaved
-                      ? 'border border-[#408A71] bg-[#ECF5F2] text-[#408A71]'
-                      : 'bg-[#408A71] hover:bg-[#34745C] text-white hover:shadow-md'
-                  }`}
-                >
-                  <svg
-                    className={`w-4 h-4 transition-colors ${
-                      isSaved ? 'text-[#408A71] fill-[#408A71]' : 'text-white fill-none'
-                    }`}
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                    />
-                  </svg>
-                  <span>{isSaved ? 'Saved to Bookmarks' : 'Save Property'}</span>
-                </button>
+              {/* Role-, Ownership-, and Eligibility-Aware Action Buttons */}
+              <div className="pt-1 space-y-2.5">
+                {isOwnProperty ? (
+                  <>
+                    <Link
+                      to={`/app/owner/properties/${listing.property_id}`}
+                      className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-xs hover:shadow-md"
+                    >
+                      <span>Manage Property</span>
+                      <span aria-hidden="true">→</span>
+                    </Link>
+                    <p className="text-[11px] text-center text-[#6B7280]">
+                      You are the owner of this property listing.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    {isAuthenticated && existingApplication && existingAppMeta ? (
+                      <div className="rounded-xl border border-[#CBE7DC] bg-[#F4FAF7] p-4 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-[#1A382A]">
+                            Application Submitted
+                          </span>
+                          <Badge variant={existingAppMeta.variant} size="sm" dot>
+                            {existingAppMeta.label}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-[#4B5563]">
+                          Applied on {formatDate(existingApplication.created_at)}
+                        </p>
+                        <Link
+                          to={`/app/tenant/applications/${existingApplication.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#408A71] hover:text-[#34745C]"
+                        >
+                          <span>View Application Details</span>
+                          <span aria-hidden="true">→</span>
+                        </Link>
+                      </div>
+                    ) : isAuthenticated && !user?.is_tenant ? (
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-[#4B5563]">
+                        Only tenant accounts can submit rental applications.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <button
+                          type="button"
+                          onClick={handleApplyClick}
+                          className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] shadow-xs hover:shadow-md"
+                        >
+                          <span>Apply for Rent</span>
+                        </button>
+                        {!isAuthenticated && (
+                          <p className="text-[11px] text-center text-[#6B7280]">
+                            Sign in required to submit an application.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Secondary Action: Save Property */}
+                    <button
+                      type="button"
+                      onClick={handleSaveToggle}
+                      disabled={saveMutation.isPending}
+                      className={`w-full py-2.5 sm:py-3 px-4 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] ${
+                        isSaved
+                          ? 'border border-[#408A71] bg-[#ECF5F2] text-[#408A71]'
+                          : 'border border-gray-200 bg-white hover:bg-gray-50 text-[#111827]'
+                      }`}
+                    >
+                      <svg
+                        className={`w-4 h-4 transition-colors ${
+                          isSaved ? 'text-[#408A71] fill-[#408A71]' : 'text-[#408A71] fill-none'
+                        }`}
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                        />
+                      </svg>
+                      <span>{isSaved ? 'Saved to Bookmarks' : 'Save Property'}</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* "LISTED BY" Divider */}
@@ -729,9 +889,8 @@ export const PublicPropertyDetailPage: React.FC = () => {
                 key={idx}
                 type="button"
                 onClick={() => setActivePhotoIndex(idx)}
-                className={`relative h-14 w-20 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                  idx === activePhotoIndex ? 'border-[#408A71] scale-105' : 'border-transparent opacity-60 hover:opacity-100'
-                }`}
+                className={`relative h-14 w-20 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${idx === activePhotoIndex ? 'border-[#408A71] scale-105' : 'border-transparent opacity-60 hover:opacity-100'
+                  }`}
               >
                 <img src={getMediaUrl(photo)} alt="" className="w-full h-full object-cover" />
               </button>
@@ -740,7 +899,7 @@ export const PublicPropertyDetailPage: React.FC = () => {
         </div>
       )}
 
-      <LandingFooter isAuthenticated={isAuthenticated} />
+      {!isTenantWorkspace && <LandingFooter isAuthenticated={isAuthenticated} />}
     </div>
   )
 }

@@ -5,11 +5,12 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 
-from apps.listings.models import Listing, ListingStatus, SavedProperty
+from apps.listings.models import Listing, SavedProperty
 from apps.listings.services.exceptions import (
     ListingOwnershipError,
     PropertyNotDiscoverableError,
 )
+from apps.listings.services.listing_service import get_public_listings_queryset
 from apps.properties.models import Property
 
 
@@ -24,13 +25,9 @@ def _verify_user_authentication(user) -> None:
 def is_property_discoverable(property_instance: Property) -> bool:
     """
     Determine whether a physical property is currently publicly discoverable.
-    In accordance with marketplace visibility rules, a property is discoverable
-    if and only if it has an active published listing.
+    Delegates to the canonical public visibility policy.
     """
-    return Listing.objects.filter(
-        property=property_instance,
-        status=ListingStatus.PUBLISHED,
-    ).exists()
+    return get_public_listings_queryset().filter(property=property_instance).exists()
 
 
 @transaction.atomic
@@ -95,7 +92,7 @@ def get_saved_properties(*, user):
 
     published_listings_prefetch = Prefetch(
         "property__listings",
-        queryset=Listing.objects.filter(status=ListingStatus.PUBLISHED),
+        queryset=get_public_listings_queryset(),
         to_attr="active_published_listings",
     )
 

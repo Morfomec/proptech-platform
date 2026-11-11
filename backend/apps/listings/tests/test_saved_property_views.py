@@ -68,7 +68,7 @@ class SavedPropertyAPITests(APITestCase):
             bathrooms=Decimal("3.0"),
             furnishing_status=FurnishingStatus.FULLY_FURNISHED,
             parking_spaces=1,
-            status=PropertyStatus.DRAFT,
+            status=PropertyStatus.AVAILABLE,
         )
         self.public_image = PropertyImage.objects.create(
             property=self.public_property,
@@ -195,7 +195,14 @@ class SavedPropertyAPITests(APITestCase):
             district="Ernakulam",
             state="Kerala",
             pin_code="682011",
-            status=PropertyStatus.DRAFT,
+            bedrooms=2,
+            bathrooms=Decimal("2.0"),
+            status=PropertyStatus.AVAILABLE,
+        )
+        PropertyImage.objects.create(
+            property=prop_b,
+            image_url="https://images.example.com/kochi/waterfront.jpg",
+            is_primary=True,
         )
         Listing.objects.create(
             property=prop_b,
@@ -345,7 +352,14 @@ class SavedPropertyAPITests(APITestCase):
                 district="Ernakulam",
                 state="Kerala",
                 pin_code="682030",
-                status=PropertyStatus.DRAFT,
+                bedrooms=2,
+                bathrooms=Decimal("2.0"),
+                status=PropertyStatus.AVAILABLE,
+            )
+            PropertyImage.objects.create(
+                property=prop,
+                image_url=f"https://images.example.com/kochi/flat_{i}.jpg",
+                is_primary=True,
             )
             Listing.objects.create(
                 property=prop,
@@ -399,4 +413,109 @@ class SavedPropertyAPITests(APITestCase):
         res = self.client.post(url, payload, format="json")
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("non_field_errors", res.data.get("errors", {}))
+
+    def test_saved_property_create_and_delete_envelopes_and_absolute_image_urls(self):
+        PropertyImage.objects.filter(property=self.public_property).delete()
+        PropertyImage.objects.create(
+            property=self.public_property,
+            image_url="/media/properties/saved_sample.jpg",
+            is_primary=True,
+        )
+        self.client.force_authenticate(user=self.tenant_a)
+
+        create_res = self.client.post(
+            reverse("listings:saved-property-list"),
+            {"property_id": str(self.public_property.id)},
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            create_res.data["data"]["property"]["primary_image_url"],
+            "http://testserver/media/properties/saved_sample.jpg",
+        )
+
+        list_res = self.client.get(reverse("listings:saved-property-list"))
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(list_res.data["success"])
+        self.assertEqual(list_res.data["data"], list_res.data["results"])
+        self.assertEqual(
+            list_res.data["data"][0]["property"]["primary_image_url"],
+            "http://testserver/media/properties/saved_sample.jpg",
+        )
+
+        del_res = self.client.delete(
+            reverse(
+                "listings:saved-property-detail",
+                kwargs={"property_id": self.public_property.id},
+            )
+        )
+        self.assertEqual(del_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(del_res.data["success"])
+        self.assertIn("data", del_res.data)
+        self.assertIsNone(del_res.data["data"])
+
+    def test_saved_properties_enforce_public_visibility_and_mask_non_available_properties(self):
+        self.client.force_authenticate(user=self.tenant_a)
+        save_url = reverse("listings:saved-property-list")
+
+        # Cannot save non-available properties even if a published listing exists in DB.
+        for hidden_status in (
+            PropertyStatus.DRAFT,
+            PropertyStatus.INACTIVE,
+            PropertyStatus.MAINTENANCE,
+            PropertyStatus.OCCUPIED,
+        ):
+            hidden_prop = Property.objects.create(
+                owner=self.owner_user,
+                title=f"Hidden Saved {hidden_status}",
+                category=PropertyCategory.RESIDENTIAL,
+                property_type=PropertyType.APARTMENT,
+                address_line_1="Secret Rd",
+                locality="Hidden",
+                city="Kozhikode",
+                district="Kozhikode",
+                state="Kerala",
+                pin_code="673001",
+                bedrooms=2,
+                bathrooms=Decimal("2.0"),
+                status=hidden_status,
+            )
+            PropertyImage.objects.create(
+                property=hidden_prop,
+                image_url=f"https://images.example.com/hidden_{hidden_status}.jpg",
+                is_primary=True,
+            )
+            Listing.objects.create(
+                property=hidden_prop,
+                title=f"Hidden Listing {hidden_status}",
+                monthly_rent=Decimal("31000.00"),
+                status=ListingStatus.PUBLISHED,
+            )
+            res = self.client.post(
+                save_url,
+                {"property_id": str(hidden_prop.id)},
+                format="json",
+            )
+            self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Saved property that later turns unavailable masks listing/property details cleanly.
+        SavedProperty.objects.create(user=self.tenant_a, property=self.public_property)
+        for non_available_status in (
+            PropertyStatus.DRAFT,
+            PropertyStatus.MAINTENANCE,
+            PropertyStatus.INACTIVE,
+            PropertyStatus.OCCUPIED,
+        ):
+            with self.subTest(property_status=non_available_status):
+                Property.objects.filter(pk=self.public_property.pk).update(
+                    status=non_available_status
+                )
+                list_res = self.client.get(save_url)
+                self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+                item = list_res.data["results"][0]
+                self.assertFalse(item["is_available"])
+                self.assertIsNone(item["listing"])
+                self.assertEqual(item["property"]["status"], "unavailable")
+                self.assertNotIn("address_line_1", item["property"])
+                self.assertNotIn("bedrooms", item["property"])
 

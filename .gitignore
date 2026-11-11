@@ -18,6 +18,8 @@ env/
 *.log
 staticfiles/
 media/
+private_media/
+backend/private_media/
 
 # Database files
 *.sqlite3

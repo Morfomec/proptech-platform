@@ -3,11 +3,16 @@ from unittest.mock import Mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from apps.accounts.models import EmailVerificationToken, SocialAccount, UserProfile
+from apps.accounts.models import (
+    EmailVerificationToken,
+    PasswordResetToken,
+    SocialAccount,
+    UserProfile,
+)
 from apps.core.permissions import (
     IsAdmin,
     IsObjectOwner,
@@ -165,6 +170,64 @@ class AccountsModelTests(TestCase):
         )
         self.assertIsInstance(token_obj.id, uuid.UUID)
         self.assertIn("Email verification for tenant@example.com", str(token_obj))
+
+    def test_case_insensitive_email_unique_constraint(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create(
+                    email="TENANT@EXAMPLE.COM",
+                    password="password123",
+                )
+
+    def test_social_account_provider_user_uniqueness_and_cascade(self):
+        other_user = User.objects.create_user(
+            email="other_social@example.com",
+            password="password123",
+        )
+        social = SocialAccount.objects.create(
+            user=self.user,
+            provider=SocialAccount.Provider.GOOGLE,
+            provider_user_id="shared-google-sub",
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                SocialAccount.objects.create(
+                    user=other_user,
+                    provider=SocialAccount.Provider.GOOGLE,
+                    provider_user_id="shared-google-sub",
+                )
+
+        self.user.delete()
+        self.assertFalse(SocialAccount.objects.filter(pk=social.pk).exists())
+
+    def test_password_reset_token_model_uniqueness_and_cascade(self):
+        expires = timezone.now() + timezone.timedelta(minutes=30)
+        reset_token = PasswordResetToken.objects.create(
+            user=self.user,
+            token_hash="b" * 64,
+            expires_at=expires,
+        )
+        self.assertIsInstance(reset_token.id, uuid.UUID)
+        self.assertEqual(self.user.password_reset_token, reset_token)
+        self.assertIn("Password reset token for tenant@example.com", str(reset_token))
+        self.assertIsNotNone(reset_token.created_at)
+
+        other_user = User.objects.create_user(
+            email="reset_other@example.com",
+            password="password123",
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                PasswordResetToken.objects.create(
+                    user=other_user,
+                    token_hash="b" * 64,
+                    expires_at=expires,
+                )
+
+        self.user.delete()
+        self.assertFalse(
+            PasswordResetToken.objects.filter(pk=reset_token.pk).exists()
+        )
 
 
 class CapabilityPermissionsTests(TestCase):

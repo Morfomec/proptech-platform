@@ -46,6 +46,11 @@ class ProfileSerializer(serializers.Serializer):
     is_platform_admin = serializers.BooleanField(read_only=True)
 
     email_verified_at = serializers.DateTimeField(read_only=True)
+    has_usable_password = serializers.BooleanField(read_only=True)
+    auth_providers = serializers.ListField(
+        child=serializers.CharField(),
+        read_only=True,
+    )
 
     def to_internal_value(self, data):
         allowed_fields = set(self.fields.keys())
@@ -71,6 +76,15 @@ class ProfileSerializer(serializers.Serializer):
 
     def to_representation(self, instance):
         profile = getattr(instance, "profile", None)
+        has_usable_password = instance.has_usable_password()
+        social_providers = list(
+            instance.social_accounts.order_by("provider").values_list(
+                "provider", flat=True
+            )
+        )
+        auth_providers = (
+            (["password"] if has_usable_password else []) + social_providers
+        )
 
         return {
             "id": str(instance.id),
@@ -86,4 +100,6 @@ class ProfileSerializer(serializers.Serializer):
             "email_verified_at": self.fields[
                 "email_verified_at"
             ].to_representation(instance.email_verified_at),
+            "has_usable_password": has_usable_password,
+            "auth_providers": auth_providers,
         }

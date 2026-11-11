@@ -220,14 +220,15 @@ class PropertyModelTests(TestCase):
             Property.objects.create(**data_bad)
         self.assertIn("longitude", ctx.exception.message_dict)
 
-        # Non-draft status with NULL coordinates -> error
-        with self.assertRaises(ValidationError) as ctx:
-            data_bad = self.valid_residential_data.copy()
-            data_bad["status"] = PropertyStatus.AVAILABLE
-            data_bad["latitude"] = None
-            data_bad["longitude"] = None
-            Property.objects.create(**data_bad)
-        self.assertIn("coordinates", ctx.exception.message_dict)
+        # Non-draft (available) status with NULL coordinates -> allowed (coordinates are optional)
+        data_avail_null = self.valid_residential_data.copy()
+        data_avail_null["status"] = PropertyStatus.AVAILABLE
+        data_avail_null["latitude"] = None
+        data_avail_null["longitude"] = None
+        prop_avail_null = Property.objects.create(**data_avail_null)
+        self.assertEqual(prop_avail_null.status, PropertyStatus.AVAILABLE)
+        self.assertIsNone(prop_avail_null.latitude)
+        self.assertIsNone(prop_avail_null.longitude)
 
     # ============================================================
     # 7. Built-up Area, Parking Spaces and Indian PIN Code Validation
