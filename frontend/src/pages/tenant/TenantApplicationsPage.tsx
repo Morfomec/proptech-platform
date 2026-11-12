@@ -17,6 +17,7 @@ import {
   formatDate,
   formatINR,
   getApplicationStatusMeta,
+  isActiveApplicationStatus,
   isWithdrawableApplication,
 } from '../../utils/application'
 import type { ApplicationListItem } from '../../types/leasing'
@@ -224,30 +225,29 @@ export const TenantApplicationsPage: React.FC = () => {
 
       {/* 4. Applications List */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((idx) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((idx) => (
             <div
               key={idx}
               className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden"
             >
-              <Skeleton className="aspect-[4/3] w-full rounded-none" />
-              <div className="p-4 space-y-2.5">
+              <Skeleton className="aspect-[16/10] w-full rounded-none" />
+              <div className="p-3.5 space-y-2">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3.5 w-1/2" />
-                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-8 w-full" />
               </div>
             </div>
           ))}
         </div>
       ) : applications.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {applications.map((app) => {
               const matchedListing = listingMap.get(app.listing)
               const prop = matchedListing?.property
-              const imageUrl = prop?.primary_image_url
-                ? getMediaUrl(prop.primary_image_url)
-                : null
+              const rawImageUrl = app.property_image_url || prop?.primary_image_url
+              const imageUrl = rawImageUrl ? getMediaUrl(rawImageUrl) : null
               const locationText = prop
                 ? [prop.locality, prop.city].filter(Boolean).join(', ') || prop.address_line_1
                 : null
@@ -264,7 +264,7 @@ export const TenantApplicationsPage: React.FC = () => {
                   className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col group"
                 >
                   {/* Property Image + Status Overlay */}
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-100">
                     <Link
                       to={`/app/tenant/applications/${app.id}`}
                       className="block w-full h-full"
@@ -308,7 +308,7 @@ export const TenantApplicationsPage: React.FC = () => {
                   </div>
 
                   {/* Card Body */}
-                  <div className="p-4 flex flex-col flex-grow justify-between gap-3">
+                  <div className="p-3.5 flex flex-col flex-grow justify-between gap-2.5">
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="min-w-0 flex-1">
@@ -380,7 +380,7 @@ export const TenantApplicationsPage: React.FC = () => {
                     <div className="flex items-center gap-2.5 pt-3 border-t border-[#F3F4F6]">
                       <Link
                         to={`/app/tenant/applications/${app.id}`}
-                        className="flex-1 py-2.5 px-3 rounded-xl bg-[#ECF5F2] hover:bg-[#DDF0E8] text-[#408A71] text-xs sm:text-sm font-semibold transition-colors text-center"
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-[#ECF5F2] hover:bg-[#DDF0E8] text-[#408A71] text-xs sm:text-sm font-medium transition-colors text-center"
                       >
                         View Details
                       </Link>
@@ -396,6 +396,21 @@ export const TenantApplicationsPage: React.FC = () => {
                           Withdraw
                         </Button>
                       )}
+
+                      {!isActiveApplicationStatus(app.status) &&
+                        matchedListing?.status === 'published' &&
+                        !applications.some(
+                          (other) =>
+                            other.listing === app.listing &&
+                            isActiveApplicationStatus(other.status)
+                        ) && (
+                          <Link
+                            to={`/app/tenant/properties/${app.listing}/apply`}
+                            className="py-2 px-3 rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white text-xs sm:text-sm font-medium transition-colors text-center"
+                          >
+                            Apply Again
+                          </Link>
+                        )}
                     </div>
                   </div>
                 </article>

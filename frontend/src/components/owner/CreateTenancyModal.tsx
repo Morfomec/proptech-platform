@@ -109,8 +109,8 @@ export const CreateTenancyModal: React.FC<CreateTenancyModalProps> = ({
       })
 
       addToast({
-        title: 'Tenancy Created',
-        description: `Pending tenancy created for ${tenantDisplay}. Confirm it when ready to reserve the property.`,
+        title: 'Tenancy Created & Confirmed',
+        description: `Tenancy confirmed for ${tenantDisplay} and published listing paused. Activate it upon move-in.`,
         variant: 'success',
       })
 
@@ -136,7 +136,7 @@ export const CreateTenancyModal: React.FC<CreateTenancyModalProps> = ({
       closeOnBackdropClick={!createMutation.isPending}
       closeOnEscape={!createMutation.isPending}
       title="Create Tenancy"
-      description="Create a pending tenancy agreement from this approved application."
+      description="Create and confirm a tenancy agreement from this approved application. Any published listing will be paused automatically."
       size="md"
       footer={
         <div className="flex items-center justify-end gap-2.5 w-full">
@@ -254,7 +254,7 @@ export const CreateTenancyModal: React.FC<CreateTenancyModalProps> = ({
         />
 
         <Alert variant="info">
-          Tenancies start in Pending Confirmation status. You can confirm, activate on move-in, or cancel from the Tenancy Details page.
+          Creating this agreement immediately sets the tenancy to Confirmed and pauses the property&apos;s public listing. You can activate the tenancy once the tenant moves in, or cancel it if plans change.
         </Alert>
       </form>
     </Modal>

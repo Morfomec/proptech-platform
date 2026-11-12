@@ -9,6 +9,7 @@ export type ApplicationStatus =
   | 'approved'
   | 'rejected'
   | 'withdrawn'
+  | 'tenancy_cancelled'
 
 export interface ApplicationListItem {
   id: string
@@ -16,6 +17,7 @@ export interface ApplicationListItem {
   listing_title: string
   property_id?: string
   property_title: string
+  property_image_url?: string | null
   applicant: string
   applicant_name: string
   status: ApplicationStatus
@@ -69,6 +71,7 @@ export interface TenancyListItem {
   property_id: string
   property_title?: string
   property_address?: string
+  property_image_url?: string | null
   tenant_id: string
   tenant_name?: string
   application_id: string | null

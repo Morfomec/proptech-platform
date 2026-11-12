@@ -31,7 +31,6 @@ from apps.leasing.serializers import (
 from apps.leasing.services import (
     activate_tenancy,
     cancel_tenancy,
-    confirm_tenancy,
     create_tenancy,
     end_tenancy,
 )
@@ -80,7 +79,7 @@ class TenancyViewSet(viewsets.GenericViewSet):
         "property__owner",
         "tenant",
         "application",
-    )
+    ).prefetch_related("property__images")
 
     http_method_names = ["get", "post", "head", "options"]
     lookup_value_regex = r"[0-9a-f-]{36}"
@@ -111,7 +110,6 @@ class TenancyViewSet(viewsets.GenericViewSet):
 
         if self.action in [
             "managed",
-            "confirm",
             "activate",
             "cancel",
             "end",
@@ -295,45 +293,6 @@ class TenancyViewSet(viewsets.GenericViewSet):
             "success": True,
             "message": "Tenancy retrieved successfully.",
             "data": serializer.data,
-        })
-
-    @extend_schema(
-        tags=["Tenancies"],
-        summary="Confirm a pending tenancy",
-        request=None,
-        responses={
-            200: success_envelope("TenancyConfirmResponse", TenancyDetailSerializer),
-            400: ApiErrorResponseSerializer,
-            401: ApiErrorResponseSerializer,
-            403: ApiErrorResponseSerializer,
-            404: ApiErrorResponseSerializer,
-        },
-    )
-    @action(detail=True, methods=["post"], url_path="confirm")
-    def confirm(self, request, *args, **kwargs):
-        tenancy = self.get_object()
-
-        try:
-            tenancy = confirm_tenancy(
-                owner=request.user,
-                tenancy_id=tenancy.pk,
-            )
-        except (
-            TenancyNotFoundError,
-            TenancyOwnershipError,
-            TenancyStateError,
-            TenancyOverlapError,
-            DjangoValidationError,
-        ) as exc:
-            self._translate_service_exception(exc)
-
-        return Response({
-            "success": True,
-            "message": "Tenancy confirmed successfully.",
-            "data": TenancyDetailSerializer(
-                tenancy,
-                context=self.get_serializer_context(),
-            ).data,
         })
 
     @extend_schema(

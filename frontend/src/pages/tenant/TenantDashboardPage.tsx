@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import type { TenancyListItem, TenancyStatus } from '../../types/leasing'
 import type { NotificationItem } from '../../types/notification'
+import { getMediaUrl } from '../../utils/imageUrl'
 
 function formatINR(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—'
@@ -426,33 +427,50 @@ export const TenantDashboardPage: React.FC = () => {
             </div>
           ) : primaryTenancy ? (
             <div className="flex flex-col sm:flex-row gap-4 items-stretch">
-              {/* Property Visual Placeholder (API Tenancy payload does not expose property image) */}
-              <div className="w-full sm:w-44 h-36 shrink-0 rounded-xl border border-[#DCE8E2] bg-gradient-to-br from-[#F4FAF7] to-[#E6F4EE] flex flex-col items-center justify-center p-3 text-center">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-[#408A71] shadow-2xs mb-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                </div>
-                <span className="text-[11px] font-medium text-[#408A71]">
-                  {TENANCY_STATUS_STYLES[primaryTenancy.status].label}
-                </span>
-                <span className="text-[10px] text-[#6B7280] mt-0.5 font-mono">
-                  Ref #{primaryTenancy.property_id.slice(0, 8)}
-                </span>
-              </div>
+              {/* Property Thumbnail */}
+              {primaryTenancy.property_image_url ? (
+                <Link
+                  to="/app/tenant/tenancy"
+                  className="block w-full sm:w-44 h-36 shrink-0 rounded-xl border border-[#E5E7EB] bg-gray-100 overflow-hidden hover:opacity-95 transition-opacity"
+                >
+                  <img
+                    src={getMediaUrl(primaryTenancy.property_image_url)}
+                    alt={primaryTenancy.property_title || matchedApplication?.property_title || 'Rental property'}
+                    className="h-full w-full object-cover object-center"
+                  />
+                </Link>
+              ) : (
+                <Link
+                  to="/app/tenant/tenancy"
+                  className="w-full sm:w-44 h-36 shrink-0 rounded-xl border border-[#DCE8E2] bg-gradient-to-br from-[#F4FAF7] to-[#E6F4EE] flex flex-col items-center justify-center p-3 text-center hover:opacity-95 transition-opacity"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-[#408A71] shadow-2xs mb-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                      />
+                    </svg>
+                  </div>
+                  <span className="text-[11px] font-medium text-[#408A71]">
+                    {TENANCY_STATUS_STYLES[primaryTenancy.status].label}
+                  </span>
+                  <span className="text-[10px] text-[#6B7280] mt-0.5 font-mono">
+                    Ref #{primaryTenancy.property_id.slice(0, 8)}
+                  </span>
+                </Link>
+              )}
 
               {/* Tenancy Summary Metrics */}
               <div className="flex-1 min-w-0 flex flex-col justify-between gap-3">
                 <div>
                   <h3 className="text-base font-medium text-[#111827] truncate">
-                    {matchedApplication?.property_title || 'Rental Tenancy'}
+                    {primaryTenancy.property_title || matchedApplication?.property_title || 'Rental Tenancy'}
                   </h3>
                   <p className="mt-0.5 text-xs text-[#6B7280] truncate">
-                    {matchedApplication?.listing_title ||
+                    {primaryTenancy.property_address ||
+                      matchedApplication?.listing_title ||
                       `Property reference: ${primaryTenancy.property_id.slice(0, 8)}`}
                   </p>
 

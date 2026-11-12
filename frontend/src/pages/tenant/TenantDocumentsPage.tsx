@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../hooks/useAuth'
 import {
@@ -22,6 +22,7 @@ import {
 } from '../../components/ui'
 import { DocumentUploadModal } from '../../components/tenant/DocumentUploadModal'
 import { DocumentPreviewModal } from '../../components/tenant/DocumentPreviewModal'
+import { DocumentCard, DocumentUploadTile } from '../../components/documents/DocumentCard'
 import { extractApiErrorMessage, formatDateTime } from '../../utils/application'
 import {
   DOCUMENT_CATEGORY_TABS,
@@ -58,8 +59,10 @@ export const TenantDocumentsPage: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortDirection>('newest')
 
   const [isUploadOpen, setIsUploadOpen] = useState(false)
+  const [droppedFile, setDroppedFile] = useState<File | null>(null)
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -244,6 +247,26 @@ export const TenantDocumentsPage: React.FC = () => {
     setPreviewError(null)
   }
 
+  const previewIndex = previewDoc
+    ? filteredDocuments.findIndex((d) => d.id === previewDoc.id)
+    : -1
+  const hasPrevPreview = previewIndex > 0
+  const hasNextPreview = previewIndex >= 0 && previewIndex < filteredDocuments.length - 1
+
+  const handlePrevPreview = () => {
+    if (hasPrevPreview) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      void handleOpenPreview(filteredDocuments[previewIndex - 1])
+    }
+  }
+
+  const handleNextPreview = () => {
+    if (hasNextPreview) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      void handleOpenPreview(filteredDocuments[previewIndex + 1])
+    }
+  }
+
   const resolveRelatedMeta = (doc: DocumentItem) => {
     if (doc.tenancy) {
       const tenancy = tenancyMap.get(doc.tenancy)
@@ -330,9 +353,12 @@ export const TenantDocumentsPage: React.FC = () => {
       {isLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-12 w-full rounded-xl" />
-          <div className="space-y-3">
+          <div
+            className="grid gap-5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}
+          >
             {[1, 2, 3, 4].map((idx) => (
-              <Skeleton key={idx} className="h-24 w-full rounded-2xl" />
+              <Skeleton key={idx} className="h-[260px] w-full rounded-2xl" />
             ))}
           </div>
         </div>
@@ -453,113 +479,152 @@ export const TenantDocumentsPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredDocuments.map((doc) => {
-                const typeMeta = getDocumentTypeMeta(doc.document_type)
-                const related = resolveRelatedMeta(doc)
-                const canPreview = isPreviewableDocument(doc.mime_type, doc.original_filename)
-                const isDownloadingThis = downloadingId === doc.id
-
-                return (
-                  <article
-                    key={doc.id}
-                    className="rounded-xl border border-[#E5E7EB] bg-white p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 hover:shadow-xs transition-shadow"
+              {/* Compact View Mode Toggle */}
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-[#6B7280]">
+                  Showing <span className="font-medium text-[#111827]">{filteredDocuments.length}</span>{' '}
+                  {filteredDocuments.length === 1 ? 'document' : 'documents'}
+                </p>
+                <div className="inline-flex items-center rounded-lg border border-[#E5E7EB] bg-white p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('grid')}
+                    aria-label="Grid view"
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                      viewMode === 'grid'
+                        ? 'bg-[#ECF5F2] text-[#408A71]'
+                        : 'text-[#6B7280] hover:text-[#111827]'
+                    }`}
                   >
-                    <div className="flex items-start gap-3.5 min-w-0">
-                      {/* File Type Icon Box */}
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ECF5F2] text-[#408A71]">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.8}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                      </div>
+                    Grid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('list')}
+                    aria-label="List view"
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                      viewMode === 'list'
+                        ? 'bg-[#ECF5F2] text-[#408A71]'
+                        : 'text-[#6B7280] hover:text-[#111827]'
+                    }`}
+                  >
+                    List
+                  </button>
+                </div>
+              </div>
 
-                      {/* Metadata */}
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-sm sm:text-base font-medium text-[#111827] truncate max-w-md">
-                            {doc.title || doc.original_filename}
-                          </h2>
-                          {doc.document_type !== 'other' && (
-                            <Badge variant={typeMeta.variant} size="sm">
-                              {typeMeta.label}
-                            </Badge>
-                          )}
-                        </div>
+              {viewMode === 'grid' ? (
+                <div
+                  className="grid gap-5"
+                  style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}
+                >
+                  <DocumentUploadTile
+                    onClickUpload={() => {
+                      setDroppedFile(null)
+                      setIsUploadOpen(true)
+                    }}
+                    onDropFile={(file) => {
+                      setDroppedFile(file)
+                      setIsUploadOpen(true)
+                    }}
+                  />
+                  {filteredDocuments.map((doc) => {
+                    const related = resolveRelatedMeta(doc)
+                    return (
+                      <DocumentCard
+                        key={doc.id}
+                        document={doc}
+                        scopeLabel={related.label}
+                        scopeLinkTo={related.linkTo}
+                        scopeLinkText={related.linkText}
+                        canEdit={Boolean(user?.id && doc.uploaded_by === user.id)}
+                        isDownloading={downloadingId === doc.id}
+                        onPreview={(d) => void handleOpenPreview(d)}
+                        onDownload={(d) => void handleDownload(d)}
+                        onEdit={(d) => setEditingDoc(d)}
+                      />
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {filteredDocuments.map((doc) => {
+                    const typeMeta = getDocumentTypeMeta(doc.document_type)
+                    const related = resolveRelatedMeta(doc)
+                    const canPreview = isPreviewableDocument(doc.mime_type, doc.original_filename)
+                    const isDownloadingThis = downloadingId === doc.id
 
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6B7280]">
-                          <span>{formatMimeTypeLabel(doc.mime_type, doc.original_filename)}</span>
-                          {doc.file_size_bytes ? (
-                            <span>· {formatFileSize(doc.file_size_bytes)}</span>
-                          ) : null}
-                          {doc.title && doc.title !== doc.original_filename && (
-                            <span className="truncate max-w-xs" title={doc.original_filename}>
-                              · {doc.original_filename}
-                            </span>
-                          )}
-                          <span>· Uploaded {formatDateTime(doc.created_at)}</span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="text-[#4B5563] font-medium">{related.label}</span>
-                          {related.linkTo && related.linkText && (
-                            <Link
-                              to={related.linkTo}
-                              className="text-[#408A71] hover:text-[#34745C] font-semibold inline-flex items-center gap-0.5"
-                            >
-                              <span>{related.linkText}</span>
-                              <span aria-hidden="true">→</span>
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-[#F3F4F6]">
-                      {hasActiveFilters && <span className="sr-only">Filtered view</span>}
-                      {user?.id && doc.uploaded_by === user.id && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingDoc(doc)}
-                        >
-                          Edit
-                        </Button>
-                      )}
-                      {canPreview && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void handleOpenPreview(doc)}
-                        >
-                          Preview
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        isLoading={isDownloadingThis}
-                        loadingText="Downloading..."
-                        onClick={() => void handleDownload(doc)}
+                    return (
+                      <article
+                        key={doc.id}
+                        onClick={() => void handleOpenPreview(doc)}
+                        className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:shadow-xs transition-shadow cursor-pointer"
                       >
-                        Download
-                      </Button>
-                    </div>
-                  </article>
-                )
-              })}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#ECF5F2] text-[#408A71]">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                              />
+                            </svg>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h2 className="text-sm font-medium text-[#111827] truncate mb-0" title={doc.original_filename}>
+                                {doc.title || doc.original_filename}
+                              </h2>
+                              {doc.document_type !== 'other' && (
+                                <Badge variant={typeMeta.variant} size="sm">
+                                  {typeMeta.label}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-0.5 text-xs text-[#6B7280] truncate">
+                              {formatMimeTypeLabel(doc.mime_type, doc.original_filename)}
+                              {doc.file_size_bytes ? ` · ${formatFileSize(doc.file_size_bytes)}` : ''} ·{' '}
+                              {formatDateTime(doc.created_at)} · {related.label}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div
+                          className="flex items-center gap-2 shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {hasActiveFilters && <span className="sr-only">Filtered view</span>}
+                          {user?.id && doc.uploaded_by === user.id && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => setEditingDoc(doc)}>
+                              Edit
+                            </Button>
+                          )}
+                          {canPreview && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleOpenPreview(doc)}
+                            >
+                              Preview
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            isLoading={isDownloadingThis}
+                            loadingText="Downloading..."
+                            onClick={() => void handleDownload(doc)}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -580,16 +645,18 @@ export const TenantDocumentsPage: React.FC = () => {
 
       {/* Upload / Edit Document Modal */}
       <DocumentUploadModal
-        key={`${editingDoc?.id ?? 'new'}-${isUploadOpen ? 'open' : 'closed'}`}
+        key={`${editingDoc?.id ?? 'new'}-${droppedFile?.name ?? 'none'}-${isUploadOpen ? 'open' : 'closed'}`}
         open={isUploadOpen || Boolean(editingDoc)}
         documentToEdit={editingDoc}
+        initialFile={droppedFile}
         onClose={() => {
           setIsUploadOpen(false)
+          setDroppedFile(null)
           setEditingDoc(null)
         }}
       />
 
-      {/* Authenticated Blob Preview Modal */}
+      {/* Authenticated Blob Preview Lightbox */}
       <DocumentPreviewModal
         document={previewDoc}
         previewUrl={previewUrl}
@@ -599,6 +666,15 @@ export const TenantDocumentsPage: React.FC = () => {
         onClose={handleClosePreview}
         onDownload={(doc) => void handleDownload(doc)}
         isDownloading={Boolean(previewDoc && downloadingId === previewDoc.id)}
+        canEdit={Boolean(previewDoc && user?.id && previewDoc.uploaded_by === user.id)}
+        onEdit={(doc) => setEditingDoc(doc)}
+        onPrev={handlePrevPreview}
+        onNext={handleNextPreview}
+        hasPrev={hasPrevPreview}
+        hasNext={hasNextPreview}
+        scopeLabel={previewDoc ? resolveRelatedMeta(previewDoc).label : undefined}
+        scopeLinkTo={previewDoc ? resolveRelatedMeta(previewDoc).linkTo : null}
+        scopeLinkText={previewDoc ? resolveRelatedMeta(previewDoc).linkText : null}
       />
     </div>
   )

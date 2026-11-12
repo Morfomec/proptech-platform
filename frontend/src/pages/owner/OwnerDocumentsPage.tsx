@@ -501,9 +501,9 @@ export const OwnerDocumentsPage: React.FC = () => {
 
       {/* 5. Loading / Empty / List */}
       {isLoading ? (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
           {[1, 2, 3, 4].map((idx) => (
-            <Skeleton key={idx} className="h-24 w-full rounded-2xl" />
+            <Skeleton key={idx} className="h-44 w-full rounded-xl" />
           ))}
         </div>
       ) : !hasAnyDocsInAccount && !isError ? (
@@ -551,7 +551,7 @@ export const OwnerDocumentsPage: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
             {visibleDocuments.map((doc) => {
               const typeMeta = getDocumentTypeMeta(doc.document_type)
               const related = resolveRelatedMeta(doc)
@@ -565,58 +565,65 @@ export const OwnerDocumentsPage: React.FC = () => {
               return (
                 <article
                   key={doc.id}
-                  className="rounded-xl border border-[#E5E7EB] bg-white p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:shadow-xs transition-shadow"
+                  className="rounded-xl border border-[#E5E7EB] bg-white p-3.5 flex flex-col justify-between gap-3 hover:shadow-xs transition-shadow"
                 >
-                  <div className="flex items-start gap-3.5 min-w-0">
-                    {/* Document Icon */}
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ECF5F2] text-[#408A71]">
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.8}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        />
-                      </svg>
+                  <div className="space-y-2.5 min-w-0">
+                    {/* Header: Icon + Title + Type Badge */}
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#ECF5F2] text-[#408A71]">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.8}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <h2
+                          className="text-sm font-medium text-[#111827] truncate mb-0"
+                          title={doc.title || doc.original_filename}
+                        >
+                          {doc.title || doc.original_filename}
+                        </h2>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <Badge variant={typeMeta.variant} size="sm">
+                            {typeMeta.label}
+                          </Badge>
+                          <span className="text-[11px] font-normal text-[#6B7280]">
+                            {formatMimeTypeLabel(doc.mime_type, doc.original_filename)}
+                            {doc.file_size_bytes ? ` · ${formatFileSize(doc.file_size_bytes)}` : ''}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Metadata */}
-                    <div className="min-w-0 space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-sm sm:text-base font-medium text-[#111827] truncate max-w-md mb-0">
-                          {doc.title || doc.original_filename}
-                        </h2>
-                        <Badge variant={typeMeta.variant} size="sm">
-                          {typeMeta.label}
-                        </Badge>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-normal text-[#6B7280]">
-                        <span>{formatMimeTypeLabel(doc.mime_type, doc.original_filename)}</span>
-                        {doc.file_size_bytes ? (
-                          <span>· {formatFileSize(doc.file_size_bytes)}</span>
-                        ) : null}
-                        {doc.title && doc.title !== doc.original_filename && (
-                          <span className="truncate max-w-xs" title={doc.original_filename}>
-                            · {doc.original_filename}
-                          </span>
-                        )}
-                        <span>· Uploaded {formatDateTime(doc.created_at)}</span>
-                        <span>· By {uploaderDisplay}</span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="font-medium text-[#4B5563]">{related.label}</span>
-                        <span className="text-[#9CA3AF]">· {related.visibilityNote}</span>
+                    <div className="space-y-1 border-t border-[#F3F4F6] pt-2 text-[11px] font-normal text-[#6B7280]">
+                      {doc.title && doc.title !== doc.original_filename && (
+                        <p className="truncate" title={doc.original_filename}>
+                          {doc.original_filename}
+                        </p>
+                      )}
+                      <p>
+                        Uploaded {formatDateTime(doc.created_at)} · By {uploaderDisplay}
+                      </p>
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs pt-0.5">
+                        <span className="font-medium text-[#4B5563] truncate">
+                          {related.label}
+                          <span className="font-normal text-[#9CA3AF]"> · {related.visibilityNote}</span>
+                        </span>
                         {related.linkTo && related.linkText && (
                           <Link
                             to={related.linkTo}
-                            className="text-[#408A71] hover:text-[#34745C] font-medium inline-flex items-center gap-0.5"
+                            className="text-[#408A71] hover:text-[#34745C] font-medium inline-flex items-center gap-0.5 shrink-0"
                           >
                             <span>{related.linkText}</span>
                             <span aria-hidden="true">→</span>
@@ -627,7 +634,7 @@ export const OwnerDocumentsPage: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-[#F3F4F6]">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5 pt-2 border-t border-[#F3F4F6]">
                     {isUploader && (
                       <Button
                         type="button"

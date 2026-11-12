@@ -20,6 +20,7 @@ class TenancyListSerializer(serializers.ModelSerializer):
     property_id = serializers.UUIDField(read_only=True)
     property_title = serializers.CharField(source="property.title", read_only=True)
     property_address = serializers.SerializerMethodField()
+    property_image_url = serializers.SerializerMethodField()
     tenant_id = serializers.UUIDField(read_only=True)
     tenant_name = serializers.SerializerMethodField()
     application_id = serializers.UUIDField(read_only=True)
@@ -31,6 +32,7 @@ class TenancyListSerializer(serializers.ModelSerializer):
             "property_id",
             "property_title",
             "property_address",
+            "property_image_url",
             "tenant_id",
             "tenant_name",
             "application_id",
@@ -44,6 +46,19 @@ class TenancyListSerializer(serializers.ModelSerializer):
 
     def get_property_address(self, obj) -> str:
         return _format_property_address(obj.property)
+
+    def get_property_image_url(self, obj) -> str | None:
+        images = list(obj.property.images.all())
+        if not images:
+            return None
+        primary = next((img for img in images if img.is_primary), images[0])
+        image_url = primary.image_url
+        if not image_url:
+            return None
+        request = self.context.get("request")
+        if request and image_url.startswith("/"):
+            return request.build_absolute_uri(image_url)
+        return image_url
 
     def get_tenant_name(self, obj) -> str:
         return _format_user_name(obj.tenant)

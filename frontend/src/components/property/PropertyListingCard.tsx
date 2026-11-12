@@ -133,7 +133,7 @@ export const PropertyListingCard: React.FC<PropertyListingCardProps> = ({
 
   return (
     <article
-      className={`bg-white rounded-2xl border border-[#E5E7EB] shadow-xs hover:shadow-md hover:border-[#408A71]/40 transition-all duration-300 flex flex-col group relative ${
+      className={`bg-white rounded-2xl border border-[#E5E7EB] shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-[#408A71]/40 transition-all duration-200 flex flex-col group relative ${
         allowOverflow ? '' : 'overflow-hidden'
       }`}
     >
@@ -217,7 +217,7 @@ export const PropertyListingCard: React.FC<PropertyListingCardProps> = ({
             onClick={onToggleSave}
             title={heartAriaLabel}
             aria-label={heartAriaLabel}
-            className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all shadow-md z-10 cursor-pointer ${
+            className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-150 active:scale-90 shadow-md z-10 cursor-pointer ${
               isSaved
                 ? 'bg-white text-red-500 hover:scale-110'
                 : 'bg-white/95 text-gray-500 hover:text-red-500 hover:bg-white hover:scale-105'

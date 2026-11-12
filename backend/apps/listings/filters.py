@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any, Dict
 
-from django.db.models import Q, QuerySet
+from django.db.models import F, Q, QuerySet
 from rest_framework import serializers
 
 from apps.properties.models import FurnishingStatus, PropertyCategory, PropertyType
@@ -13,7 +13,7 @@ SORT_CHOICES = [
 ]
 
 SORT_ORDERING_MAP = {
-    "newest": ["-published_at", "-created_at", "-id"],
+    "newest": [F("published_at").desc(nulls_last=True), "-created_at", "-id"],
     "rent_low_to_high": ["monthly_rent", "-published_at", "-id"],
     "rent_high_to_low": ["-monthly_rent", "-published_at", "-id"],
 }

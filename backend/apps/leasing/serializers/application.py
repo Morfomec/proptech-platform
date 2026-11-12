@@ -45,6 +45,7 @@ class ApplicationListSerializer(serializers.ModelSerializer):
         source="listing.property.title",
         read_only=True,
     )
+    property_image_url = serializers.SerializerMethodField()
     applicant_name = serializers.SerializerMethodField()
     tenancy_id = serializers.SerializerMethodField()
 
@@ -56,6 +57,7 @@ class ApplicationListSerializer(serializers.ModelSerializer):
             "listing_title",
             "property_id",
             "property_title",
+            "property_image_url",
             "applicant",
             "applicant_name",
             "status",
@@ -65,6 +67,19 @@ class ApplicationListSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_property_image_url(self, obj) -> str | None:
+        images = list(obj.listing.property.images.all())
+        if not images:
+            return None
+        primary = next((img for img in images if img.is_primary), images[0])
+        image_url = primary.image_url
+        if not image_url:
+            return None
+        request = self.context.get("request")
+        if request and image_url.startswith("/"):
+            return request.build_absolute_uri(image_url)
+        return image_url
 
     def get_applicant_name(self, obj) -> str:
         full_name = f"{obj.applicant.first_name} {obj.applicant.last_name}".strip()

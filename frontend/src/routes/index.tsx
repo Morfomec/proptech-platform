@@ -11,6 +11,7 @@ import TenantApplyPropertyPage from '../pages/tenant/TenantApplyPropertyPage'
 import TenantApplicationsPage from '../pages/tenant/TenantApplicationsPage'
 import TenantApplicationDetailPage from '../pages/tenant/TenantApplicationDetailPage'
 import TenantTenancyPage from '../pages/tenant/TenantTenancyPage'
+import TenantTenancyDetailPage from '../pages/tenant/TenantTenancyDetailPage'
 import TenantDocumentsPage from '../pages/tenant/TenantDocumentsPage'
 import TenantNotificationsPage from '../pages/tenant/TenantNotificationsPage'
 import OwnerDashboardPage from '../pages/owner/OwnerDashboardPage'
@@ -242,6 +243,10 @@ export const router = createBrowserRouter([
               {
                 path: 'tenancy',
                 element: <TenantTenancyPage />,
+              },
+              {
+                path: 'tenancy/:tenancyId',
+                element: <TenantTenancyDetailPage />,
               },
               {
                 path: 'documents',

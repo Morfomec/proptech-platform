@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useAuth } from '../../hooks/useAuth'
@@ -129,10 +129,25 @@ function extractApiErrors(data: unknown): {
 
 export const AddPropertyWizardPage: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { propertyId } = useParams<{ propertyId?: string }>()
   const isEditMode = Boolean(propertyId)
   const queryClient = useQueryClient()
   const { refreshProfile } = useAuth()
+
+  const rawReturnTo = (location.state as { returnTo?: unknown } | null)?.returnTo
+  const returnTo =
+    typeof rawReturnTo === 'string' && rawReturnTo.startsWith('/app/') ? rawReturnTo : null
+
+  const handleBack = () => {
+    if (returnTo) {
+      navigate(returnTo)
+    } else if (window.history.length > 1) {
+      navigate(-1)
+    } else {
+      navigate('/app/owner/properties')
+    }
+  }
 
   // Master amenities catalogue query (fetched exclusively from backend)
   const {
@@ -814,7 +829,12 @@ export const AddPropertyWizardPage: React.FC = () => {
           <span>/</span>
           {isEditMode ? (
             <>
-              <span className="text-gray-500 truncate max-w-[150px]">{title || 'Property'}</span>
+              <Link
+                to={`/app/owner/properties/${propertyId}`}
+                className="text-gray-500 hover:text-[#408A71] transition-colors truncate max-w-[150px]"
+              >
+                {title || 'Property'}
+              </Link>
               <span>/</span>
               <span className="text-gray-900 font-medium">Edit</span>
             </>
@@ -826,10 +846,10 @@ export const AddPropertyWizardPage: React.FC = () => {
         <div className="flex items-center gap-3 border-b border-gray-200 pb-4">
           <button
             type="button"
-            onClick={() => navigate('/app/owner/properties')}
+            onClick={handleBack}
             className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            title="Back to My Properties"
-            aria-label="Back to My Properties"
+            title="Back"
+            aria-label="Back"
           >
             <svg
               className="w-5 h-5"
@@ -1091,7 +1111,7 @@ export const AddPropertyWizardPage: React.FC = () => {
         isSubmitting={isSubmitting}
         submittingAction={submittingAction}
         imageCount={images.length}
-        onCancel={() => navigate('/app/owner/properties')}
+        onCancel={handleBack}
         onSubmit={handleSubmit}
       />
     </div>

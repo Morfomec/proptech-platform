@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Alert, Button, Modal, Textarea, useToast } from '../ui'
+import { Alert, Button, ConfirmationDialog, Modal, Textarea, useToast } from '../ui'
 import { useReviewApplication } from '../../hooks/useOwnerApplications'
 import { extractApiErrorMessage } from '../../utils/application'
 import type {
@@ -77,10 +77,12 @@ export const ApplicationReviewModal: React.FC<ApplicationReviewModalProps> = ({
 
   const [reason, setReason] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [isSecondConfirmOpen, setIsSecondConfirmOpen] = useState(false)
 
   if (!application || !targetStatus) return null
 
   const config = ACTION_CONFIG[targetStatus]
+  const requiresSecondConfirm = targetStatus === 'approved' || targetStatus === 'rejected'
   const propertyTitle =
     application.property_title || application.listing_title || 'this listing'
   const applicantDisplay = application.applicant_name || 'Applicant'
@@ -89,11 +91,11 @@ export const ApplicationReviewModal: React.FC<ApplicationReviewModalProps> = ({
     if (reviewMutation.isPending) return
     setReason('')
     setErrorMsg(null)
+    setIsSecondConfirmOpen(false)
     onClose()
   }
 
-  const handleConfirm = async (e?: React.FormEvent) => {
-    e?.preventDefault()
+  const executeReview = async () => {
     if (reviewMutation.isPending) return
     setErrorMsg(null)
 
@@ -113,16 +115,29 @@ export const ApplicationReviewModal: React.FC<ApplicationReviewModalProps> = ({
         variant: 'success',
       })
       setReason('')
+      setIsSecondConfirmOpen(false)
       onClose()
       onSuccess?.()
     } catch (err: unknown) {
+      setIsSecondConfirmOpen(false)
       setErrorMsg(
         extractApiErrorMessage(err, 'Unable to update application status. Please retry.')
       )
     }
   }
 
+  const handleConfirm = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (reviewMutation.isPending) return
+    if (requiresSecondConfirm) {
+      setIsSecondConfirmOpen(true)
+      return
+    }
+    await executeReview()
+  }
+
   return (
+    <>
     <Modal
       open={open}
       onClose={handleClose}
@@ -130,7 +145,7 @@ export const ApplicationReviewModal: React.FC<ApplicationReviewModalProps> = ({
       closeOnEscape={!reviewMutation.isPending}
       title={config.title}
       description={config.description}
-      size="md"
+      size="sm"
       footer={
         <div className="flex items-center justify-end gap-2.5 w-full">
           <Button
@@ -155,17 +170,17 @@ export const ApplicationReviewModal: React.FC<ApplicationReviewModalProps> = ({
         </div>
       }
     >
-      <form onSubmit={(e) => void handleConfirm(e)} className="space-y-4">
+      <form onSubmit={(e) => void handleConfirm(e)} className="space-y-3">
         {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
 
-        <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4 space-y-1.5 text-xs">
+        <div className="rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 space-y-1 text-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[#6B7280]">Applicant</span>
-            <span className="font-bold text-[#111827]">{applicantDisplay}</span>
+            <span className="font-medium text-[#111827]">{applicantDisplay}</span>
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[#6B7280]">Property</span>
-            <span className="font-semibold text-[#111827] truncate max-w-[260px]">
+            <span className="font-medium text-[#111827] truncate max-w-[220px]">
               {propertyTitle}
             </span>
           </div>
@@ -181,16 +196,45 @@ export const ApplicationReviewModal: React.FC<ApplicationReviewModalProps> = ({
           <Textarea
             id="owner-review-reason"
             label="Review Note (Optional)"
-            hint="Optional note recorded in the application status history."
-            rows={3}
+            hint="Recorded in the application status history."
+            rows={2}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="e.g. Verified documents and approved move-in, or reason for rejection..."
+            placeholder="Add an optional note..."
             disabled={reviewMutation.isPending}
           />
         </div>
       </form>
     </Modal>
+
+    <ConfirmationDialog
+      open={isSecondConfirmOpen}
+      onClose={() => {
+        if (!reviewMutation.isPending) setIsSecondConfirmOpen(false)
+      }}
+      onConfirm={executeReview}
+      title={
+        targetStatus === 'approved'
+          ? 'Final Confirmation: Approve Application?'
+          : 'Final Confirmation: Reject Application?'
+      }
+      description={
+        targetStatus === 'approved'
+          ? `Are you sure you want to approve ${applicantDisplay}'s application for ${propertyTitle}? This decision is final and notifies the tenant immediately.`
+          : `Are you sure you want to reject ${applicantDisplay}'s application for ${propertyTitle}? Once rejected, it cannot be reopened and the tenant will be notified immediately.`
+      }
+      confirmText={
+        reviewMutation.isPending
+          ? config.loadingText
+          : targetStatus === 'approved'
+            ? 'Yes, Approve Application'
+            : 'Yes, Reject Application'
+      }
+      cancelText="Go Back"
+      variant={targetStatus === 'rejected' ? 'danger' : 'default'}
+      loading={reviewMutation.isPending}
+    />
+    </>
   )
 }
 

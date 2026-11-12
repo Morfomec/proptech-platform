@@ -9,6 +9,7 @@ from apps.core.permissions import _matches_user
 from apps.leasing.models import (
     Application,
     ApplicationStatus,
+    ApplicationStatusHistory,
     Tenancy,
     TenancyStatus,
 )
@@ -250,17 +251,27 @@ def create_tenancy(
     application_id=None,
     notes=None,
 ):
-    """Create a pending tenancy for an owner's property."""
+    """
+    Create and confirm a tenancy for an owner's property.
+    Automatically pauses any published listing for the property.
+    """
 
     property = _get_locked_property(property_id=property_id)
     _verify_property_owner(property=property, owner=owner)
     _verify_tenant_account(tenant=tenant, property=property)
+    _verify_property_available_for_tenancy(property=property)
 
     locked_application = _resolve_and_lock_application(
         application=application,
         application_id=application_id,
         property=property,
         tenant=tenant,
+    )
+
+    _check_overlapping_tenancies(
+        property=property,
+        start_date=start_date,
+        end_date=end_date,
     )
 
     tenancy = Tenancy(
@@ -272,54 +283,10 @@ def create_tenancy(
         monthly_rent=monthly_rent,
         security_deposit=security_deposit,
         rent_due_day=rent_due_day,
-        status=TenancyStatus.PENDING,
+        status=TenancyStatus.CONFIRMED,
         notes=notes,
     )
 
-    _save_tenancy(tenancy=tenancy)
-
-    create_notification(
-        user=tenancy.tenant,
-        notification_type=NotificationType.TENANCY_CREATED,
-        title="New tenancy created",
-        message="A new tenancy has been created for you.",
-        related_object_type=RelatedObjectType.TENANCY,
-        related_object_id=tenancy.id,
-    )
-
-    return tenancy
-
-
-@transaction.atomic
-def confirm_tenancy(*, owner, tenancy_id):
-    """
-    Confirm a pending tenancy.
-    This reserves the property and pauses its published listing.
-    """
-
-    property, tenancy = _get_locked_property_and_tenancy(
-        tenancy_id=tenancy_id
-    )
-
-    _verify_property_owner(property=property, owner=owner)
-
-    if tenancy.status != TenancyStatus.PENDING:
-        raise TenancyStateError(
-            {"status": "Only pending tenancies can be confirmed."}
-        )
-
-    _verify_property_available_for_tenancy(
-        property=property,
-        exclude_tenancy_id=tenancy.pk,
-    )
-    _check_overlapping_tenancies(
-        property=property,
-        start_date=tenancy.start_date,
-        end_date=tenancy.end_date,
-        exclude_tenancy_id=tenancy.pk,
-    )
-
-    tenancy.status = TenancyStatus.CONFIRMED
     _save_tenancy(tenancy=tenancy)
 
     _pause_published_listing(
@@ -329,9 +296,9 @@ def confirm_tenancy(*, owner, tenancy_id):
 
     create_notification(
         user=tenancy.tenant,
-        notification_type=NotificationType.TENANCY_CONFIRMED,
-        title="Tenancy confirmed",
-        message="Your tenancy has been confirmed by the property owner.",
+        notification_type=NotificationType.TENANCY_CREATED,
+        title="New tenancy created",
+        message="A new confirmed tenancy has been created for you.",
         related_object_type=RelatedObjectType.TENANCY,
         related_object_id=tenancy.id,
     )
@@ -417,6 +384,24 @@ def cancel_tenancy(*, owner, tenancy_id):
 
     tenancy.status = TenancyStatus.CANCELLED
     _save_tenancy(tenancy=tenancy)
+
+    if tenancy.application_id:
+        linked_application = (
+            Application.objects
+            .select_for_update()
+            .filter(pk=tenancy.application_id)
+            .first()
+        )
+        if linked_application and linked_application.status == ApplicationStatus.APPROVED:
+            linked_application.status = ApplicationStatus.TENANCY_CANCELLED
+            linked_application.save(update_fields=["status", "updated_at"])
+            ApplicationStatusHistory.objects.create(
+                application=linked_application,
+                previous_status=ApplicationStatus.APPROVED,
+                new_status=ApplicationStatus.TENANCY_CANCELLED,
+                changed_by=owner,
+                change_reason="Linked tenancy was cancelled by the property owner.",
+            )
 
     create_notification(
         user=tenancy.tenant,

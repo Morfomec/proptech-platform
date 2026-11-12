@@ -337,11 +337,16 @@ Table applications {
   indexes {
     (listing_id, status)
     (applicant_id, created_at)
-    (listing_id, applicant_id) [unique]
   }
 
+  // IMPLEMENTATION REQUIREMENT (PostgreSQL / Django):
+  // DBML index syntax cannot enforce partial conditions (WHERE clauses).
+  // Implement as a PostgreSQL partial unique index via Django Meta.constraints:
+  // UniqueConstraint(fields=['listing', 'applicant'], condition=Q(status__in=['submitted', 'under_review', 'approved']), name='uq_active_application_listing_applicant')
+  // This permits at most one active application per tenant per listing; withdrawn and rejected applications do not block new applications.
+  //
   // IMPLEMENTATION NOTE:
-  // Permitted statuses: 'submitted', 'under_review', 'approved', 'rejected', 'withdrawn'.
+  // Permitted statuses: 'submitted', 'under_review', 'approved', 'rejected', 'withdrawn', 'tenancy_cancelled'.
   // Only authorized users may review an application.
   // Update application status and insert status history within the same database transaction.
 }

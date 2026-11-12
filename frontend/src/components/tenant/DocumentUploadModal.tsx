@@ -24,6 +24,7 @@ export interface DocumentUploadModalProps {
   open: boolean
   onClose: () => void
   documentToEdit?: DocumentItem | null
+  initialFile?: File | null
   tenancyId?: string
   defaultDocumentType?: DocumentType
   allowTypeSelection?: boolean
@@ -52,6 +53,7 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
   open,
   onClose,
   documentToEdit = null,
+  initialFile = null,
   tenancyId,
   defaultDocumentType = 'other',
   allowTypeSelection = false,
@@ -68,10 +70,14 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [documentName, setDocumentName] = useState(() =>
-    documentToEdit ? documentToEdit.title || documentToEdit.original_filename : ''
+  const [selectedFile, setSelectedFile] = useState<File | null>(() =>
+    documentToEdit ? null : initialFile
   )
+  const [documentName, setDocumentName] = useState(() => {
+    if (documentToEdit) return documentToEdit.title || documentToEdit.original_filename
+    if (initialFile) return initialFile.name.replace(/\.[^/.]+$/, '')
+    return ''
+  })
   const [documentType, setDocumentType] = useState<DocumentType>(defaultDocumentType)
   const [attachmentScope, setAttachmentScope] = useState<'personal' | 'property' | 'tenancy'>('personal')
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('')

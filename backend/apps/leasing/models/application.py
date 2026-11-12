@@ -10,6 +10,14 @@ class ApplicationStatus(models.TextChoices):
     APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
     WITHDRAWN = "withdrawn", "Withdrawn"
+    TENANCY_CANCELLED = "tenancy_cancelled", "Tenancy Cancelled"
+
+
+ACTIVE_APPLICATION_STATUSES = (
+    ApplicationStatus.SUBMITTED,
+    ApplicationStatus.UNDER_REVIEW,
+    ApplicationStatus.APPROVED,
+)
 
 
 class Application(BaseModel):
@@ -66,7 +74,14 @@ class Application(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["listing", "applicant"],
-                name="uq_application_listing_applicant",
+                condition=models.Q(
+                    status__in=[
+                        ApplicationStatus.SUBMITTED,
+                        ApplicationStatus.UNDER_REVIEW,
+                        ApplicationStatus.APPROVED,
+                    ]
+                ),
+                name="uq_active_application_listing_applicant",
             ),
         ]
 

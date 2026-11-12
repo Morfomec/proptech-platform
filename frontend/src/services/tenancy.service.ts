@@ -69,18 +69,6 @@ export const tenancyService = {
   },
 
   /**
-   * Confirms a pending tenancy (pending -> confirmed).
-   * Connects to POST /api/v1/tenancies/{id}/confirm/.
-   */
-  async confirmTenancy(tenancyId: string): Promise<ApiResponse<TenancyDetail>> {
-    const response = await apiClient.post<ApiResponse<TenancyDetail>>(
-      `/tenancies/${tenancyId}/confirm/`,
-      {}
-    )
-    return response.data
-  },
-
-  /**
    * Activates a confirmed tenancy upon tenant move-in (confirmed -> active).
    * Connects to POST /api/v1/tenancies/{id}/activate/.
    */

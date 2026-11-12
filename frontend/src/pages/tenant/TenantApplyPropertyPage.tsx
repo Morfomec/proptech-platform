@@ -11,6 +11,7 @@ import {
   formatDate,
   formatINR,
   getApplicationStatusMeta,
+  isActiveApplicationStatus,
 } from '../../utils/application'
 import { getMediaUrl } from '../../utils/imageUrl'
 import type { ApplicationDetail } from '../../types/leasing'
@@ -82,9 +83,17 @@ export const TenantApplyPropertyPage: React.FC = () => {
     listing && listing.status === 'published' && prop?.status === 'available'
   )
 
-  const existingApplication = useMemo(() => {
-    if (!listing) return null
-    return (myApplicationsData?.results ?? []).find((a) => a.listing === listing.id) ?? null
+  const { existingApplication, previousApplication } = useMemo(() => {
+    if (!listing) return { existingApplication: null, previousApplication: null }
+    const forListing = (myApplicationsData?.results ?? []).filter(
+      (a) => a.listing === listing.id
+    )
+    return {
+      existingApplication:
+        forListing.find((a) => isActiveApplicationStatus(a.status)) ?? null,
+      previousApplication:
+        forListing.find((a) => !isActiveApplicationStatus(a.status)) ?? null,
+    }
   }, [listing, myApplicationsData])
 
   const detailPath = `/app/tenant/properties/${listing?.id || id}`
@@ -400,6 +409,12 @@ export const TenantApplyPropertyPage: React.FC = () => {
             /* Application Form */
             <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
               {submitError && <Alert variant="error">{submitError}</Alert>}
+
+              {previousApplication && (
+                <Alert variant="info" title="Reapplying for Listing">
+                  Your previous application ({getApplicationStatusMeta(previousApplication.status).label}) remains in your history. Submitting this form creates a new application.
+                </Alert>
+              )}
 
               {/* Authenticated Applicant Account Summary */}
               {user && (

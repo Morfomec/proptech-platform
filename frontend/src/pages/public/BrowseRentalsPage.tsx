@@ -650,8 +650,8 @@ export const BrowseRentalsPage: React.FC<BrowseRentalsPageProps> = ({
 
         {/* 3. Listings Grid / Loading / Empty / Error States */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
               <PropertyListingCardSkeleton key={i} />
             ))}
           </div>
@@ -703,7 +703,7 @@ export const BrowseRentalsPage: React.FC<BrowseRentalsPageProps> = ({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
             {displayedListings.map((listing) => {
               const prop = listing.property
               const propertyId = prop?.id || listing.property_id
