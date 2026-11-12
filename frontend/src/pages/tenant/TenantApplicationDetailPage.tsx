@@ -11,6 +11,7 @@ import {
   formatDateTime,
   formatINR,
   getApplicationStatusMeta,
+  isActiveApplicationStatus,
   isWithdrawableApplication,
 } from '../../utils/application'
 import type { ApplicationStatusHistoryItem } from '../../types/leasing'
@@ -200,8 +201,8 @@ export const TenantApplicationDetailPage: React.FC = () => {
           </div>
         </div>
 
-        {canWithdraw && (
-          <div className="shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {canWithdraw && (
             <Button
               type="button"
               variant="outline"
@@ -211,8 +212,18 @@ export const TenantApplicationDetailPage: React.FC = () => {
             >
               Withdraw Application
             </Button>
-          </div>
-        )}
+          )}
+          {!isActiveApplicationStatus(application.status) &&
+            listing &&
+            listing.status === 'published' &&
+            listing.property?.status === 'available' && (
+              <Link to={`/app/tenant/properties/${application.listing}/apply`}>
+                <Button type="button" variant="primary" size="sm">
+                  Apply Again
+                </Button>
+              </Link>
+            )}
+        </div>
       </section>
 
       {/* 3. Main 2-Column Details Grid */}

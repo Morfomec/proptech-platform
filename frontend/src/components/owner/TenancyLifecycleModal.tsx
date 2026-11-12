@@ -3,13 +3,12 @@ import { Alert, Button, Input, Modal, useToast } from '../ui'
 import {
   useActivateTenancy,
   useCancelTenancy,
-  useConfirmTenancy,
   useEndTenancy,
 } from '../../hooks/useOwnerTenancies'
 import { extractApiErrorMessage } from '../../utils/application'
 import type { TenancyDetail } from '../../types/leasing'
 
-export type OwnerTenancyAction = 'confirm' | 'activate' | 'cancel' | 'end'
+export type OwnerTenancyAction = 'activate' | 'cancel' | 'end'
 
 export interface TenancyLifecycleModalProps {
   open: boolean
@@ -33,18 +32,6 @@ const ACTION_CONFIG: Record<
     dateFieldHint?: string
   }
 > = {
-  confirm: {
-    title: 'Confirm Tenancy',
-    confirmLabel: 'Confirm Tenancy',
-    loadingText: 'Confirming...',
-    buttonVariant: 'primary',
-    description:
-      'Confirm this pending tenancy agreement and reserve the property for the tenant.',
-    impactNote:
-      'Any published listing for this property will be paused, and the tenant will be notified.',
-    toastTitle: 'Tenancy Confirmed',
-    toastDescription: 'The tenancy is now confirmed and ready for move-in activation.',
-  },
   activate: {
     title: 'Activate Tenancy (Move-In)',
     confirmLabel: 'Activate Tenancy',
@@ -53,7 +40,7 @@ const ACTION_CONFIG: Record<
     description:
       'Record tenant move-in and transition this confirmed tenancy to Active status.',
     impactNote:
-      'The property will be marked as occupied, any active listing will be closed, and the tenant will be notified.',
+      'The property will be marked as occupied, any published listing will remain paused, and the tenant will be notified.',
     toastTitle: 'Tenancy Activated',
     toastDescription: 'Tenant move-in recorded and tenancy is now active.',
     dateFieldLabel: 'Actual Move-In Date (Optional)',
@@ -94,7 +81,7 @@ function getTodayIsoDate(): string {
 /**
  * TenancyLifecycleModal
  * Confirmation dialog for owner tenancy lifecycle transitions:
- * confirm, activate (with optional move-in date), end/checkout (with optional move-out date), and cancel.
+ * activate (with optional move-in date), end/checkout (with optional move-out date), and cancel.
  */
 export const TenancyLifecycleModal: React.FC<TenancyLifecycleModalProps> = ({
   open,
@@ -103,13 +90,11 @@ export const TenancyLifecycleModal: React.FC<TenancyLifecycleModalProps> = ({
   onClose,
 }) => {
   const { addToast } = useToast()
-  const confirmMutation = useConfirmTenancy()
   const activateMutation = useActivateTenancy()
   const cancelMutation = useCancelTenancy()
   const endMutation = useEndTenancy()
 
   const isPending =
-    confirmMutation.isPending ||
     activateMutation.isPending ||
     cancelMutation.isPending ||
     endMutation.isPending
@@ -133,9 +118,7 @@ export const TenancyLifecycleModal: React.FC<TenancyLifecycleModalProps> = ({
     setErrorMsg(null)
 
     try {
-      if (action === 'confirm') {
-        await confirmMutation.mutateAsync(tenancy.id)
-      } else if (action === 'activate') {
+      if (action === 'activate') {
         await activateMutation.mutateAsync({
           tenancyId: tenancy.id,
           payload: actionDate ? { move_in_date: actionDate } : {},

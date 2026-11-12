@@ -19,7 +19,7 @@ export const FeaturedRentals: React.FC = () => {
     staleTime: 1000 * 60 * 2,
   })
 
-  const listings = data?.results || []
+  const listings = (data?.results || []).slice(0, 6)
 
   return (
     <section id="properties" className="py-20 bg-white">

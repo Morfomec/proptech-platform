@@ -205,14 +205,16 @@ class ApplicationModelTests(LeasingModelTestMixin, TestCase):
         self.assertEqual(application.reviewed_at, reviewed_time)
 
     def test_unique_constraint_prevents_duplicate_listing_applicant(self):
-        Application.objects.create(
+        first = Application.objects.create(
             listing=self.listing,
             applicant=self.applicant,
+            status=ApplicationStatus.SUBMITTED,
         )
 
         duplicate = Application(
             listing=self.listing,
             applicant=self.applicant,
+            status=ApplicationStatus.SUBMITTED,
         )
         with self.assertRaises(ValidationError):
             duplicate.full_clean()
@@ -221,7 +223,36 @@ class ApplicationModelTests(LeasingModelTestMixin, TestCase):
             with transaction.atomic():
                 duplicate.save()
 
+        # Under review and approved also block a second active application.
+        for active_status in (
+            ApplicationStatus.UNDER_REVIEW,
+            ApplicationStatus.APPROVED,
+        ):
+            Application.objects.filter(pk=first.pk).update(status=active_status)
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    Application.objects.create(
+                        listing=self.listing,
+                        applicant=self.applicant,
+                        status=ApplicationStatus.SUBMITTED,
+                    )
+
+        # Withdrawn and rejected applications allow creating a new application record.
+        for inactive_status in (
+            ApplicationStatus.WITHDRAWN,
+            ApplicationStatus.REJECTED,
+        ):
+            Application.objects.filter(pk=first.pk).update(status=inactive_status)
+            reapplied = Application.objects.create(
+                listing=self.listing,
+                applicant=self.applicant,
+                status=ApplicationStatus.SUBMITTED,
+            )
+            self.assertNotEqual(reapplied.id, first.id)
+            reapplied.delete()
+
         # Different applicant on same listing and same applicant on another listing succeed.
+        Application.objects.filter(pk=first.pk).update(status=ApplicationStatus.SUBMITTED)
         other_app = Application.objects.create(
             listing=self.listing,
             applicant=self.other_applicant,

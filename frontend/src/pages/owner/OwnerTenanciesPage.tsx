@@ -14,6 +14,7 @@ import {
   Skeleton,
 } from '../../components/ui'
 import { formatDate, formatINR } from '../../utils/application'
+import { getMediaUrl } from '../../utils/imageUrl'
 import { getOwnerTenancyStatusMeta } from '../../utils/tenancy'
 import type { TenancyStatus } from '../../types/leasing'
 
@@ -23,7 +24,6 @@ type StatusFilter = 'all' | TenancyStatus
 
 const STATUS_TABS: { id: StatusFilter; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'pending', label: 'Pending Confirmation' },
   { id: 'confirmed', label: 'Upcoming' },
   { id: 'active', label: 'Active' },
   { id: 'ended', label: 'Completed' },
@@ -56,7 +56,6 @@ export const OwnerTenanciesPage: React.FC = () => {
   // Accurate server-side global counts per status
   const { data: totalAllCount = 0, isLoading: isLoadingAllCount } =
     useManagedTenanciesCount()
-  const { data: pendingCount = 0 } = useManagedTenanciesCount('pending')
   const { data: confirmedCount = 0, isLoading: isLoadingConfirmedCount } =
     useManagedTenanciesCount('confirmed')
   const { data: activeCount = 0, isLoading: isLoadingActiveCount } =
@@ -65,9 +64,8 @@ export const OwnerTenanciesPage: React.FC = () => {
     useManagedTenanciesCount('ended')
   const { data: cancelledCount = 0 } = useManagedTenanciesCount('cancelled')
 
-  const tabCounts: Record<StatusFilter, number> = {
+  const tabCounts: Partial<Record<StatusFilter, number>> = {
     all: totalAllCount,
-    pending: pendingCount,
     confirmed: confirmedCount,
     active: activeCount,
     ended: endedCount,
@@ -287,9 +285,9 @@ export const OwnerTenanciesPage: React.FC = () => {
 
       {/* 5. Loading / Empty / List Cards */}
       {isLoading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((idx) => (
-            <Skeleton key={idx} className="h-44 w-full rounded-2xl" />
+            <Skeleton key={idx} className="h-72 w-full rounded-xl" />
           ))}
         </div>
       ) : !hasAnyTenancyInAccount && !isError ? (
@@ -332,73 +330,108 @@ export const OwnerTenanciesPage: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {visibleTenancies.map((tenancy) => {
               const statusMeta = getOwnerTenancyStatusMeta(tenancy.status)
               const propertyTitle = tenancy.property_title || 'Property'
               const tenantName = tenancy.tenant_name || 'Tenant'
+              const imageUrl = tenancy.property_image_url
+                ? getMediaUrl(tenancy.property_image_url)
+                : null
 
               return (
                 <article
                   key={tenancy.id}
-                  className="rounded-xl border border-[#E5E7EB] bg-white p-4 sm:p-5 flex flex-col justify-between gap-4 hover:shadow-xs transition-shadow"
+                  className="rounded-xl border border-[#E5E7EB] bg-white overflow-hidden flex flex-col justify-between hover:shadow-xs transition-shadow"
                 >
-                  <div className="min-w-0 space-y-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 space-y-0.5">
+                  <div>
+                    {/* Top Property Photo + Overlaid Status Badge */}
+                    <Link
+                      to={`/app/owner/tenancies/${tenancy.id}`}
+                      className="block relative aspect-[16/10] w-full bg-[#F4FAF7] overflow-hidden"
+                    >
+                      {imageUrl ? (
+                        <img
+                          src={imageUrl}
+                          alt={propertyTitle}
+                          className="w-full h-full object-cover object-center"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-[#408A71] gap-1">
+                          <svg
+                            className="w-6 h-6 opacity-75"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            strokeWidth="1.6"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                            />
+                          </svg>
+                          <span className="text-[11px] font-medium">No property photo</span>
+                        </div>
+                      )}
+                      <div className="absolute top-2.5 right-2.5">
+                        <Badge variant={statusMeta.variant} size="sm" dot>
+                          {statusMeta.label}
+                        </Badge>
+                      </div>
+                    </Link>
+
+                    {/* Compact Body */}
+                    <div className="p-3.5 space-y-2.5">
+                      <div className="min-w-0">
                         <Link
                           to={`/app/owner/tenancies/${tenancy.id}`}
-                          className="block text-base font-medium text-[#111827] hover:text-[#408A71] transition-colors truncate"
+                          className="block text-sm font-medium text-[#111827] hover:text-[#408A71] transition-colors truncate"
                         >
                           {propertyTitle}
                         </Link>
                         {tenancy.property_address && (
-                          <p className="text-xs font-normal text-[#6B7280] truncate">
+                          <p className="text-xs font-normal text-[#6B7280] truncate mt-0.5">
                             {tenancy.property_address}
                           </p>
                         )}
                       </div>
 
-                      <Badge variant={statusMeta.variant} size="sm" dot>
-                        {statusMeta.label}
-                      </Badge>
-                    </div>
+                      <div className="grid grid-cols-2 gap-2 rounded-lg bg-[#F9FAFB] border border-[#F3F4F6] p-2.5 text-xs">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-normal text-[#6B7280]">Tenant</p>
+                          <p className="mt-0.5 font-medium text-[#111827] truncate">
+                            {tenantName}
+                          </p>
+                        </div>
 
-                    <div className="grid grid-cols-2 gap-3 rounded-lg bg-[#F9FAFB] border border-[#F3F4F6] p-3 text-xs">
-                      <div className="min-w-0">
-                        <p className="font-normal text-[#6B7280]">Tenant</p>
-                        <p className="mt-0.5 font-medium text-[#111827] truncate">
-                          {tenantName}
-                        </p>
-                      </div>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-normal text-[#6B7280]">Monthly Rent</p>
+                          <p className="mt-0.5 font-medium text-[#111827] tabular-nums">
+                            {formatINR(tenancy.monthly_rent)}/mo
+                          </p>
+                        </div>
 
-                      <div className="min-w-0">
-                        <p className="font-normal text-[#6B7280]">Monthly Rent</p>
-                        <p className="mt-0.5 font-medium text-[#111827] tabular-nums">
-                          {formatINR(tenancy.monthly_rent)}/mo
-                        </p>
-                      </div>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-normal text-[#6B7280]">Deposit</p>
+                          <p className="mt-0.5 font-medium text-[#111827] tabular-nums">
+                            {formatINR(tenancy.security_deposit)}
+                          </p>
+                        </div>
 
-                      <div className="min-w-0">
-                        <p className="font-normal text-[#6B7280]">Security Deposit</p>
-                        <p className="mt-0.5 font-medium text-[#111827] tabular-nums">
-                          {formatINR(tenancy.security_deposit)}
-                        </p>
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="font-normal text-[#6B7280]">Term</p>
-                        <p className="mt-0.5 font-medium text-[#111827]">
-                          {formatDate(tenancy.start_date)} –{' '}
-                          {tenancy.end_date ? formatDate(tenancy.end_date) : 'Open-ended'}
-                        </p>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-normal text-[#6B7280]">Start</p>
+                          <p className="mt-0.5 font-medium text-[#111827] truncate">
+                            {formatDate(tenancy.start_date)}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-[#F3F4F6]">
-                    <span className="text-xs font-normal text-[#6B7280]">
-                      Created {formatDate(tenancy.created_at)}
+                  <div className="px-3.5 pb-3.5 pt-2 flex items-center justify-between gap-2 border-t border-[#F3F4F6]">
+                    <span className="text-[11px] font-normal text-[#6B7280] truncate">
+                      {tenancy.end_date ? `Ends ${formatDate(tenancy.end_date)}` : 'Open-ended'}
                     </span>
 
                     <Button

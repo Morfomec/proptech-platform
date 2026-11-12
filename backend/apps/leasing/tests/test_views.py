@@ -197,6 +197,108 @@ class ApplicationAPITests(LeasingAPITestMixin, APITestCase):
         )
         self.assertEqual(admin_res.status_code, status.HTTP_200_OK)
 
+        # Tenant withdraws -> can apply again and gets a new application UUID while preserving history.
+        self.client.force_authenticate(user=self.tenant)
+        withdraw_res = self.client.post(
+            reverse("leasing:application-withdraw", kwargs={"pk": app_id}),
+            {"change_reason": "Updating details"},
+            format="json",
+        )
+        self.assertEqual(withdraw_res.status_code, status.HTTP_200_OK)
+
+        reapply_res = self.client.post(
+            reverse("leasing:application-list"),
+            {"listing_id": str(self.listing.id), "message": "Reapplying"},
+            format="json",
+        )
+        self.assertEqual(reapply_res.status_code, status.HTTP_201_CREATED)
+        reapply_id = reapply_res.data["data"]["id"]
+        self.assertNotEqual(reapply_id, app_id)
+
+        # Owner rejects -> tenant can apply again.
+        self.client.force_authenticate(user=self.owner)
+        reject_res = self.client.post(
+            reverse("leasing:application-review", kwargs={"pk": reapply_id}),
+            {"status": ApplicationStatus.REJECTED},
+            format="json",
+        )
+        self.assertEqual(reject_res.status_code, status.HTTP_200_OK)
+
+        self.client.force_authenticate(user=self.tenant)
+        reapply_after_reject = self.client.post(
+            reverse("leasing:application-list"),
+            {"listing_id": str(self.listing.id), "message": "Third attempt"},
+            format="json",
+        )
+        self.assertEqual(reapply_after_reject.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(reapply_after_reject.data["data"]["id"], reapply_id)
+        self.assertEqual(
+            self.client.get(reverse("leasing:application-me")).data["count"],
+            3,
+        )
+
+        # Approve third attempt -> create tenancy -> cancel tenancy -> application transitions to tenancy_cancelled -> reapply.
+        third_id = reapply_after_reject.data["data"]["id"]
+        self.client.force_authenticate(user=self.owner)
+        self.assertEqual(
+            self.client.post(
+                reverse("leasing:application-review", kwargs={"pk": third_id}),
+                {"status": ApplicationStatus.APPROVED},
+                format="json",
+            ).status_code,
+            status.HTTP_200_OK,
+        )
+        tenancy_res = self.client.post(
+            reverse("leasing:tenancy-list"),
+            {
+                "property_id": str(self.property.id),
+                "tenant_id": str(self.tenant.id),
+                "application_id": third_id,
+                "start_date": "2027-01-01",
+                "monthly_rent": "25000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(tenancy_res.status_code, status.HTTP_201_CREATED)
+        tenancy_id = tenancy_res.data["data"]["id"]
+
+        self.assertEqual(
+            self.client.post(
+                reverse("leasing:tenancy-cancel", kwargs={"pk": tenancy_id}),
+                {},
+                format="json",
+            ).status_code,
+            status.HTTP_200_OK,
+        )
+
+        # Republish listing and verify tenant sees tenancy_cancelled in history and can reapply.
+        self.assertEqual(
+            self.client.post(
+                reverse("listings:listing-publish", kwargs={"pk": self.listing.id}),
+                {},
+                format="json",
+            ).status_code,
+            status.HTTP_200_OK,
+        )
+        self.client.force_authenticate(user=self.tenant)
+        detail_res = self.client.get(
+            reverse("leasing:application-detail", kwargs={"pk": third_id})
+        )
+        self.assertEqual(detail_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_res.data["data"]["status"], ApplicationStatus.TENANCY_CANCELLED)
+
+        fourth_res = self.client.post(
+            reverse("leasing:application-list"),
+            {"listing_id": str(self.listing.id), "message": "Fourth attempt after cancelled tenancy"},
+            format="json",
+        )
+        self.assertEqual(fourth_res.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(fourth_res.data["data"]["id"], third_id)
+        self.assertEqual(
+            self.client.get(reverse("leasing:application-me")).data["count"],
+            4,
+        )
+
     def test_received_and_review_workflow_and_permissions(self):
         app = Application.objects.create(
             listing=self.listing,
@@ -336,7 +438,6 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
             ("get", reverse("leasing:tenancy-me"), None),
             ("get", reverse("leasing:tenancy-managed"), None),
             ("get", reverse("leasing:tenancy-detail", kwargs={"pk": tenancy.id}), None),
-            ("post", reverse("leasing:tenancy-confirm", kwargs={"pk": tenancy.id}), {}),
             ("post", reverse("leasing:tenancy-activate", kwargs={"pk": tenancy.id}), {}),
             ("post", reverse("leasing:tenancy-cancel", kwargs={"pk": tenancy.id}), {}),
             ("post", reverse("leasing:tenancy-end", kwargs={"pk": tenancy.id}), {}),
@@ -374,7 +475,7 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         self.assertTrue(res.data["success"])
         tenancy_id = res.data["data"]["id"]
-        self.assertEqual(res.data["data"]["status"], TenancyStatus.PENDING)
+        self.assertEqual(res.data["data"]["status"], TenancyStatus.CONFIRMED)
 
         # Owner sees in /managed/.
         managed_res = self.client.get(reverse("leasing:tenancy-managed"))
@@ -408,6 +509,7 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
         tenancy = Tenancy.objects.create(
             property=self.property,
             tenant=self.tenant,
+            status=TenancyStatus.CONFIRMED,
             start_date=date(2026, 9, 1),
             end_date=date(2027, 8, 31),
             monthly_rent=Decimal("24000.00"),
@@ -416,7 +518,6 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
         # Tenant cannot call lifecycle endpoints.
         self.client.force_authenticate(user=self.tenant)
         for action_name in (
-            "leasing:tenancy-confirm",
             "leasing:tenancy-activate",
             "leasing:tenancy-cancel",
             "leasing:tenancy-end",
@@ -428,28 +529,8 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
             )
             self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
-        # Owner cannot activate before confirming -> 400.
-        self.client.force_authenticate(user=self.owner)
-        early_activate = self.client.post(
-            reverse("leasing:tenancy-activate", kwargs={"pk": tenancy.id}),
-            {},
-            format="json",
-        )
-        self.assertEqual(early_activate.status_code, status.HTTP_400_BAD_REQUEST)
-
-        # Confirm -> 200 & listing paused.
-        confirm_res = self.client.post(
-            reverse("leasing:tenancy-confirm", kwargs={"pk": tenancy.id}),
-            {},
-            format="json",
-        )
-        self.assertEqual(confirm_res.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            confirm_res.data["data"]["status"],
-            TenancyStatus.CONFIRMED,
-        )
-
         # Activate -> 200 & property occupied.
+        self.client.force_authenticate(user=self.owner)
         activate_res = self.client.post(
             reverse("leasing:tenancy-activate", kwargs={"pk": tenancy.id}),
             {"move_in_date": "2026-09-02"},
@@ -462,6 +543,14 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
         )
         self.property.refresh_from_db()
         self.assertEqual(self.property.status, PropertyStatus.OCCUPIED)
+
+        # Activate again while active -> 400.
+        re_activate = self.client.post(
+            reverse("leasing:tenancy-activate", kwargs={"pk": tenancy.id}),
+            {},
+            format="json",
+        )
+        self.assertEqual(re_activate.status_code, status.HTTP_400_BAD_REQUEST)
 
         # Cancel active -> 400.
         cancel_active = self.client.post(
@@ -500,7 +589,7 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
             TenancyStatus.CANCELLED,
         )
 
-    def test_confirm_and_activate_endpoints_reject_unavailable_property(self):
+    def test_activate_endpoint_rejects_unavailable_property(self):
         self.client.force_authenticate(user=self.owner)
         tenancy = Tenancy.objects.create(
             property=self.property,
@@ -508,34 +597,7 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
             start_date=date(2028, 1, 1),
             end_date=date(2028, 12, 31),
             monthly_rent=Decimal("25000.00"),
-        )
-
-        for disallowed_status in (
-            PropertyStatus.DRAFT,
-            PropertyStatus.OCCUPIED,
-            PropertyStatus.MAINTENANCE,
-            PropertyStatus.INACTIVE,
-        ):
-            with self.subTest(action="confirm", property_status=disallowed_status):
-                Property.objects.filter(pk=self.property.pk).update(status=disallowed_status)
-                res = self.client.post(
-                    reverse("leasing:tenancy-confirm", kwargs={"pk": tenancy.id}),
-                    {},
-                    format="json",
-                )
-                self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-                self.assertFalse(res.data["success"])
-                self.assertIn("property", res.data["errors"])
-
-        # Confirm while available, then block activation on unavailable property statuses.
-        Property.objects.filter(pk=self.property.pk).update(status=PropertyStatus.AVAILABLE)
-        self.assertEqual(
-            self.client.post(
-                reverse("leasing:tenancy-confirm", kwargs={"pk": tenancy.id}),
-                {},
-                format="json",
-            ).status_code,
-            status.HTTP_200_OK,
+            status=TenancyStatus.CONFIRMED,
         )
 
         for disallowed_status in (

@@ -82,16 +82,6 @@ export function useCreateTenancy() {
   })
 }
 
-export function useConfirmTenancy() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (tenancyId: string) => tenancyService.confirmTenancy(tenancyId),
-    onSuccess: (_response, tenancyId) => {
-      invalidateTenancyRelatedQueries(queryClient, tenancyId)
-    },
-  })
-}
-
 export function useActivateTenancy() {
   const queryClient = useQueryClient()
   return useMutation({

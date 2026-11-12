@@ -29,6 +29,10 @@ export const APPLICATION_STATUS_META: Record<ApplicationStatus, ApplicationStatu
     label: 'Withdrawn',
     variant: 'neutral',
   },
+  tenancy_cancelled: {
+    label: 'Tenancy Cancelled',
+    variant: 'warning',
+  },
 }
 
 export function getApplicationStatusMeta(status: string): ApplicationStatusMeta {
@@ -47,6 +51,18 @@ export function getApplicationStatusMeta(status: string): ApplicationStatusMeta 
  */
 export function isWithdrawableApplication(status: ApplicationStatus | string): boolean {
   return status === 'submitted' || status === 'under_review'
+}
+
+/**
+ * Matches backend partial unique constraint & eligibility rule:
+ * Only one active application (`submitted`, `under_review`, or `approved`) is allowed per listing.
+ */
+export function isActiveApplicationStatus(status: ApplicationStatus | string): boolean {
+  return (
+    status === 'submitted' ||
+    status === 'under_review' ||
+    status === 'approved'
+  )
 }
 
 /**

@@ -179,7 +179,7 @@ export const TenantHeader: React.FC<TenantHeaderProps> = ({ onOpenSidebar }) => 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search properties, locations..."
-            className="w-full pl-9 pr-4 py-2 bg-[#F3F4F6] hover:bg-[#EBEEF2] focus:bg-white text-xs text-[#111827] placeholder-[#6B7280] rounded-lg border border-[#E5E7EB] focus:border-[#408A71] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/20 transition-all"
+            className="w-full h-10 pl-9 pr-4 bg-[#F3F4F6] hover:bg-[#EBEEF2] focus:bg-white text-xs text-[#111827] placeholder-[#6B7280] rounded-lg border border-[#E5E7EB] focus:border-[#408A71] focus:outline-hidden focus:ring-2 focus:ring-[#408A71]/20 transition-all"
           />
         </form>
       </div>

@@ -306,7 +306,9 @@ export const OwnerApplicationDetailPage: React.FC = () => {
               >
                 {application.status === 'rejected'
                   ? 'This application has been rejected. No further review transitions are allowed.'
-                  : 'This application was withdrawn by the applicant and cannot be reviewed.'}
+                  : application.status === 'tenancy_cancelled'
+                    ? 'The tenancy created from this application was cancelled. No further review transitions are allowed.'
+                    : 'This application was withdrawn by the applicant and cannot be reviewed.'}
               </Alert>
             )}
           </section>

@@ -316,9 +316,9 @@ export const SavedPropertiesPage: React.FC<SavedPropertiesPageProps> = ({
             </button>
           </div>
         ) : isLoading && currentPage === 1 ? (
-          /* Loading Skeletons matching 3-column Listing Grid */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+          /* Loading Skeletons matching 4-column Listing Grid */
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
               <PropertyListingCardSkeleton key={i} />
             ))}
           </div>
@@ -364,8 +364,8 @@ export const SavedPropertiesPage: React.FC<SavedPropertiesPageProps> = ({
             )}
           </div>
         ) : (
-          /* Responsive 3-Column Property Card Grid matching Browse Listings */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          /* Responsive 4-Column Property Card Grid matching Browse Listings */
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredAndSortedItems.map((item) => {
               const prop = item.property as PublicListingProperty
               const listing = item.listing

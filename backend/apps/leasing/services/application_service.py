@@ -8,7 +8,10 @@ from apps.leasing.models import (
     Application,
     ApplicationStatus,
     ApplicationStatusHistory,
+    Tenancy,
+    TenancyStatus,
 )
+from apps.leasing.models.application import ACTIVE_APPLICATION_STATUSES
 from apps.listings.models import Listing, ListingStatus
 from apps.properties.models import PropertyStatus
 
@@ -114,6 +117,19 @@ def submit_application(
             }
         )
 
+    if Tenancy.objects.filter(
+        property=listing.property,
+        status__in=[TenancyStatus.CONFIRMED, TenancyStatus.ACTIVE],
+    ).exists():
+        raise ListingUnavailableError(
+            {
+                "listing": (
+                    "This listing is no longer accepting applications because "
+                    "the property already has a confirmed or active tenancy."
+                )
+            }
+        )
+
     if _matches_user(listing.owner, applicant):
         raise ApplicationOwnershipError(
             {"applicant": "You cannot apply to your own property listing."}
@@ -122,9 +138,10 @@ def submit_application(
     if Application.objects.filter(
         listing=listing,
         applicant=applicant,
+        status__in=ACTIVE_APPLICATION_STATUSES,
     ).exists():
         raise DuplicateApplicationError(
-            {"application": "You have already applied to this listing."}
+            {"application": "You already have an active application for this listing."}
         )
 
     try:
@@ -135,10 +152,10 @@ def submit_application(
             status=ApplicationStatus.SUBMITTED,
         )
     except IntegrityError:
-        # The database unique constraint remains the final protection
-        # against concurrent duplicate submissions.
+        # The partial unique constraint remains the final protection
+        # against concurrent duplicate active submissions.
         raise DuplicateApplicationError(
-            {"application": "You have already applied to this listing."}
+            {"application": "You already have an active application for this listing."}
         )
 
     _record_status_change(
@@ -176,7 +193,7 @@ def get_applicant_applications(*, applicant):
             "applicant",
             "reviewed_by",
         )
-        .prefetch_related("status_history")
+        .prefetch_related("status_history", "listing__property__images")
         .order_by("-created_at")
     )
 
@@ -203,7 +220,7 @@ def get_received_applications(*, owner):
             "applicant",
             "reviewed_by",
         )
-        .prefetch_related("status_history")
+        .prefetch_related("status_history", "listing__property__images")
         .order_by("-created_at")
     )
 

@@ -6,7 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useOwnedPropertyIds } from '../../hooks/useOwnedPropertyIds'
 import { useMyApplications } from '../../hooks/useTenantWorkspace'
 import { Badge } from '../../components/ui/badge'
-import { getApplicationStatusMeta } from '../../utils/application'
+import { getApplicationStatusMeta, isActiveApplicationStatus } from '../../utils/application'
 import LandingHeader from './components/LandingHeader'
 import LandingFooter from './components/LandingFooter'
 import { getMediaUrl } from '../../utils/imageUrl'
@@ -124,9 +124,19 @@ export const PublicPropertyDetailPage: React.FC<PublicPropertyDetailPageProps> =
         ownedPropertyIds.has(listing.property_id))
   )
 
-  const existingApplication = useMemo(() => {
-    if (!listing || !isAuthenticated) return null
-    return (myApplicationsData?.results ?? []).find((a) => a.listing === listing.id) ?? null
+  const { activeApplication, latestPreviousApplication } = useMemo(() => {
+    if (!listing || !isAuthenticated) {
+      return { activeApplication: null, latestPreviousApplication: null }
+    }
+    const forListing = (myApplicationsData?.results ?? []).filter(
+      (a) => a.listing === listing.id
+    )
+    return {
+      activeApplication:
+        forListing.find((a) => isActiveApplicationStatus(a.status)) ?? null,
+      latestPreviousApplication:
+        forListing.find((a) => !isActiveApplicationStatus(a.status)) ?? null,
+    }
   }, [listing, isAuthenticated, myApplicationsData])
 
   // Format INR price helper
@@ -421,9 +431,17 @@ export const PublicPropertyDetailPage: React.FC<PublicPropertyDetailPageProps> =
   const ownerAvatar = listing.owner?.avatar_url || null
   const ownerRole = listing.owner?.role || 'Property Owner'
 
-  const existingAppMeta = existingApplication
-    ? getApplicationStatusMeta(existingApplication.status)
+  const activeAppMeta = activeApplication
+    ? getApplicationStatusMeta(activeApplication.status)
     : null
+  const previousAppMeta = latestPreviousApplication
+    ? getApplicationStatusMeta(latestPreviousApplication.status)
+    : null
+  const isListingEligibleForApplications = Boolean(
+    listing &&
+      listing.status === 'published' &&
+      listing.property?.status === 'available'
+  )
 
   return (
     <div className={isTenantWorkspace ? 'pb-10 font-sans' : 'min-h-screen bg-[#FDFEFE] flex flex-col font-sans'}>
@@ -649,22 +667,22 @@ export const PublicPropertyDetailPage: React.FC<PublicPropertyDetailPageProps> =
                   </>
                 ) : (
                   <>
-                    {isAuthenticated && existingApplication && existingAppMeta ? (
+                    {isAuthenticated && activeApplication && activeAppMeta ? (
                       <div className="rounded-xl border border-[#CBE7DC] bg-[#F4FAF7] p-4 space-y-2.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-[#1A382A]">
-                            Application Submitted
+                          <span className="text-xs font-medium text-[#1A382A]">
+                            Active Application
                           </span>
-                          <Badge variant={existingAppMeta.variant} size="sm" dot>
-                            {existingAppMeta.label}
+                          <Badge variant={activeAppMeta.variant} size="sm" dot>
+                            {activeAppMeta.label}
                           </Badge>
                         </div>
                         <p className="text-xs text-[#4B5563]">
-                          Applied on {formatDate(existingApplication.created_at)}
+                          Applied on {formatDate(activeApplication.created_at)}
                         </p>
                         <Link
-                          to={`/app/tenant/applications/${existingApplication.id}`}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#408A71] hover:text-[#34745C]"
+                          to={`/app/tenant/applications/${activeApplication.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-[#408A71] hover:text-[#34745C]"
                         >
                           <span>View Application Details</span>
                           <span aria-hidden="true">→</span>
@@ -674,14 +692,35 @@ export const PublicPropertyDetailPage: React.FC<PublicPropertyDetailPageProps> =
                       <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-[#4B5563]">
                         Only tenant accounts can submit rental applications.
                       </div>
+                    ) : !isListingEligibleForApplications ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                        This listing is no longer accepting new applications.
+                      </div>
                     ) : (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2.5">
+                        {isAuthenticated && latestPreviousApplication && previousAppMeta && (
+                          <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 space-y-1 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[#6B7280]">Previous application</span>
+                              <Badge variant={previousAppMeta.variant} size="sm">
+                                {previousAppMeta.label}
+                              </Badge>
+                            </div>
+                            <Link
+                              to={`/app/tenant/applications/${latestPreviousApplication.id}`}
+                              className="inline-flex items-center gap-1 font-medium text-[#408A71] hover:text-[#34745C]"
+                            >
+                              <span>View previous application</span>
+                              <span aria-hidden="true">→</span>
+                            </Link>
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={handleApplyClick}
-                          className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] shadow-xs hover:shadow-md"
+                          className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-[#408A71] hover:bg-[#34745C] text-white text-sm font-medium transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] shadow-xs hover:shadow-md"
                         >
-                          <span>Apply for Rent</span>
+                          <span>{latestPreviousApplication ? 'Apply Again' : 'Apply for Rent'}</span>
                         </button>
                         {!isAuthenticated && (
                           <p className="text-[11px] text-center text-[#6B7280]">

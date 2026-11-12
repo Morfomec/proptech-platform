@@ -21,14 +21,14 @@ const PAGE_SIZE = 20
 type ReadFilter = 'all' | 'unread' | 'read'
 
 function NotificationTypeIcon({ kind, isUnread }: { kind: NotificationIconKind; isUnread: boolean }) {
-  const baseClass = `flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+  const baseClass = `flex h-8 w-8 shrink-0 items-center justify-center rounded-lg mt-0.5 ${
     isUnread ? 'bg-[#408A71] text-white' : 'bg-[#ECF5F2] text-[#408A71]'
   }`
 
   if (kind === 'application') {
     return (
       <div className={baseClass}>
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.9}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.9}>
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -173,7 +173,7 @@ export const TenantNotificationsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-5 pb-10 max-w-2xl">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E7EB] pb-3.5">
         <div className="flex items-center gap-2.5">
@@ -261,7 +261,7 @@ export const TenantNotificationsPage: React.FC = () => {
         </div>
       ) : notifications.length > 0 ? (
         <>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {notifications.map((item) => {
               const typeMeta = getNotificationTypeMeta(item.notification_type)
               const target = getTenantNotificationTarget(item)
@@ -288,24 +288,24 @@ export const TenantNotificationsPage: React.FC = () => {
                   }
                   role={isInteractive ? 'button' : undefined}
                   tabIndex={isInteractive ? 0 : undefined}
-                  className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-all ${
+                  className={`rounded-xl border px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all ${
                     item.is_read
                       ? 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
                       : 'border-[#CBE7DC] bg-[#F4FAF7] hover:border-[#408A71]/50 shadow-2xs'
                   } ${isInteractive ? 'cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#408A71]/40' : ''}`}
                 >
-                  <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex items-start gap-2.5 min-w-0">
                     <NotificationTypeIcon kind={typeMeta.iconKind} isUnread={!item.is_read} />
 
-                    <div className="min-w-0 space-y-1">
+                    <div className="min-w-0 space-y-0.5">
                       <div className="flex flex-wrap items-center gap-2">
                         {!item.is_read && (
                           <span
-                            className="w-2 h-2 rounded-full bg-[#408A71] shrink-0"
+                            className="w-1.5 h-1.5 rounded-full bg-[#408A71] shrink-0"
                             aria-label="Unread notification"
                           />
                         )}
-                        <h2 className="text-sm sm:text-base font-medium text-[#111827]">
+                        <h2 className="text-sm font-medium text-[#111827] mb-0">
                           {item.title}
                         </h2>
                         <Badge variant={typeMeta.variant} size="sm">
@@ -313,14 +313,14 @@ export const TenantNotificationsPage: React.FC = () => {
                         </Badge>
                       </div>
 
-                      <p className="text-xs sm:text-sm text-[#4B5563] leading-relaxed">
+                      <p className="text-xs text-[#4B5563] line-clamp-1 mb-0">
                         {item.message}
                       </p>
 
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-[#6B7280]">
+                      <div className="flex flex-wrap items-center gap-x-2.5 text-[11px] text-[#6B7280]">
                         <span>{formatNotificationDate(item.created_at)}</span>
                         {target && (
-                          <span className="font-semibold text-[#408A71] inline-flex items-center gap-0.5">
+                          <span className="font-medium text-[#408A71] inline-flex items-center gap-0.5">
                             <span>· {target.label}</span>
                             <span aria-hidden="true">→</span>
                           </span>
@@ -329,8 +329,8 @@ export const TenantNotificationsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#E5E7EB]/60">
-                    {!item.is_read && (
+                  {!item.is_read && (
+                    <div className="flex items-center shrink-0">
                       <Button
                         type="button"
                         variant="outline"
@@ -341,21 +341,8 @@ export const TenantNotificationsPage: React.FC = () => {
                       >
                         Mark as Read
                       </Button>
-                    )}
-                    {target && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void handleNotificationActivate(item)
-                        }}
-                      >
-                        Open →
-                      </Button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </article>
               )
             })}

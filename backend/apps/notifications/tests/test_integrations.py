@@ -22,7 +22,6 @@ from apps.leasing.models import (
 from apps.leasing.services import (
     activate_tenancy,
     cancel_tenancy,
-    confirm_tenancy,
     create_tenancy,
     end_tenancy,
     review_application,
@@ -184,23 +183,15 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
             monthly_rent=Decimal("42000.00"),
             security_deposit=Decimal("150000.00"),
         )
-        self.assertTrue(
-            Notification.objects.filter(
-                user=self.tenant,
-                notification_type=NotificationType.TENANCY_CREATED,
-                related_object_type=RelatedObjectType.TENANCY,
-                related_object_id=tenancy.id,
-            ).exists()
-        )
-
-        # 5. Owner confirms tenancy -> listing paused, tenant notified.
-        confirm_tenancy(owner=self.owner, tenancy_id=tenancy.id)
+        # 5. Tenancy created as confirmed -> listing paused, tenant notified.
+        self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
         self.listing.refresh_from_db()
         self.assertEqual(self.listing.status, ListingStatus.PAUSED)
         self.assertTrue(
             Notification.objects.filter(
                 user=self.tenant,
-                notification_type=NotificationType.TENANCY_CONFIRMED,
+                notification_type=NotificationType.TENANCY_CREATED,
+                related_object_type=RelatedObjectType.TENANCY,
                 related_object_id=tenancy.id,
             ).exists()
         )
@@ -292,7 +283,6 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
             end_date=date(2026, 6, 30),
             monthly_rent=Decimal("40000.00"),
         )
-        confirm_tenancy(owner=self.owner, tenancy_id=tenancy_1.id)
         activate_tenancy(owner=self.owner, tenancy_id=tenancy_1.id)
 
         # Second non-overlapping active tenancy starting later.
@@ -304,7 +294,6 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
             end_date=date(2027, 6, 30),
             monthly_rent=Decimal("42000.00"),
         )
-        confirm_tenancy(owner=self.owner, tenancy_id=tenancy_2.id)
         activate_tenancy(owner=self.owner, tenancy_id=tenancy_2.id)
 
         end_tenancy(owner=self.owner, tenancy_id=tenancy_1.id)
@@ -363,24 +352,23 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
             ).exists()
         )
 
-        # Rollback on notification failure for confirm_tenancy (listing stays published) & document upload (file deleted)
-        draft_tenancy = create_tenancy(
-            owner=self.owner,
-            property_id=self.property.id,
-            tenant=self.second_tenant,
-            start_date=date(2028, 1, 1),
-            monthly_rent=Decimal("45000.00"),
-        )
+        # Rollback on notification failure for create_tenancy (tenancy rolled back & listing stays published) & document upload (file deleted)
+        self.listing.status = ListingStatus.PUBLISHED
+        self.listing.save(update_fields=["status", "updated_at"])
         with patch(
             "apps.leasing.services.tenancy_service.create_notification",
             side_effect=RuntimeError("Simulated failure"),
         ):
             with self.assertRaises(RuntimeError):
-                confirm_tenancy(owner=self.owner, tenancy_id=draft_tenancy.id)
+                create_tenancy(
+                    owner=self.owner,
+                    property_id=self.property.id,
+                    tenant=self.second_tenant,
+                    start_date=date(2028, 1, 1),
+                    monthly_rent=Decimal("45000.00"),
+                )
 
-        draft_tenancy.refresh_from_db()
         self.listing.refresh_from_db()
-        self.assertEqual(draft_tenancy.status, TenancyStatus.PENDING)
         self.assertEqual(self.listing.status, ListingStatus.PUBLISHED)
 
         docs_before = Document.objects.count()
@@ -393,7 +381,7 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
                     uploaded_by=self.owner,
                     uploaded_file=self._pdf("rollback.pdf"),
                     document_type=DocumentType.RENTAL_AGREEMENT,
-                    tenancy_instance=draft_tenancy,
+                    tenancy_instance=pending_tenancy,
                 )
 
         self.assertEqual(Document.objects.count(), docs_before)
@@ -662,6 +650,7 @@ class EndToEndRentalLifecycleHTTPTests(APITestCase):
             format="json",
         )
         self.assertEqual(tenancy_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(tenancy_res.data["data"]["status"], TenancyStatus.CONFIRMED)
         tenancy_id = tenancy_res.data["data"]["id"]
 
         dup_tenancy = self.client.post(
@@ -677,16 +666,7 @@ class EndToEndRentalLifecycleHTTPTests(APITestCase):
         )
         self.assertEqual(dup_tenancy.status_code, status.HTTP_400_BAD_REQUEST)
 
-        # 9. Owner performs confirm -> activate -> invalid transition check -> end
-        self.assertEqual(
-            self.client.post(
-                reverse("leasing:tenancy-confirm", kwargs={"pk": tenancy_id}),
-                {},
-                format="json",
-            ).status_code,
-            status.HTTP_200_OK,
-        )
-        # Confirm paused the listing -> no longer publicly listed
+        # 9. Creating tenancy paused the listing -> no longer publicly listed; owner activates -> invalid transition check -> end
         self.assertEqual(
             self.client.get(reverse("listings:listing-list")).data["count"],
             0,
@@ -700,15 +680,7 @@ class EndToEndRentalLifecycleHTTPTests(APITestCase):
         self.assertEqual(act_res.status_code, status.HTTP_200_OK)
         self.assertEqual(act_res.data["data"]["status"], TenancyStatus.ACTIVE)
 
-        # Invalid transitions rejected while active
-        self.assertEqual(
-            self.client.post(
-                reverse("leasing:tenancy-confirm", kwargs={"pk": tenancy_id}),
-                {},
-                format="json",
-            ).status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
+        # Invalid transition rejected while active (cancel active -> 400)
         self.assertEqual(
             self.client.post(
                 reverse("leasing:tenancy-cancel", kwargs={"pk": tenancy_id}),
