@@ -6,6 +6,7 @@ import type {
   EndTenancyPayload,
   TenancyDetail,
   TenancyListItem,
+  TenancySettlementPreview,
   TenancyStatus,
 } from '../types/leasing'
 import type { PaginationParams } from './application.service'
@@ -106,6 +107,19 @@ export const tenancyService = {
     const response = await apiClient.post<ApiResponse<TenancyDetail>>(
       `/tenancies/${tenancyId}/end/`,
       payload ?? {}
+    )
+    return response.data
+  },
+
+  /**
+   * Retrieves checkout settlement numbers (deposit received, prior refunds, max refundable).
+   * Connects to GET /api/v1/tenancies/{id}/settlement-preview/.
+   */
+  async getSettlementPreview(
+    tenancyId: string
+  ): Promise<ApiResponse<TenancySettlementPreview>> {
+    const response = await apiClient.get<ApiResponse<TenancySettlementPreview>>(
+      `/tenancies/${tenancyId}/settlement-preview/`
     )
     return response.data
   },

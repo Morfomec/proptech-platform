@@ -15,10 +15,12 @@ export interface RentalManagementCardProps {
   isLoadingListing: boolean
   isUpdatingPropertyStatus: boolean
   isListingActionLoading: boolean
+  isSubmittingForApproval?: boolean
   propertyStatusError: string | null
   listingError: string | null
   onRequestPropertyStatus: (targetStatus: PropertyStatus) => void
   onPublishOrResumeListing: () => void
+  onSubmitForApproval?: () => void
   onRequestPauseListing: () => void
   onRequestCloseListing: () => void
 }
@@ -39,18 +41,18 @@ const PROPERTY_STATUS_DOTS: Record<PropertyStatus, string> = {
   inactive: 'bg-red-500',
 }
 
-const LISTING_STATUS_LABELS: Record<PublicListingItem['status'], string> = {
-  published: 'Published',
+const REVIEW_STATUS_LABELS: Record<'draft' | 'pending' | 'approved' | 'rejected', string> = {
   draft: 'Draft',
-  paused: 'Paused',
-  closed: 'Closed',
+  pending: 'Pending Approval',
+  approved: 'Approved',
+  rejected: 'Rejected',
 }
 
-const LISTING_STATUS_DOTS: Record<PublicListingItem['status'], string> = {
-  published: 'bg-[#408A71]',
+const REVIEW_STATUS_DOTS: Record<'draft' | 'pending' | 'approved' | 'rejected', string> = {
   draft: 'bg-gray-400',
-  paused: 'bg-amber-500',
-  closed: 'bg-gray-400',
+  pending: 'bg-amber-500',
+  approved: 'bg-[#408A71]',
+  rejected: 'bg-red-500',
 }
 
 function getContextualSummary(
@@ -68,8 +70,14 @@ function getContextualSummary(
   }
   if (!listing) {
     return propertyStatus === 'draft'
-      ? 'Finish setup or create a rental listing to set rent, deposit, and publish.'
-      : 'Property is ready. Create a rental listing to set rent, deposit, and publish.'
+      ? 'Finish setup or create a rental listing to set rent, deposit, and submit for approval.'
+      : 'Property is ready. Create a rental listing to set rent, deposit, and submit for approval.'
+  }
+  if (listing.review_status === 'pending') {
+    return 'This listing has been submitted for administrator review. Once approved, it will be published on the marketplace.'
+  }
+  if (listing.review_status === 'rejected') {
+    return 'This listing was rejected by an administrator. Please review the reason above, edit the listing, and resubmit for approval.'
   }
   switch (listing.status) {
     case 'published':
@@ -77,7 +85,7 @@ function getContextualSummary(
     case 'paused':
       return 'Listing is paused and hidden from public search. Resume when ready to accept applications.'
     case 'draft':
-      return 'Listing is saved as a draft. Publish it to make the property visible on the marketplace.'
+      return 'Listing is saved as a draft. Submit it for administrator approval to make it visible on the marketplace.'
     case 'closed':
       return 'This listing is closed. Create a new listing to market this property again.'
     default:
@@ -92,10 +100,12 @@ export const RentalManagementCard: React.FC<RentalManagementCardProps> = ({
   isLoadingListing,
   isUpdatingPropertyStatus,
   isListingActionLoading,
+  isSubmittingForApproval = false,
   propertyStatusError,
   listingError,
   onRequestPropertyStatus,
   onPublishOrResumeListing,
+  onSubmitForApproval,
   onRequestPauseListing,
   onRequestCloseListing,
 }) => {
@@ -219,6 +229,44 @@ export const RentalManagementCard: React.FC<RentalManagementCardProps> = ({
       )
     }
 
+    if (listing.review_status === 'pending') {
+      return (
+        <div className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs font-medium">
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+          <span>Awaiting Administrator Review</span>
+        </div>
+      )
+    }
+
+    if (listing.review_status === 'rejected') {
+      return (
+        <div className="flex items-center gap-2 flex-1">
+          <Link
+            to={`/app/owner/properties/${propertyId}/edit`}
+            state={{ returnTo: `/app/owner/properties/${propertyId}` }}
+            className="flex-1"
+          >
+            <Button type="button" variant="outline" size="sm" className="w-full">
+              Edit Listing
+            </Button>
+          </Link>
+          {onSubmitForApproval && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              className="flex-1"
+              isLoading={isListingActionLoading || isSubmittingForApproval}
+              disabled={isBusy}
+              onClick={onSubmitForApproval}
+            >
+              Resubmit
+            </Button>
+          )}
+        </div>
+      )
+    }
+
     if (listing.status === 'draft') {
       return (
         <Button
@@ -226,11 +274,11 @@ export const RentalManagementCard: React.FC<RentalManagementCardProps> = ({
           variant="primary"
           size="sm"
           className="flex-1"
-          isLoading={isListingActionLoading}
+          isLoading={isListingActionLoading || isSubmittingForApproval}
           disabled={isBusy}
-          onClick={onPublishOrResumeListing}
+          onClick={onSubmitForApproval}
         >
-          Publish Listing
+          Submit for Approval
         </Button>
       )
     }
@@ -285,6 +333,12 @@ export const RentalManagementCard: React.FC<RentalManagementCardProps> = ({
         )}
       </div>
 
+      {listing?.review_status === 'rejected' && listing.rejection_reason && (
+        <Alert variant="error" title="Listing Rejected by Administrator">
+          <p className="text-xs text-red-700 mt-0.5">{listing.rejection_reason}</p>
+        </Alert>
+      )}
+
       {propertyStatusError && (
         <Alert variant="error" title="Status update failed">
           {propertyStatusError}
@@ -316,13 +370,21 @@ export const RentalManagementCard: React.FC<RentalManagementCardProps> = ({
               </span>
             </div>
             <div>
-              <span className="text-[#6B7280] block">Listing Status</span>
+              <span className="text-[#6B7280] block">Review Status</span>
               {listing ? (
                 <span className="mt-1 inline-flex items-center gap-1.5 font-medium text-[#111827]">
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${LISTING_STATUS_DOTS[listing.status]}`}
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      REVIEW_STATUS_DOTS[listing.review_status ?? 'draft']
+                    }`}
                   />
-                  {LISTING_STATUS_LABELS[listing.status]}
+                  {REVIEW_STATUS_LABELS[listing.review_status ?? 'draft']}
+                  {listing.status === 'published' && (
+                    <span className="ml-1 text-[11px] text-[#15803D] font-normal">(Live)</span>
+                  )}
+                  {listing.status === 'paused' && (
+                    <span className="ml-1 text-[11px] text-amber-700 font-normal">(Paused)</span>
+                  )}
                 </span>
               ) : (
                 <span className="mt-1 block font-medium text-[#6B7280]">Not Listed</span>

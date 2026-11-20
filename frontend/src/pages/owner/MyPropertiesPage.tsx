@@ -141,6 +141,8 @@ export const MyPropertiesPage: React.FC = () => {
           security_deposit: item.security_deposit,
           available_from: item.available_from,
           status: item.status,
+          review_status: item.review_status,
+          rejection_reason: item.rejection_reason,
           published_at: item.published_at,
           property: item.property,
         }
@@ -252,6 +254,25 @@ export const MyPropertiesPage: React.FC = () => {
     typeFilter !== 'all' ||
     statusFilter !== 'all' ||
     sortBy !== 'newest'
+
+  // Action: Submit Listing for Approval
+  const handleSubmitForApproval = async (listingId: string) => {
+    try {
+      setActionLoading(true)
+      await listingService.submitListing(listingId)
+      await queryClient.invalidateQueries({ queryKey: [OWNER_LISTINGS_QUERY_KEY] })
+      setFeedback({
+        type: 'success',
+        message: 'Listing submitted for administrator approval! You will be notified once it is approved.',
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to submit listing for approval.'
+      setFeedback({ type: 'error', message: msg })
+    } finally {
+      setActionLoading(false)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
 
   // Action: Publish Listing
   const handlePublishListing = async (listingId: string, propertyId: string) => {
@@ -714,6 +735,7 @@ export const MyPropertiesPage: React.FC = () => {
               property={property}
               listing={listingsByPropertyId[property.id]}
               onPublishListing={handlePublishListing}
+              onSubmitForApproval={handleSubmitForApproval}
               onPauseListing={handlePauseListing}
               onResumeListing={handleResumeListing}
               onCloseListing={handleCloseListing}

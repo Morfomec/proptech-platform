@@ -445,7 +445,12 @@ class TenancyModelTests(LeasingModelTestMixin, TestCase):
         self.assertEqual(tenancy.owner, self.owner)
         self.assertIn(tenancy, self.property.tenancies.all())
         self.assertIn(tenancy, self.tenant.tenancies.all())
-        self.assertEqual(str(tenancy), f"Tenancy object ({tenancy.id})")
+        tenant_name = (
+            f"{self.tenant.first_name} {self.tenant.last_name}".strip()
+            if self.tenant.first_name or self.tenant.last_name
+            else self.tenant.email
+        )
+        self.assertEqual(str(tenancy), f"{self.property.title} — {tenant_name} ({tenancy.get_status_display()})")
 
         unsaved = Tenancy(tenant=self.tenant)
         self.assertIsNone(unsaved.owner)

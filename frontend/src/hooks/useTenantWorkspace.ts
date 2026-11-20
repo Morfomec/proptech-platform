@@ -4,6 +4,7 @@ import tenancyService from '../services/tenancy.service'
 import documentService from '../services/document.service'
 import notificationService, { type NotificationListParams } from '../services/notification.service'
 import { listingService } from '../services/listing.service'
+import rentService from '../services/rent.service'
 import { useAuth } from './useAuth'
 import type {
   CreateApplicationPayload,
@@ -204,4 +205,62 @@ export function useMarkAllNotificationsRead() {
     },
   })
 }
+
+/**
+ * Hook to retrieve read-only rent charges for a tenant's tenancy or across all tenancies.
+ */
+export function useTenantRentCharges(tenancyId?: string) {
+  const { isAuthenticated, user } = useAuth()
+  return useQuery({
+    queryKey: ['tenant', 'rent', 'charges', tenancyId ?? 'all'],
+    queryFn: () =>
+      rentService.getRentCharges({
+        ...(tenancyId ? { tenancy_id: tenancyId } : {}),
+        role: 'tenant',
+        page: 1,
+        page_size: 100,
+      }),
+    enabled: isAuthenticated && Boolean(user?.is_tenant),
+    staleTime: 30_000,
+  })
+}
+
+/**
+ * Hook to retrieve read-only payment records for a tenant's tenancy or across all tenancies.
+ */
+export function useTenantPayments(tenancyId?: string) {
+  const { isAuthenticated, user } = useAuth()
+  return useQuery({
+    queryKey: ['tenant', 'rent', 'payments', tenancyId ?? 'all'],
+    queryFn: () =>
+      rentService.getPayments({
+        ...(tenancyId ? { tenancy_id: tenancyId } : {}),
+        role: 'tenant',
+        page: 1,
+        page_size: 100,
+      }),
+    enabled: isAuthenticated && Boolean(user?.is_tenant),
+    staleTime: 30_000,
+  })
+}
+
+/**
+ * Hook to retrieve read-only security deposit position for a tenant's tenancy or across all tenancies.
+ */
+export function useTenantSecurityDeposits(tenancyId?: string) {
+  const { isAuthenticated, user } = useAuth()
+  return useQuery({
+    queryKey: ['tenant', 'rent', 'security-deposits', tenancyId ?? 'all'],
+    queryFn: () =>
+      rentService.getSecurityDeposits({
+        ...(tenancyId ? { tenancy_id: tenancyId } : {}),
+        role: 'tenant',
+      }),
+    select: (res) => res.data,
+    enabled: isAuthenticated && Boolean(user?.is_tenant),
+    staleTime: 30_000,
+  })
+}
+
+
 

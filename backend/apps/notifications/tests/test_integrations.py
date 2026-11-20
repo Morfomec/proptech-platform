@@ -526,15 +526,24 @@ class EndToEndRentalLifecycleHTTPTests(APITestCase):
             0,
         )
 
-        # Owner publishes listing
+        # Owner submits listing for approval and platform admin approves it
         self.client.force_authenticate(user=self.owner_user)
-        pub_res = self.client.post(
-            reverse("listings:listing-publish", kwargs={"pk": listing_id}),
+        sub_res = self.client.post(
+            reverse("listings:listing-submit", kwargs={"pk": listing_id}),
             {},
             format="json",
         )
-        self.assertEqual(pub_res.status_code, status.HTTP_200_OK)
-        self.assertEqual(pub_res.data["data"]["status"], ListingStatus.PUBLISHED)
+        self.assertEqual(sub_res.status_code, status.HTTP_200_OK)
+
+        from apps.listings.services import approve_listing
+
+        admin_user = User.objects.create_superuser(
+            email="platform_admin@example.com",
+            password="adminpassword123",
+        )
+        listing_obj = Listing.objects.get(pk=listing_id)
+        approve_listing(admin_user=admin_user, listing_instance=listing_obj)
+
         self.assertEqual(
             self.client.get(reverse("listings:listing-me"), {"status": "published"}).data["count"],
             1,

@@ -1,0 +1,261 @@
+{% extends 'admin/base.html' %}
+{% load i18n unfold %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-shell">
+
+    <!-- Dashboard Header -->
+    <header class="dashboard-header-bar">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-medium tracking-tight text-[#111827] dark:text-white">
+                {% trans "Overview" %}
+            </h1>
+            <p class="text-xs sm:text-sm font-normal text-[#64748B] dark:text-base-400 mt-0.5">
+                {% trans "A simple overview of platform activity." %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#EAF6F0] dark:bg-primary-950/50 border border-[#A5E0CB]/60 dark:border-primary-800/60 text-xs font-medium text-[#0B493A] dark:text-[#A5E0CB]">
+                <span class="h-1.5 w-1.5 rounded-full bg-[#408A71] dark:bg-[#A5E0CB] animate-pulse"></span>
+                <span>{% trans "Platform Active" %}</span>
+            </div>
+        </div>
+    </header>
+
+    {% if perms_dashboard.can_view_properties or perms_dashboard.can_view_leasing or perms_dashboard.can_view_listings or perms_dashboard.can_view_finance %}
+    <!-- Primary KPI Cards (4 Core Metrics, Compact & Balanced) -->
+    <section>
+        <div class="dashboard-kpi-grid">
+            {% if perms_dashboard.can_view_properties %}
+            <!-- 1. Total Properties -->
+            <a href="{% url 'admin:properties_property_changelist' %}" class="kpi-card accent-properties group">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-[#64748B] group-hover:text-[#408A71] dark:text-base-400 dark:group-hover:text-primary-400 transition-colors">
+                        {% trans "Total Properties" %}
+                    </span>
+                    <div class="kpi-badge-primary">
+                        <span class="material-symbols-outlined text-base">apartment</span>
+                    </div>
+                </div>
+                <div class="mt-2.5">
+                    <div class="text-2xl font-medium tracking-tight text-[#111827] dark:text-white tabular-nums leading-tight">
+                        {{ kpi_data.total_properties|default:0 }}
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1.5">
+                        <span class="inline-flex items-center text-[11px] font-medium text-[#408A71] dark:text-[#A5E0CB] bg-[#EAF6F0] dark:bg-primary-950/60 px-2 py-0.5 rounded-md border border-[#A5E0CB]/40">
+                            {% trans "Managed physical assets" %}
+                        </span>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+
+            {% if perms_dashboard.can_view_leasing %}
+            <!-- 2. Active Tenancies -->
+            <a href="{% url 'admin:leasing_tenancy_changelist' %}?status__exact=active" class="kpi-card accent-tenancies group">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-[#64748B] group-hover:text-teal-700 dark:text-base-400 dark:group-hover:text-teal-300 transition-colors">
+                        {% trans "Active Tenancies" %}
+                    </span>
+                    <div class="kpi-badge-teal">
+                        <span class="material-symbols-outlined text-base">key</span>
+                    </div>
+                </div>
+                <div class="mt-2.5">
+                    <div class="text-2xl font-medium tracking-tight text-[#111827] dark:text-white tabular-nums leading-tight">
+                        {{ kpi_data.active_tenancies|default:0 }}
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1.5">
+                        <span class="inline-flex items-center text-[11px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-200/50">
+                            {% trans "Current active leases" %}
+                        </span>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+
+            {% if perms_dashboard.can_view_listings %}
+            <!-- 3. Pending Listing Reviews -->
+            <a href="{% url 'admin:listings_listing_changelist' %}?review_status__exact=pending" class="kpi-card accent-reviews group">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-[#64748B] group-hover:text-amber-800 dark:text-base-400 dark:group-hover:text-amber-300 transition-colors">
+                        {% trans "Pending Listing Reviews" %}
+                    </span>
+                    <div class="kpi-badge-amber">
+                        <span class="material-symbols-outlined text-base">rate_review</span>
+                    </div>
+                </div>
+                <div class="mt-2.5">
+                    <div class="text-2xl font-medium tracking-tight text-[#111827] dark:text-white tabular-nums leading-tight">
+                        {{ kpi_data.pending_listing_reviews|default:0 }}
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1.5">
+                        <span class="inline-flex items-center text-[11px] font-medium text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200/60">
+                            {% trans "Listings awaiting moderation" %}
+                        </span>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+
+            {% if perms_dashboard.can_view_finance %}
+            <!-- 4. Outstanding Rent -->
+            <a href="{% url 'admin:rent_rentcharge_changelist' %}?status__exact=unpaid" class="kpi-card accent-rent group">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-[#64748B] group-hover:text-emerald-800 dark:text-base-400 dark:group-hover:text-emerald-300 transition-colors">
+                        {% trans "Outstanding Rent" %}
+                    </span>
+                    <div class="kpi-badge-emerald">
+                        <span class="material-symbols-outlined text-base">account_balance_wallet</span>
+                    </div>
+                </div>
+                <div class="mt-2.5">
+                    <div class="text-2xl font-medium tracking-tight text-[#111827] dark:text-white tabular-nums leading-tight">
+                        ₹{{ kpi_data.outstanding_rent|floatformat:2 }}
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1.5">
+                        <span class="inline-flex items-center text-[11px] font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                            {% trans "Uncollected eligible charges" %}
+                        </span>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if needs_attention %}
+    <!-- Needs Attention Section (Compact Spacing & Clear Icon Gap) -->
+    <section class="dashboard-card p-4 sm:p-5">
+        <div class="flex items-center justify-between mb-3.5">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-[#64748B] dark:text-base-400 flex items-center gap-2">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                <span>{% trans "Needs Attention" %}</span>
+            </h2>
+            <span class="text-xs text-[#64748B] dark:text-base-400 font-normal">
+                {% trans "Operational items requiring review" %}
+            </span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for item in needs_attention %}
+            <a href="{{ item.url }}" class="attention-card group">
+                <div class="activity-info">
+                    <div class="activity-icon-box bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/60">
+                        <span class="material-symbols-outlined text-lg">{{ item.icon }}</span>
+                    </div>
+                    <span class="text-xs sm:text-sm font-medium text-[#111827] group-hover:text-[#408A71] dark:text-white dark:group-hover:text-primary-400 transition-colors truncate">
+                        {{ item.label }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 pl-3">
+                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800 tabular-nums">
+                        {{ item.count }}
+                    </span>
+                    <span class="material-symbols-outlined text-base text-[#64748B] group-hover:text-[#408A71] group-hover:translate-x-0.5 transition-all">
+                        arrow_forward
+                    </span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if recent_activity %}
+    <!-- Recent Activity Section (Balanced Icon & Text Spacing) -->
+    <section class="dashboard-card">
+        <div class="dashboard-card-header">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-[#64748B] dark:text-base-400 flex items-center gap-2">
+                <div class="h-5 w-5 rounded-md bg-[#EAF6F0] text-[#408A71] dark:bg-primary-950/60 dark:text-primary-400 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-xs">schedule</span>
+                </div>
+                <span>{% trans "Recent Activity" %}</span>
+            </h2>
+            <span class="inline-flex items-center gap-1.5 text-xs text-[#64748B] dark:text-base-400 font-normal">
+                <span class="h-1.5 w-1.5 rounded-full bg-[#408A71]"></span>
+                {% trans "Latest platform events across managed entities" %}
+            </span>
+        </div>
+        <div class="activity-feed">
+            {% for act in recent_activity %}
+            <div class="activity-row">
+                <!-- Activity Info: Icon + Title & Record Link (14px clean gap) -->
+                <div class="activity-info">
+                    <div class="activity-icon-box
+                        {% if 'Tenancy' in act.description %}
+                            activity-icon-green
+                        {% elif 'Application' in act.description %}
+                            activity-icon-blue
+                        {% elif 'Listing' in act.description %}
+                            activity-icon-amber
+                        {% elif 'Property' in act.description %}
+                            activity-icon-teal
+                        {% else %}
+                            activity-icon-green
+                        {% endif %}">
+                        <span class="material-symbols-outlined text-base">
+                            {{ act.icon|default:'fiber_manual_record' }}
+                        </span>
+                    </div>
+                    <div class="activity-text">
+                        <div class="activity-title">
+                            {{ act.description }}
+                        </div>
+                        <div class="activity-record">
+                            <a href="{{ act.url }}">
+                                {{ act.record }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Side: Status Badge, Relative Timestamp & Action Arrow -->
+                <div class="activity-meta-side">
+                    {% if act.status %}
+                    <span class="status-pill pill-{{ act.status|lower }}">
+                        {{ act.status }}
+                    </span>
+                    {% endif %}
+                    
+                    <span class="activity-time tabular-nums">
+                        <span class="material-symbols-outlined">schedule</span>
+                        <span>{{ act.timestamp|timesince }} {% trans "ago" %}</span>
+                    </span>
+
+                    <a href="{{ act.url }}" class="activity-arrow-btn" title="{% trans 'View record' %}">
+                        <span class="material-symbols-outlined text-base">arrow_forward</span>
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if not perms_dashboard.can_view_properties and not perms_dashboard.can_view_leasing and not perms_dashboard.can_view_listings and not perms_dashboard.can_view_finance %}
+    <!-- Restricted Staff Empty State -->
+    <div class="dashboard-card p-8 text-center">
+        <div class="h-10 w-10 rounded-full bg-[#EAF6F0] text-[#408A71] dark:bg-base-800 mx-auto flex items-center justify-center mb-2.5">
+            <span class="material-symbols-outlined text-xl">lock</span>
+        </div>
+        <h3 class="text-sm font-medium text-[#111827] dark:text-white">
+            {% trans "No Operational Modules Assigned" %}
+        </h3>
+        <p class="text-xs text-[#64748B] dark:text-base-400 mt-1 max-w-md mx-auto">
+            {% trans "You are logged in as a staff member but do not have permissions to view operational dashboards. Please contact a platform administrator if you require access." %}
+        </p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

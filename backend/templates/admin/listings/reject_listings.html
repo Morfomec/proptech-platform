@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="p-6 max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+    <form method="post" action="">
+        {% csrf_token %}
+        <h2 class="text-xl font-medium text-gray-900 dark:text-gray-100 mb-2">{% trans "Reject Selected Listings" %}</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            {% trans "You are rejecting the following listing(s). An administrator rejection reason is required and will be displayed to the property owner." %}
+        </p>
+        <ul class="mb-6 list-disc pl-5 text-sm text-gray-700 dark:text-gray-300 space-y-1">
+            {% for item in queryset %}
+            <li>
+                <strong>{{ item.title }}</strong> ({{ item.property.title }} &mdash; {{ item.property.city }})
+                <input type="hidden" name="{{ action_checkbox_name }}" value="{{ item.pk }}" />
+            </li>
+            {% endfor %}
+        </ul>
+        <div class="mb-6">
+            <label for="rejection_reason" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {% trans "Rejection Reason" %} <span class="text-red-500">*</span>
+            </label>
+            <textarea id="rejection_reason" name="rejection_reason" rows="4" required class="w-full border border-gray-300 dark:border-gray-600 rounded-md p-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:ring-2 focus:ring-emerald-500" placeholder="{% trans 'State specifically what must be corrected before this listing can be approved...' %}"></textarea>
+        </div>
+        <input type="hidden" name="action" value="reject_selected_listings" />
+        <input type="hidden" name="post" value="yes" />
+        <div class="flex items-center gap-3">
+            <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors cursor-pointer border-0">
+                {% trans "Confirm Rejection" %}
+            </button>
+            <a href="." class="py-2 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                {% trans "Cancel" %}
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

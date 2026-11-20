@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 
 export interface FinalCtaSectionProps {
@@ -7,27 +7,8 @@ export interface FinalCtaSectionProps {
 }
 
 export const FinalCtaSection: React.FC<FinalCtaSectionProps> = () => {
-  const { isAuthenticated, user } = useAuth()
-  const navigate = useNavigate()
-
-  const handleOwnerClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    if (!isAuthenticated) {
-      navigate('/login', {
-        state: { from: { pathname: '/app/owner/properties/new' } },
-      })
-    } else if (user?.is_owner === true) {
-      navigate('/app/owner/dashboard')
-    } else {
-      navigate('/app/owner/properties/new')
-    }
-  }
-
-  const ownerCta = !isAuthenticated
-    ? { to: '/login', state: { from: { pathname: '/app/owner/properties/new' } } }
-    : user?.is_owner === true
-    ? { to: '/app/owner/dashboard', state: undefined }
-    : { to: '/app/owner/properties/new', state: undefined }
+  const { user } = useAuth()
+  const ownerDestination = user?.is_owner ? '/app/owner/dashboard' : '/owner/get-started'
 
   return (
     <section className="py-20 sm:py-24 bg-white text-center">
@@ -47,9 +28,7 @@ export const FinalCtaSection: React.FC<FinalCtaSectionProps> = () => {
           </Link>
 
           <Link
-            to={ownerCta.to}
-            state={ownerCta.state}
-            onClick={handleOwnerClick}
+            to={ownerDestination}
             className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-[#111827] px-8 py-3.5 text-base font-semibold shadow-2xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#408A71] cursor-pointer"
           >
             List Your Property

@@ -1,0 +1,69 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="p-6 max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+    <form method="post" action="">
+        {% csrf_token %}
+        <div class="flex items-center gap-3 mb-4">
+            <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 font-semibold text-lg">
+                ✕
+            </span>
+            <div>
+                <h2 class="text-xl font-medium text-gray-900 dark:text-gray-100">{% trans "Reject Listing" %}</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{% trans "Provide feedback so the property owner can make necessary corrections." %}</p>
+            </div>
+        </div>
+
+        <div class="p-4 mb-5 rounded-md bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 text-sm space-y-1.5">
+            <div class="flex justify-between">
+                <span class="text-gray-500 dark:text-gray-400">{% trans "Listing Title:" %}</span>
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ listing.title }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500 dark:text-gray-400">{% trans "Property:" %}</span>
+                <span class="font-medium text-gray-900 dark:text-gray-100">{{ listing.property.title }} ({{ listing.property.city }})</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500 dark:text-gray-400">{% trans "Owner:" %}</span>
+                <span class="text-gray-700 dark:text-gray-300">{{ listing.property.owner.email }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500 dark:text-gray-400">{% trans "Monthly Rent:" %}</span>
+                <span class="font-medium text-gray-900 dark:text-gray-100">₹{{ listing.monthly_rent }}</span>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <label for="rejection_reason" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                {% trans "Rejection Reason" %} <span class="text-red-500">*</span>
+            </label>
+            <textarea
+                id="rejection_reason"
+                name="rejection_reason"
+                rows="4"
+                required
+                class="w-full border border-gray-300 dark:border-gray-600 rounded-md p-3 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                placeholder="{% trans 'Specify what must be corrected before this listing can be approved (e.g. invalid pricing, inappropriate photos, inaccurate description)...' %}"
+            >{{ initial_reason }}</textarea>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{% trans "This reason will be visible to the property owner on their dashboard so they can revise and resubmit." %}</p>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+            <button
+                type="submit"
+                class="bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 px-5 rounded-md text-sm transition-colors cursor-pointer border-0 shadow-sm"
+            >
+                {% trans "Confirm & Reject Listing" %}
+            </button>
+            <a
+                href="{% url 'admin:listings_listing_change' listing.pk %}"
+                class="py-2.5 px-5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors no-underline"
+            >
+                {% trans "Cancel" %}
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

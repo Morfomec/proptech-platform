@@ -114,10 +114,10 @@ class ListingServiceTests(TestCase):
         self.assertEqual(listing.owner, self.owner)
         self.assertEqual(listing.title, "Sea Breeze Villa for Rent")
         self.assertEqual(listing.status, ListingStatus.DRAFT)
-        self.assertEqual(listing.review_status, ReviewStatus.PENDING)
+        self.assertEqual(listing.review_status, ReviewStatus.DRAFT)
         self.assertIsNone(listing.published_at)
 
-    def test_owner_can_create_and_publish_immediately(self):
+    def test_new_listings_always_created_as_draft(self):
         listing = create_listing(
             owner=self.owner,
             property_instance=self.property,
@@ -125,10 +125,9 @@ class ListingServiceTests(TestCase):
             publish=True,
         )
 
-        self.assertEqual(listing.status, ListingStatus.PUBLISHED)
-        self.assertIsNotNone(listing.published_at)
-        # Approval not required
-        self.assertEqual(listing.review_status, ReviewStatus.PENDING)
+        self.assertEqual(listing.status, ListingStatus.DRAFT)
+        self.assertIsNone(listing.published_at)
+        self.assertEqual(listing.review_status, ReviewStatus.DRAFT)
 
     def test_non_owner_cannot_create_listing_for_property(self):
         with self.assertRaises(ListingOwnershipError):
@@ -179,7 +178,7 @@ class ListingServiceTests(TestCase):
         )
 
         self.assertEqual(listing.owner, self.owner)
-        self.assertEqual(listing.review_status, ReviewStatus.PENDING)
+        self.assertEqual(listing.review_status, ReviewStatus.DRAFT)
         self.assertIsNone(listing.reviewed_by)
 
     # ============================================================
@@ -263,6 +262,9 @@ class ListingServiceTests(TestCase):
         self.assertEqual(listing.status, ListingStatus.DRAFT)
         self.assertIsNone(listing.published_at)
 
+        listing.review_status = ReviewStatus.APPROVED
+        listing.save()
+
         published = publish_listing(owner=self.owner, listing_instance=listing)
         self.assertEqual(published.status, ListingStatus.PUBLISHED)
         self.assertIsNotNone(published.published_at)
@@ -272,8 +274,12 @@ class ListingServiceTests(TestCase):
             owner=self.owner,
             property_instance=self.property,
             validated_data=self.valid_payload,
-            publish=True,
+            publish=False,
         )
+        listing.review_status = ReviewStatus.APPROVED
+        listing.status = ListingStatus.PUBLISHED
+        listing.published_at = timezone.now()
+        listing.save()
         first_published_at = listing.published_at
 
         # Publish again
@@ -337,6 +343,9 @@ class ListingServiceTests(TestCase):
             validated_data=self.valid_payload,
             publish=False,
         )
+        listing.review_status = ReviewStatus.APPROVED
+        listing.save()
+
         # Verify initial zero-image publish attempt is blocked
         with self.assertRaises(PropertyImageRequiredError):
             publish_listing(owner=self.owner, listing_instance=listing)
@@ -448,6 +457,8 @@ class ListingServiceTests(TestCase):
         self.assertEqual(draft_prop.status, PropertyStatus.DRAFT)
 
         # Publishing transitions draft property -> available atomically
+        draft_listing.review_status = ReviewStatus.APPROVED
+        draft_listing.save()
         published = publish_listing(owner=self.owner, listing_instance=draft_listing)
         draft_prop.refresh_from_db()
         self.assertEqual(published.status, ListingStatus.PUBLISHED)
@@ -470,17 +481,23 @@ class ListingServiceTests(TestCase):
             status=PropertyStatus.DRAFT,
         )
 
+        draft_listing = create_listing(
+            owner=self.owner,
+            property_instance=draft_prop,
+            validated_data=self.valid_payload,
+            publish=False,
+        )
+        draft_listing.review_status = ReviewStatus.APPROVED
+        draft_listing.save()
+
         # Missing image -> fails and preserves DRAFT status
         with self.assertRaises(PropertyImageRequiredError):
-            create_listing(
+            publish_listing(
                 owner=self.owner,
-                property_instance=draft_prop,
-                validated_data=self.valid_payload,
-                publish=True,
+                listing_instance=draft_listing,
             )
         draft_prop.refresh_from_db()
         self.assertEqual(draft_prop.status, PropertyStatus.DRAFT)
-        self.assertFalse(Listing.objects.filter(property=draft_prop).exists())
 
         # Add image, but incomplete residential specs fail property.full_clean() -> transaction rolls back
         PropertyImage.objects.create(
@@ -489,42 +506,36 @@ class ListingServiceTests(TestCase):
             is_primary=True,
         )
         with self.assertRaises(ValidationError):
-            create_listing(
+            publish_listing(
                 owner=self.owner,
-                property_instance=draft_prop,
-                validated_data=self.valid_payload,
-                publish=True,
+                listing_instance=draft_listing,
             )
         draft_prop.refresh_from_db()
         self.assertEqual(draft_prop.status, PropertyStatus.DRAFT)
-        self.assertFalse(Listing.objects.filter(property=draft_prop).exists())
 
         # Complete specs (still without coordinates) -> succeeds & promotes DRAFT -> AVAILABLE
         draft_prop.bedrooms = 2
         draft_prop.bathrooms = Decimal("2.0")
         draft_prop.save()
-        created = create_listing(
+        created = publish_listing(
             owner=self.owner,
-            property_instance=draft_prop,
-            validated_data=self.valid_payload,
-            publish=True,
+            listing_instance=draft_listing,
         )
         draft_prop.refresh_from_db()
         self.assertEqual(created.status, ListingStatus.PUBLISHED)
         self.assertEqual(draft_prop.status, PropertyStatus.AVAILABLE)
 
-    def test_publishing_when_review_status_is_pending_does_not_prevent_publication(self):
+    def test_publishing_requires_admin_approval(self):
         listing = create_listing(
             owner=self.owner,
             property_instance=self.property,
             validated_data=self.valid_payload,
             publish=False,
         )
-        self.assertEqual(listing.review_status, ReviewStatus.PENDING)
+        self.assertEqual(listing.review_status, ReviewStatus.DRAFT)
 
-        published = publish_listing(owner=self.owner, listing_instance=listing)
-        self.assertEqual(published.status, ListingStatus.PUBLISHED)
-        self.assertEqual(published.review_status, ReviewStatus.PENDING)
+        with self.assertRaises(ListingStateError):
+            publish_listing(owner=self.owner, listing_instance=listing)
 
     # ============================================================
     # 4. pause_listing & republishing
@@ -534,8 +545,12 @@ class ListingServiceTests(TestCase):
             owner=self.owner,
             property_instance=self.property,
             validated_data=self.valid_payload,
-            publish=True,
+            publish=False,
         )
+        listing.status = ListingStatus.PUBLISHED
+        listing.review_status = ReviewStatus.APPROVED
+        listing.published_at = timezone.now()
+        listing.save()
         published_at = listing.published_at
 
         paused = pause_listing(owner=self.owner, listing_instance=listing)
@@ -558,8 +573,12 @@ class ListingServiceTests(TestCase):
             owner=self.owner,
             property_instance=self.property,
             validated_data=self.valid_payload,
-            publish=True,
+            publish=False,
         )
+        listing.status = ListingStatus.PUBLISHED
+        listing.review_status = ReviewStatus.APPROVED
+        listing.published_at = timezone.now()
+        listing.save()
         original_ts = listing.published_at
 
         paused = pause_listing(owner=self.owner, listing_instance=listing)

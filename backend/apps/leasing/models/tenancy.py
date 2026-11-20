@@ -235,3 +235,12 @@ class Tenancy(BaseModel):
                 index_type="GIST",
             ),
         ]
+
+    def __str__(self):
+        tenant_name = (
+            f"{self.tenant.first_name} {self.tenant.last_name}".strip()
+            if self.tenant and (self.tenant.first_name or self.tenant.last_name)
+            else (self.tenant.email if self.tenant else "Unknown Tenant")
+        )
+        prop_title = self.property.title if self.property else "Unknown Property"
+        return f"{prop_title} — {tenant_name} ({self.get_status_display()})"

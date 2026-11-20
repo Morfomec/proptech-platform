@@ -23,11 +23,10 @@ const PAGE_SIZE = 20
 type StatusFilter = 'all' | TenancyStatus
 
 const STATUS_TABS: { id: StatusFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'confirmed', label: 'Upcoming' },
   { id: 'active', label: 'Active' },
   { id: 'ended', label: 'Completed' },
   { id: 'cancelled', label: 'Cancelled' },
+  { id: 'all', label: 'All' },
 ]
 
 /**
@@ -39,7 +38,7 @@ export const OwnerTenanciesPage: React.FC = () => {
   const navigate = useNavigate()
 
   const [currentPage, setCurrentPage] = useState(1)
-  const [activeStatus, setActiveStatus] = useState<StatusFilter>('all')
+  const [activeStatus, setActiveStatus] = useState<StatusFilter>('active')
   const [searchQuery, setSearchQuery] = useState('')
 
   const {
@@ -318,7 +317,7 @@ export const OwnerTenanciesPage: React.FC = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setActiveStatus('all')
+                  setActiveStatus('active')
                   setSearchQuery('')
                   setCurrentPage(1)
                 }}

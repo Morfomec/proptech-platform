@@ -65,6 +65,16 @@ const NOTIFICATION_TYPE_MAP: Record<string, NotificationTypeMeta> = {
     variant: 'info',
     iconKind: 'document',
   },
+  listing_approved: {
+    label: 'Listing Approved',
+    variant: 'success',
+    iconKind: 'general',
+  },
+  listing_rejected: {
+    label: 'Listing Rejected',
+    variant: 'danger',
+    iconKind: 'general',
+  },
 }
 
 export function getNotificationTypeMeta(notificationType: string): NotificationTypeMeta {
@@ -139,6 +149,14 @@ export function getOwnerNotificationTarget(
     return {
       path: '/app/owner/documents',
       label: 'View Documents',
+    }
+  }
+  if (item.related_object_type === 'listing' && item.related_object_id) {
+    return {
+      path: item.property_id
+        ? `/app/owner/properties/${item.property_id}`
+        : '/app/owner/properties',
+      label: 'View Property',
     }
   }
   return null

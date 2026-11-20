@@ -27,12 +27,14 @@ from apps.leasing.serializers import (
     TenancyDetailSerializer,
     TenancyEndSerializer,
     TenancyListSerializer,
+    TenancySettlementPreviewSerializer,
 )
 from apps.leasing.services import (
     activate_tenancy,
     cancel_tenancy,
     create_tenancy,
     end_tenancy,
+    get_tenancy_settlement_preview,
 )
 from apps.leasing.services.exceptions import (
     TenancyApplicationError,
@@ -404,6 +406,18 @@ class TenancyViewSet(viewsets.GenericViewSet):
                 move_out_date=serializer.validated_data.get(
                     "move_out_date"
                 ),
+                settle_deposit=serializer.validated_data.get(
+                    "settle_deposit", False
+                ),
+                deductions=serializer.validated_data.get(
+                    "deductions"
+                ),
+                refund_amount=serializer.validated_data.get(
+                    "refund_amount"
+                ),
+                refund_reference=serializer.validated_data.get(
+                    "refund_reference"
+                ),
             )
         except (
             TenancyNotFoundError,
@@ -420,4 +434,36 @@ class TenancyViewSet(viewsets.GenericViewSet):
                 tenancy,
                 context=self.get_serializer_context(),
             ).data,
+        })
+
+    @extend_schema(
+        tags=["Tenancies"],
+        summary="Tenancy settlement preview",
+        description="Retrieve pre-calculated security deposit settlement numbers for checkout.",
+        responses={
+            200: success_envelope("TenancySettlementPreviewResponse", TenancySettlementPreviewSerializer),
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
+    @action(detail=True, methods=["get"], url_path="settlement-preview")
+    def settlement_preview(self, request, *args, **kwargs):
+        tenancy = self.get_object()
+        try:
+            preview_data = get_tenancy_settlement_preview(
+                owner=request.user,
+                tenancy_id=tenancy.pk,
+            )
+        except (
+            TenancyNotFoundError,
+            TenancyOwnershipError,
+            TenancyStateError,
+            DjangoValidationError,
+        ) as exc:
+            self._translate_service_exception(exc)
+
+        return Response({
+            "success": True,
+            "data": preview_data,
         })

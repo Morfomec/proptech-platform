@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.listings.models import Listing, ListingStatus, SavedProperty
+from apps.listings.models import Listing, ListingStatus, ReviewStatus, SavedProperty
 from apps.properties.models import (
     FurnishingStatus,
     Property,
@@ -85,6 +85,7 @@ class SavedPropertyAPITests(APITestCase):
             monthly_rent=Decimal("38000.00"),
             security_deposit=Decimal("120000.00"),
             status=ListingStatus.PUBLISHED,
+            review_status=ReviewStatus.APPROVED,
         )
 
         # Unpublished property (only draft listing)
@@ -209,6 +210,7 @@ class SavedPropertyAPITests(APITestCase):
             title="Waterfront Condo for Rent",
             monthly_rent=Decimal("45000.00"),
             status=ListingStatus.PUBLISHED,
+            review_status=ReviewStatus.APPROVED,
         )
 
         # User A bookmarks public_property
@@ -366,6 +368,7 @@ class SavedPropertyAPITests(APITestCase):
                 title=f"Flat {i} for Rent",
                 monthly_rent=Decimal("20000.00"),
                 status=ListingStatus.PUBLISHED,
+                review_status=ReviewStatus.APPROVED,
             )
             SavedProperty.objects.create(user=self.tenant_a, property=prop)
 
@@ -490,6 +493,7 @@ class SavedPropertyAPITests(APITestCase):
                 title=f"Hidden Listing {hidden_status}",
                 monthly_rent=Decimal("31000.00"),
                 status=ListingStatus.PUBLISHED,
+                review_status=ReviewStatus.APPROVED,
             )
             res = self.client.post(
                 save_url,

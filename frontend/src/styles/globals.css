@@ -139,3 +139,34 @@ object {
   }
 }
 
+/* ============================================================
+   ADMIN-STYLE DATA TABLE PALETTE
+   Consistent with Django Admin (Unfold) table styling:
+   - Header:     #FFFFFF
+   - Odd rows:   #FFFFFF
+   - Even rows:  #F8FAFC
+   - Hover:      #F1F5F9
+   - Borders:    #E5E7EB
+   ============================================================ */
+table.table-admin thead,
+.data-table thead {
+  background-color: #FFFFFF !important;
+  border-bottom: 1px solid #E5E7EB !important;
+}
+
+table.table-admin tbody tr:nth-child(even),
+.data-table tbody tr:nth-child(even) {
+  background-color: #F8FAFC;
+}
+
+table.table-admin tbody tr:nth-child(odd),
+.data-table tbody tr:nth-child(odd) {
+  background-color: #FFFFFF;
+}
+
+table.table-admin tbody tr:hover,
+.data-table tbody tr:hover {
+  background-color: #F1F5F9 !important;
+}
+
+

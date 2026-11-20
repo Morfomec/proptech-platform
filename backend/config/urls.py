@@ -47,6 +47,12 @@ urlpatterns = [
     #Notification API
     path("api/v1/",include("apps.notifications.urls")),
 
+    # Subscriptions API
+    path("api/v1/", include("apps.subscriptions.urls")),
+
+    # Rent & Payments API
+    path("api/v1/", include("apps.rent.urls")),
+
     # OpenAPI Schema
     path(
         "api/schema/",
@@ -71,3 +77,5 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+    urlpatterns += staticfiles_urlpatterns()

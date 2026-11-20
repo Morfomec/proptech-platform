@@ -492,10 +492,10 @@ export const AddPropertyWizardPage: React.FC = () => {
     setUniqueErrors([])
     setFieldErrors({})
 
-    // Pre-flight check: If publishing immediately, user must have selected at least 1 photo
+    // Pre-flight check: If submitting for approval, user must have selected at least 1 photo
     const hasAnyImageToUpload = images.length > 0 || images.some((img) => img.uploaded)
     if (wantsPublish && !hasAnyImageToUpload) {
-      const msg = 'A property must have at least one uploaded photo before its listing can be published.'
+      const msg = 'A property must have at least one uploaded photo before its listing can be submitted for approval.'
       setApiError(msg)
       setUniqueErrors([msg])
       setFieldErrors({ images: 'Please select at least one property photo.' })
@@ -625,10 +625,10 @@ export const AddPropertyWizardPage: React.FC = () => {
         return
       }
 
-      // Confirm that at least one photo succeeded if publish is requested
+      // Confirm that at least one photo succeeded if submit is requested
       const hasUploadedImages = nextImages.some((img) => img.uploaded)
       if (wantsPublish && !hasUploadedImages) {
-        const msg = 'A property must have at least one uploaded photo before its listing can be published.'
+        const msg = 'A property must have at least one uploaded photo before its listing can be submitted for approval.'
         setApiError(msg)
         setUniqueErrors([msg])
         setFieldErrors({ images: 'Please select and upload at least one property photo.' })
@@ -657,12 +657,11 @@ export const AddPropertyWizardPage: React.FC = () => {
               monthly_rent: rentAmount,
               security_deposit: depositAmount,
               available_from: availFrom,
-              status: wantsPublish ? 'published' : 'draft',
-              publish: wantsPublish,
+              status: 'draft',
             }
             const listingRes = await listingService.createListing(listingPayload)
             activeListingId = listingRes.data?.id || null
-            resolvedListingStatus = listingRes.data?.status ?? (wantsPublish ? 'published' : 'draft')
+            resolvedListingStatus = listingRes.data?.status ?? 'draft'
             if (activeListingId) {
               setPersistedListingId(activeListingId)
             }
@@ -675,10 +674,12 @@ export const AddPropertyWizardPage: React.FC = () => {
               available_from: availFrom,
             })
             resolvedListingStatus = updatedListingRes.data?.status ?? resolvedListingStatus
-            if (wantsPublish) {
-              const publishedRes = await listingService.publishListing(activeListingId)
-              resolvedListingStatus = publishedRes.data?.status ?? 'published'
-            }
+          }
+
+          // If owner requested submission for administrator approval, submit it explicitly
+          if (wantsPublish && activeListingId) {
+            const submitRes = await listingService.submitListing(activeListingId)
+            resolvedListingStatus = submitRes.data?.status ?? resolvedListingStatus
           }
         } catch (listingErr) {
           let errMsg = 'Failed to create listing'
@@ -689,27 +690,12 @@ export const AddPropertyWizardPage: React.FC = () => {
           } else if (listingErr instanceof Error) {
             errMsg = listingErr.message
           }
-          setApiError(`Failed to ${wantsPublish ? 'publish' : 'save'} listing: ${errMsg}`)
+          setApiError(`Failed to ${wantsPublish ? 'submit' : 'save'} listing: ${errMsg}`)
           setUniqueErrors([errMsg])
           window.scrollTo({ top: 0, behavior: 'smooth' })
           setIsSubmitting(false)
           setSubmittingAction(null)
           return
-        }
-      }
-
-      // 5. Confirm that listing is published when wantsPublish is true (Operation 4)
-      if (wantsPublish && activeListingId) {
-        try {
-          const verifyRes = await listingService.getListing(activeListingId)
-          if (verifyRes.data?.status !== 'published') {
-            const pubRes = await listingService.publishListing(activeListingId)
-            resolvedListingStatus = pubRes.data?.status ?? 'published'
-          } else {
-            resolvedListingStatus = 'published'
-          }
-        } catch (verifyErr) {
-          console.warn('Listing status confirmation warning:', verifyErr)
         }
       }
 

@@ -18,6 +18,7 @@ RELATED_OBJECT_MODELS = {
     RelatedObjectType.APPLICATION: ("leasing", "Application"),
     RelatedObjectType.TENANCY: ("leasing", "Tenancy"),
     RelatedObjectType.DOCUMENT: ("documents", "Document"),
+    RelatedObjectType.LISTING: ("listings", "Listing"),
 }
 
 

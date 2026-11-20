@@ -7,6 +7,7 @@ import {
   useReceivedApplicationsCount,
 } from '../../hooks/useOwnerApplications'
 import { useManagedTenanciesCount } from '../../hooks/useOwnerTenancies'
+import { useOwnerRentSummary } from '../../hooks/useOwnerRent'
 import { useMarkNotificationRead, useNotifications } from '../../hooks/useTenantWorkspace'
 import { Alert, Badge, Button, Skeleton, type BadgeVariant } from '../../components/ui'
 import { formatDate, formatINR, getApplicationStatusMeta } from '../../utils/application'
@@ -75,6 +76,13 @@ export const OwnerDashboardPage: React.FC = () => {
   } = useManagedTenanciesCount('active')
 
   const {
+    data: rentSummary,
+    isLoading: rentSummaryLoading,
+    isError: rentSummaryError,
+    refetch: refetchRentSummary,
+  } = useOwnerRentSummary()
+
+  const {
     data: notificationsData,
     isLoading: notificationsLoading,
     isError: notificationsError,
@@ -106,6 +114,7 @@ export const OwnerDashboardPage: React.FC = () => {
       activeListings: activeListingsCount ?? 0,
       pendingApplications: pendingApplicationsCount ?? 0,
       activeTenancies: activeTenanciesCount ?? 0,
+      outstandingRent: rentSummary?.outstanding_rent ?? '0',
     }),
     [
       propertiesData,
@@ -113,6 +122,7 @@ export const OwnerDashboardPage: React.FC = () => {
       activeListingsCount,
       pendingApplicationsCount,
       activeTenanciesCount,
+      rentSummary,
     ]
   )
 
@@ -120,14 +130,16 @@ export const OwnerDashboardPage: React.FC = () => {
     propertiesLoading ||
     activeListingsLoading ||
     pendingAppsLoading ||
-    tenanciesLoading
+    tenanciesLoading ||
+    rentSummaryLoading
   const hasCoreError =
     propertiesError ||
     listingsError ||
     activeListingsError ||
     applicationsError ||
     pendingAppsError ||
-    tenanciesError
+    tenanciesError ||
+    rentSummaryError
 
   const handleNotificationClick = (item: NotificationItem) => {
     if (!item.is_read) {
@@ -154,6 +166,7 @@ export const OwnerDashboardPage: React.FC = () => {
                 void refetchApplications()
                 void refetchPendingAppsCount()
                 void refetchTenancies()
+                void refetchRentSummary()
               }}
             >
               Retry
@@ -165,8 +178,8 @@ export const OwnerDashboardPage: React.FC = () => {
       {/* B. Summary Stat Cards Row */}
       <section aria-label="Owner Summary Metrics">
         {isStatsLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-            {[1, 2, 3, 4].map((idx) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
+            {[1, 2, 3, 4, 5].map((idx) => (
               <div
                 key={idx}
                 className="rounded-xl border border-[#E5E7EB] bg-white p-4 space-y-2.5"
@@ -177,7 +190,7 @@ export const OwnerDashboardPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
             {/* Total Properties */}
             <Link
               to="/app/owner/properties"
@@ -273,6 +286,28 @@ export const OwnerDashboardPage: React.FC = () => {
                 <p className="text-xs font-normal text-[#6B7280]">Active Tenancies</p>
                 <p className="mt-0.5 text-xl font-medium text-[#111827] tabular-nums">
                   {metrics.activeTenancies}
+                </p>
+              </div>
+            </Link>
+
+            {/* Outstanding Rent */}
+            <Link
+              to="/app/owner/rent"
+              className="rounded-xl border border-[#E5E7EB] bg-white p-4 flex items-center gap-3.5 hover:border-[#408A71]/40 transition-colors"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-normal text-[#6B7280]">Outstanding Rent</p>
+                <p className="mt-0.5 text-xl font-medium text-[#111827] tabular-nums">
+                  {formatINR(metrics.outstandingRent)}
                 </p>
               </div>
             </Link>

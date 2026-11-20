@@ -141,7 +141,7 @@ class ListingSearchAndFilterAPITests(APITestCase):
             security_deposit=Decimal("150000.00"),
             available_from=date(2026, 6, 1),
             status=ListingStatus.PUBLISHED,
-            review_status=ReviewStatus.PENDING,
+            review_status=ReviewStatus.APPROVED,
             published_at=base_time - timezone.timedelta(days=10),
         )
 
@@ -180,7 +180,7 @@ class ListingSearchAndFilterAPITests(APITestCase):
             security_deposit=Decimal("75000.00"),
             available_from=date(2026, 6, 15),
             status=ListingStatus.PUBLISHED,
-            review_status=ReviewStatus.PENDING,
+            review_status=ReviewStatus.APPROVED,
             published_at=base_time - timezone.timedelta(days=3),
         )
 
@@ -524,6 +524,7 @@ class ListingSearchAndFilterAPITests(APITestCase):
                 title=f"Kozhikode Flat {i} for Rent",
                 monthly_rent=Decimal("20000.00"),
                 status=ListingStatus.PUBLISHED,
+                review_status=ReviewStatus.APPROVED,
             )
 
         # Page 1 filtering by city=Kozhikode

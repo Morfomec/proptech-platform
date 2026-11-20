@@ -3,7 +3,7 @@
  * Strictly aligned with backend serializers in apps.notifications.
  */
 
-export type RelatedObjectType = 'application' | 'tenancy' | 'document' | null
+export type RelatedObjectType = 'application' | 'tenancy' | 'document' | 'listing' | null
 
 export interface NotificationItem {
   id: string
@@ -12,6 +12,7 @@ export interface NotificationItem {
   message: string
   related_object_type: RelatedObjectType
   related_object_id: string | null
+  property_id?: string | null
   is_read: boolean
   read_at: string | null
   created_at: string

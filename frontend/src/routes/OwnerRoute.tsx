@@ -23,12 +23,10 @@ export const OwnerRoute: React.FC = () => {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  const isCreatingProperty = location.pathname.startsWith('/app/owner/properties/new')
-
-  // Strictly require is_owner for owner workspace pages, allowing authenticated users
-  // to access the creation wizard which activates owner status.
-  if (!isCreatingProperty && user?.is_owner !== true) {
-    return <Navigate to="/app/owner/properties/new" replace />
+  // Strictly require is_owner for owner workspace pages. Non-owners are directed
+  // to activate their 90-day free trial first.
+  if (user?.is_owner !== true) {
+    return <Navigate to="/owner/get-started" replace />
   }
 
   return <Outlet />

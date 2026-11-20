@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.listings.models import Listing, ListingStatus, ReviewStatus
+from apps.listings.services.listing_service import approve_listing
 from apps.properties.models import (
     Amenity,
     AmenityCategory,
@@ -127,7 +128,7 @@ class ListingAPITests(APITestCase):
             security_deposit=Decimal("150000.00"),
             available_from=date.today() + timedelta(days=5),
             status=ListingStatus.PUBLISHED,
-            review_status=ReviewStatus.PENDING,  # Notice: pending review should NOT block public browsing in MVP
+            review_status=ReviewStatus.APPROVED,
         )
 
         # Secondary property for draft testing
@@ -332,6 +333,7 @@ class ListingAPITests(APITestCase):
 
     def test_owner_cannot_create_and_publish_without_images(self):
         self.client.force_authenticate(user=self.owner_b)
+        # 1. Attempting publish directly upon creation is rejected
         payload = {
             "property_id": str(self.property_b.id),
             "title": "Immediate Publish Studio Without Images",
@@ -340,7 +342,23 @@ class ListingAPITests(APITestCase):
         }
         res = self.client.post(reverse("listings:listing-list"), payload, format="json")
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        errors = res.data.get("errors", res.data)
+        self.assertIn("status", res.data.get("errors", res.data))
+
+        # 2. Creating as draft and submitting without images is rejected with image error
+        draft_payload = {
+            "property_id": str(self.property_b.id),
+            "title": "Draft Studio Without Images",
+            "monthly_rent": "22000.00",
+        }
+        create_res = self.client.post(reverse("listings:listing-list"), draft_payload, format="json")
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        listing_id = create_res.data["data"]["id"]
+
+        submit_res = self.client.post(
+            reverse("listings:listing-submit", kwargs={"pk": listing_id})
+        )
+        self.assertEqual(submit_res.status_code, status.HTTP_400_BAD_REQUEST)
+        errors = submit_res.data.get("errors", submit_res.data)
         self.assertIn("property", errors)
         self.assertIn("at least one uploaded image", str(errors["property"]))
 
@@ -356,14 +374,25 @@ class ListingAPITests(APITestCase):
             "property_id": str(self.property_b.id),
             "title": "Immediate Publish Studio",
             "monthly_rent": "22000.00",
-            "publish": True,
         }
         res = self.client.post(reverse("listings:listing-list"), payload, format="json")
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
 
-        data = res.data["data"]
-        self.assertEqual(data["status"], ListingStatus.PUBLISHED)
-        self.assertIsNotNone(data["published_at"])
+        listing_id = res.data["data"]["id"]
+        # Submit for approval
+        submit_res = self.client.post(
+            reverse("listings:listing-submit", kwargs={"pk": listing_id})
+        )
+        self.assertEqual(submit_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(submit_res.data["data"]["review_status"], ReviewStatus.PENDING)
+
+        # Admin approves
+        listing = Listing.objects.get(pk=listing_id)
+        approve_listing(admin_user=self.admin_user, listing_instance=listing)
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, ListingStatus.PUBLISHED)
+        self.assertEqual(listing.review_status, ReviewStatus.APPROVED)
+        self.assertIsNotNone(listing.published_at)
 
     def test_create_listing_rejects_cross_owner_property(self):
         # Owner B attempts to create listing for Owner A's property
@@ -445,7 +474,7 @@ class ListingAPITests(APITestCase):
         self.assertIn("property", errors)
         self.assertIn("at least one uploaded image", str(errors["property"]))
 
-    def test_publish_draft_listing_with_images_succeeds(self):
+    def test_publish_unapproved_draft_listing_rejected(self):
         # Attach image to property_a2 (available property)
         PropertyImage.objects.create(
             property=self.property_a2,
@@ -457,12 +486,19 @@ class ListingAPITests(APITestCase):
         self.client.force_authenticate(user=self.owner_a)
         url = reverse("listings:listing-publish", kwargs={"pk": self.draft_listing.id})
         res = self.client.post(url)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("administrator approval", str(res.data))
+
+        # Once approved, publishing succeeds
+        self.draft_listing.review_status = ReviewStatus.APPROVED
+        self.draft_listing.save(update_fields=["review_status"])
+
+        res = self.client.post(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data["data"]["status"], ListingStatus.PUBLISHED)
         self.assertIsNotNone(res.data["data"]["published_at"])
-        # Review status remains pending without blocking publication
         self.draft_listing.refresh_from_db()
-        self.assertEqual(self.draft_listing.review_status, ReviewStatus.PENDING)
+        self.assertEqual(self.draft_listing.review_status, ReviewStatus.APPROVED)
         self.assertEqual(self.draft_listing.status, ListingStatus.PUBLISHED)
 
     def test_publish_closed_listing_rejected(self):
@@ -533,17 +569,23 @@ class ListingAPITests(APITestCase):
             PropertyStatus.INACTIVE,
         ):
             with self.subTest(property_status=disallowed_status):
+                Listing.objects.filter(property=self.property_b).delete()
                 Property.objects.filter(pk=self.property_b.pk).update(status=disallowed_status)
                 payload = {
                     "property_id": str(self.property_b.id),
                     "title": "Unavailable Property Listing",
                     "monthly_rent": "22000.00",
-                    "publish": True,
                 }
                 res = self.client.post(reverse("listings:listing-list"), payload, format="json")
-                self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-                self.assertFalse(res.data["success"])
-                self.assertIn("property", res.data["errors"])
+                self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+                listing_id = res.data["data"]["id"]
+
+                submit_res = self.client.post(
+                    reverse("listings:listing-submit", kwargs={"pk": listing_id})
+                )
+                self.assertEqual(submit_res.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertFalse(submit_res.data["success"])
+                self.assertIn("property", submit_res.data["errors"])
 
     def test_publish_endpoint_rejects_unavailable_property(self):
         PropertyImage.objects.create(
@@ -576,27 +618,35 @@ class ListingAPITests(APITestCase):
         )
         self.client.force_authenticate(user=self.owner_b)
 
-        # Missing image -> 400 and property stays in draft
         payload = {
             "property_id": str(self.property_b.id),
             "title": "No Coords Studio",
             "monthly_rent": "18000.00",
-            "publish": True,
         }
-        res_fail = self.client.post(reverse("listings:listing-list"), payload, format="json")
-        self.assertEqual(res_fail.status_code, status.HTTP_400_BAD_REQUEST)
+        res_create = self.client.post(reverse("listings:listing-list"), payload, format="json")
+        self.assertEqual(res_create.status_code, status.HTTP_201_CREATED)
+        listing_id = res_create.data["data"]["id"]
+
+        # Missing image -> submit fails and property stays in draft
+        submit_fail = self.client.post(reverse("listings:listing-submit", kwargs={"pk": listing_id}))
+        self.assertEqual(submit_fail.status_code, status.HTTP_400_BAD_REQUEST)
         self.property_b.refresh_from_db()
         self.assertEqual(self.property_b.status, PropertyStatus.DRAFT)
 
-        # With image & publish=True -> 201 and property transitions to available
+        # With image -> submit succeeds (pending approval)
         PropertyImage.objects.create(
             property=self.property_b,
             image_url="https://images.example.com/bengaluru/studio.jpg",
             is_primary=True,
         )
-        res_ok = self.client.post(reverse("listings:listing-list"), payload, format="json")
-        self.assertEqual(res_ok.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(res_ok.data["data"]["status"], ListingStatus.PUBLISHED)
+        submit_ok = self.client.post(reverse("listings:listing-submit", kwargs={"pk": listing_id}))
+        self.assertEqual(submit_ok.status_code, status.HTTP_200_OK)
+
+        # Admin approval promotes draft property to available and publishes listing
+        listing = Listing.objects.get(pk=listing_id)
+        approve_listing(admin_user=self.admin_user, listing_instance=listing)
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, ListingStatus.PUBLISHED)
         self.property_b.refresh_from_db()
         self.assertEqual(self.property_b.status, PropertyStatus.AVAILABLE)
 
@@ -688,6 +738,7 @@ class ListingAPITests(APITestCase):
         )
         self.assertEqual(update_res.data["data"]["property"]["primary_image_url"], expected_url)
 
+        Listing.objects.filter(pk=listing_id).update(review_status=ReviewStatus.APPROVED)
         publish_res = self.client.post(reverse("listings:listing-publish", kwargs={"pk": listing_id}))
         self.assertEqual(publish_res.data["data"]["property"]["primary_image_url"], expected_url)
 

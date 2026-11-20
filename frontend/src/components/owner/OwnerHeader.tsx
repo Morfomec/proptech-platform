@@ -179,11 +179,11 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({ onOpenSidebar }) => {
               {/* User Summary Header */}
               <div className="px-4 py-3 border-b border-[#F3F4F6]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-[#408A71]/15 text-[#408A71] font-bold text-xs flex items-center justify-center ring-1 ring-[#408A71]/30 shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-[#408A71]/15 text-[#408A71] font-semibold text-xs flex items-center justify-center ring-1 ring-[#408A71]/30 shrink-0">
                     {userInitials}
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-bold text-[#111827] truncate">
+                    <span className="text-xs font-medium text-[#111827] truncate">
                       {userFullName}
                     </span>
                     <span className="text-[11px] text-[#6B7280] truncate">
@@ -191,16 +191,32 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({ onOpenSidebar }) => {
                     </span>
                   </div>
                 </div>
-                <div className="mt-2.5 flex items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#408A71]/10 text-[#408A71]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#408A71]" />
-                    Verified Owner
-                  </span>
-                </div>
               </div>
 
               {/* Navigation Options */}
               <div className="py-1">
+                <Link
+                  to="/app/owner/subscription"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-[#374151] hover:bg-gray-50 hover:text-[#111827] transition-colors"
+                >
+                  <svg
+                    className="w-4 h-4 text-[#6B7280]"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76z"
+                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m9 12 2 2 4-4" />
+                  </svg>
+                  <span>Subscription &amp; Billing</span>
+                </Link>
                 <Link
                   to="/app/owner/settings"
                   onClick={() => setIsDropdownOpen(false)}

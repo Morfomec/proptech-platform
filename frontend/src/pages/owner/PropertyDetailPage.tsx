@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { propertyService } from '../../services/property.service'
@@ -73,8 +73,19 @@ function hasValidCoordinates(lat?: string | null, lng?: string | null): boolean 
 export const PropertyDetailPage: React.FC = () => {
   const { propertyId } = useParams<{ propertyId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+
+  const navState = location.state as {
+    from?: string
+    fromLabel?: string
+    returnTo?: string
+    returnLabel?: string
+  } | null
+
+  const backPath = navState?.from || navState?.returnTo || '/app/owner/properties'
+  const backLabel = navState?.fromLabel || navState?.returnLabel || 'My Properties'
 
   // Active viewing image state
   const [activeImageIndex, setActiveImageIndex] = useState(0)
@@ -218,6 +229,30 @@ export const PropertyDetailPage: React.FC = () => {
       })
     } catch (err: unknown) {
       setListingError(extractApiErrorMessage(err, 'Failed to publish listing.'))
+    } finally {
+      setIsListingActionLoading(false)
+    }
+  }
+
+  const handleSubmitForApproval = async () => {
+    if (!propertyListing || isListingActionLoading) return
+    setIsListingActionLoading(true)
+    setListingError(null)
+
+    try {
+      await listingService.submitListing(propertyListing.id)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [OWNER_LISTINGS_QUERY_KEY] }),
+        queryClient.invalidateQueries({ queryKey: ['property', propertyId] }),
+      ])
+      addToast({
+        title: 'Submitted for Approval',
+        description:
+          'Your listing has been submitted for administrator review. You will be notified once it is approved.',
+        variant: 'success',
+      })
+    } catch (err: unknown) {
+      setListingError(extractApiErrorMessage(err, 'Failed to submit listing for approval.'))
     } finally {
       setIsListingActionLoading(false)
     }
@@ -368,8 +403,8 @@ export const PropertyDetailPage: React.FC = () => {
       {/* Compact Workspace Header */}
       <header className="border-b border-[#E5E7EB] pb-4 space-y-2.5">
         <nav className="flex items-center gap-2 text-xs text-[#6B7280]">
-          <Link to="/app/owner/properties" className="hover:text-[#111827] transition-colors">
-            My Properties
+          <Link to={backPath} className="hover:text-[#111827] transition-colors">
+            {backLabel}
           </Link>
           <span>/</span>
           <span className="text-[#111827] font-medium truncate max-w-xs">{property.title}</span>
@@ -398,7 +433,7 @@ export const PropertyDetailPage: React.FC = () => {
           <div className="flex items-center gap-2 shrink-0">
             <Link
               to={`/app/owner/properties/${property.id}/edit`}
-              state={{ returnTo: `/app/owner/properties/${property.id}` }}
+              state={{ returnTo: `/app/owner/properties/${property.id}`, from: navState?.from, fromLabel: navState?.fromLabel }}
             >
               <Button variant="primary" size="sm">
                 Edit Property
@@ -501,7 +536,7 @@ export const PropertyDetailPage: React.FC = () => {
                 </p>
                 <Link
                   to={`/app/owner/properties/${property.id}/edit`}
-                  state={{ returnTo: `/app/owner/properties/${property.id}` }}
+                  state={{ returnTo: `/app/owner/properties/${property.id}`, from: navState?.from, fromLabel: navState?.fromLabel }}
                 >
                   <Button variant="primary" size="sm">
                     Add Photos in Edit Property
@@ -616,6 +651,7 @@ export const PropertyDetailPage: React.FC = () => {
             listingError={listingError}
             onRequestPropertyStatus={handleRequestPropertyStatus}
             onPublishOrResumeListing={() => void handlePublishOrResumeListing()}
+            onSubmitForApproval={() => void handleSubmitForApproval()}
             onRequestPauseListing={() => setListingConfirmAction('pause')}
             onRequestCloseListing={() => setListingConfirmAction('close')}
           />

@@ -110,5 +110,20 @@ export interface ActivateTenancyPayload {
 
 export interface EndTenancyPayload {
   move_out_date?: string
+  settle_deposit?: boolean
+  deductions?: Array<{ reason: string; amount: string | number }>
+  refund_amount?: string | number | null
+  refund_reference?: string | null
 }
+
+export interface TenancySettlementPreview {
+  tenancy_id: string
+  agreed_deposit: string
+  deposit_received: string
+  prior_refunds: string
+  deposit_held: string
+  max_refundable_amount: string
+  status: string
+}
+
 

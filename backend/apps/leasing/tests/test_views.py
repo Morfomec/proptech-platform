@@ -12,7 +12,7 @@ from apps.leasing.models import (
     Tenancy,
     TenancyStatus,
 )
-from apps.listings.models import Listing, ListingStatus
+from apps.listings.models import Listing, ListingStatus, ReviewStatus
 from apps.properties.models import (
     Property,
     PropertyCategory,
@@ -81,13 +81,21 @@ class LeasingAPITestMixin:
         *,
         title="Maple Court Listing",
         status_value=ListingStatus.PUBLISHED,
+        review_status_value=None,
     ):
+        if review_status_value is None:
+            review_status_value = (
+                ReviewStatus.APPROVED
+                if status_value == ListingStatus.PUBLISHED
+                else ReviewStatus.DRAFT
+            )
         return Listing.objects.create(
             property=property_instance,
             title=title,
             monthly_rent=Decimal("24000.00"),
             security_deposit=Decimal("80000.00"),
             status=status_value,
+            review_status=review_status_value,
         )
 
 

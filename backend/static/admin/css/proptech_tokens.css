@@ -1,0 +1,1165 @@
+/**
+ * PropTech Platform Admin - Centralised Brand Design Tokens & SaaS Shell Refinement
+ * 
+ * Established Brand Palette:
+ * - Primary:                #408A71
+ * - Light accent:           #A5E0CB
+ * - Hover:                  #34745C
+ * - Deep green:             #0B493A
+ * - Main background:        #F9FAFB
+ * - Surface:                #FFFFFF
+ * - Primary text:           #111827
+ * - Secondary text:         #64748B
+ * - Borders:                #E8EEEB
+ * - Subtle green background:#EAF6F0
+ */
+
+:root {
+    --proptech-primary: #408A71;
+    --proptech-light-accent: #A5E0CB;
+    --proptech-hover: #34745C;
+    --proptech-deep-green: #0B493A;
+    --proptech-main-bg: #F9FAFB;
+    --proptech-surface: #FFFFFF;
+    --proptech-primary-text: #111827;
+    --proptech-secondary-text: #64748B;
+    --proptech-borders: #E8EEEB;
+    --proptech-subtle-green-bg: #EAF6F0;
+}
+
+/* ============================================================
+   1. MAIN CONTENT WIDTH & RESPONSIVE CONTAINER FIX
+   Removes overly restrictive 1280px clamping so the SaaS shell
+   expands naturally on 1440px and 1920px viewports without stretching.
+   ============================================================ */
+
+#main .container,
+#header-inner .container,
+#content.container,
+.container {
+    max-width: 1760px !important;
+    width: 100% !important;
+}
+
+/* Consistent Page Horizontal Padding (28px on tablet, 32px on desktop) */
+#main > div.px-4 {
+    padding-left: 1.75rem !important;
+    padding-right: 1.75rem !important;
+}
+
+@media (min-width: 1024px) {
+    #main > div.px-4 {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+}
+
+.header,
+#main > div.bg-white.border-b {
+    padding-left: 1.75rem !important;
+    padding-right: 1.75rem !important;
+    border-bottom-color: var(--proptech-borders) !important;
+}
+
+@media (min-width: 1024px) {
+    .header,
+    #main > div.bg-white.border-b {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+}
+
+/* ============================================================
+   2. BODY & GLOBAL TYPOGRAPHY
+   ============================================================ */
+
+body {
+    background-color: var(--proptech-main-bg) !important;
+    color: var(--proptech-primary-text) !important;
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+#main {
+    background-color: var(--proptech-main-bg) !important;
+}
+
+.dark #main {
+    background-color: rgb(21, 27, 38) !important;
+}
+
+/* ============================================================
+   3. SIDEBAR NAVIGATION REFINEMENTS
+   ============================================================ */
+
+/* Normal sidebar background: #F9FAFB */
+#nav-sidebar,
+#nav-sidebar-inner {
+    background-color: var(--proptech-main-bg, #F9FAFB) !important;
+    border-inline-end-color: var(--proptech-borders, #E8EEEB) !important;
+}
+
+.dark #nav-sidebar,
+.dark #nav-sidebar-inner {
+    background-color: rgb(17, 24, 39) !important;
+    border-inline-end-color: rgb(31, 41, 55) !important;
+}
+
+/* Sidebar Brand Header & Icon */
+#nav-sidebar .border-b {
+    border-bottom-color: var(--proptech-borders, #E8EEEB) !important;
+}
+
+#nav-sidebar .bg-primary-600 {
+    background-color: var(--proptech-primary, #408A71) !important;
+    border-radius: 0.625rem !important;
+    box-shadow: 0 2px 4px 0 rgba(64, 138, 113, 0.25);
+}
+
+/* Ensure the building symbol inside the brand logo is ALWAYS brilliant white */
+#nav-sidebar a.bg-primary-600 span.material-symbols-outlined,
+#nav-sidebar span.bg-primary-600 span.material-symbols-outlined,
+#nav-sidebar .bg-primary-600 span.material-symbols-outlined {
+    color: #FFFFFF !important;
+    font-size: 1.25rem !important;
+}
+
+/* Sidebar Navigation Group Titles: Distinct uppercase heading */
+#nav-sidebar h2 {
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: var(--proptech-primary-text, #111827) !important;
+    padding-top: 0.625rem !important;
+    padding-bottom: 0.375rem !important;
+    margin-bottom: 0.125rem !important;
+    transition: color 0.15s ease-in-out;
+}
+
+#nav-sidebar h2:hover {
+    color: var(--proptech-primary, #408A71) !important;
+}
+
+.dark #nav-sidebar h2 {
+    color: #F1F5F9 !important;
+}
+
+.dark #nav-sidebar h2:hover {
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+}
+
+/* Group accordion chevron arrow */
+#nav-sidebar h2 span.material-symbols-outlined {
+    color: #94A3B8 !important;
+    transition: color 0.15s ease-in-out, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+#nav-sidebar h2:hover span.material-symbols-outlined {
+    color: var(--proptech-primary, #408A71) !important;
+}
+
+/* Expanded Group Content Container: Synchronized ambient off-white surface seamlessly blended with #F9FAFB */
+#nav-sidebar .nav-expanded-group,
+#nav-sidebar div[x-data*="navigationOpen"] > ol {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(244, 246, 245, 0.55) 50%, rgba(249, 250, 251, 0.35) 100%) !important;
+    border: none !important;
+    border-radius: 0.75rem !important;
+    padding: 0.3125rem !important;
+    margin-left: 0.75rem !important;
+    margin-right: 0.75rem !important;
+    margin-bottom: 0.5rem !important;
+    box-shadow: 0 0 0 1px rgba(232, 238, 235, 0.45), 0 2px 5px -1px rgba(17, 24, 39, 0.02) !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    flex-direction: column !important;
+    gap: 0.125rem !important;
+}
+
+/* Ensure Alpine.js display: none is strictly respected when collapsed */
+#nav-sidebar ol[style*="display: none"],
+#nav-sidebar .nav-expanded-group[style*="display: none"],
+#nav-sidebar div[x-data*="navigationOpen"] > ol[style*="display: none"] {
+    display: none !important;
+}
+
+.dark #nav-sidebar .nav-expanded-group,
+.dark #nav-sidebar div[x-data*="navigationOpen"] > ol {
+    background: linear-gradient(180deg, rgba(31, 41, 55, 0.5) 0%, rgba(17, 24, 39, 0.25) 100%) !important;
+    border: none !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Static (non-collapsible) Group Content (e.g. Overview) */
+#nav-sidebar .nav-sidebar-group:not(.nav-sidebar-group-collapsible) > ol,
+#nav-sidebar div:not([x-data*="navigationOpen"]) > ol {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    margin-bottom: 0.25rem !important;
+    flex-direction: column !important;
+    gap: 0.125rem !important;
+}
+
+/* Child Links inside Expanded Groups: Hierarchy with extra left padding */
+#nav-sidebar .nav-expanded-group li a,
+#nav-sidebar div[x-data*="navigationOpen"] > ol li a {
+    color: var(--proptech-primary-text, #111827) !important;
+    font-size: 0.8125rem !important;
+    font-weight: 500 !important;
+    height: 2.25rem !important;
+    padding-left: 0.875rem !important; /* Extra left padding communicating hierarchy */
+    padding-right: 0.75rem !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border-radius: 0.5rem !important;
+    transition: background-color 0.15s ease, color 0.15s ease !important;
+}
+
+/* Non-collapsible Links (e.g. Dashboard) */
+#nav-sidebar div:not([x-data*="navigationOpen"]) > ol li a {
+    color: var(--proptech-primary-text, #111827) !important;
+    font-size: 0.8125rem !important;
+    font-weight: 500 !important;
+    height: 2.25rem !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    border-radius: 0.5rem !important;
+    transition: background-color 0.15s ease, color 0.15s ease !important;
+}
+
+.dark #nav-sidebar .nav-expanded-group li a,
+.dark #nav-sidebar div[x-data*="navigationOpen"] > ol li a,
+.dark #nav-sidebar div:not([x-data*="navigationOpen"]) > ol li a {
+    color: #E2E8F0 !important;
+}
+
+/* Secondary Icons: #64748B */
+#nav-sidebar ol li a span.material-symbols-outlined,
+#nav-sidebar .nav-expanded-group li a span.material-symbols-outlined,
+#nav-sidebar div[x-data*="navigationOpen"] > ol li a span.material-symbols-outlined {
+    font-size: 1.125rem !important;
+    color: var(--proptech-secondary-text, #64748B) !important;
+    margin-right: 0.625rem !important;
+    transition: color 0.15s ease !important;
+}
+
+.dark #nav-sidebar ol li a span.material-symbols-outlined,
+.dark #nav-sidebar .nav-expanded-group li a span.material-symbols-outlined,
+.dark #nav-sidebar div[x-data*="navigationOpen"] > ol li a span.material-symbols-outlined {
+    color: #94A3B8 !important;
+}
+
+/* Navigation Items Hover: Background #F3F6F4 */
+#nav-sidebar a:hover:not(.active),
+#nav-sidebar .nav-expanded-group li a:hover:not(.active),
+#nav-sidebar div[x-data*="navigationOpen"] > ol li a:hover:not(.active),
+#nav-sidebar ol li a:hover:not(.active) {
+    color: var(--proptech-primary-text, #111827) !important;
+    background-color: #F3F6F4 !important;
+    border-radius: 0.5rem !important;
+}
+
+#nav-sidebar a:hover:not(.active) span.material-symbols-outlined,
+#nav-sidebar .nav-expanded-group li a:hover:not(.active) span.material-symbols-outlined,
+#nav-sidebar div[x-data*="navigationOpen"] > ol li a:hover:not(.active) span.material-symbols-outlined,
+#nav-sidebar ol li a:hover:not(.active) span.material-symbols-outlined {
+    color: var(--proptech-primary, #408A71) !important;
+}
+
+.dark #nav-sidebar a:hover:not(.active),
+.dark #nav-sidebar .nav-expanded-group li a:hover:not(.active),
+.dark #nav-sidebar div[x-data*="navigationOpen"] > ol li a:hover:not(.active),
+.dark #nav-sidebar ol li a:hover:not(.active) {
+    color: #F1F5F9 !important;
+    background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dark #nav-sidebar a:hover:not(.active) span.material-symbols-outlined,
+.dark #nav-sidebar .nav-expanded-group li a:hover:not(.active) span.material-symbols-outlined,
+.dark #nav-sidebar div[x-data*="navigationOpen"] > ol li a:hover:not(.active) span.material-symbols-outlined,
+.dark #nav-sidebar ol li a:hover:not(.active) span.material-symbols-outlined {
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+}
+
+/* Active Navigation Item: Background #E1F0E9, Text & Icon #408A71 */
+#nav-sidebar a.active,
+#nav-sidebar a.nav-sidebar-link-active,
+#nav-sidebar a.bg-base-100.active,
+#nav-sidebar .nav-expanded-group li a.active,
+#nav-sidebar div[x-data*="navigationOpen"] > ol li a.active,
+#nav-sidebar ol li a.active {
+    background-color: #E1F0E9 !important;
+    color: var(--proptech-primary, #408A71) !important;
+    font-weight: 600 !important;
+    border-radius: 0.5rem !important;
+}
+
+#nav-sidebar a.active span.material-symbols-outlined,
+#nav-sidebar a.nav-sidebar-link-active span.material-symbols-outlined,
+#nav-sidebar .nav-expanded-group li a.active span.material-symbols-outlined,
+#nav-sidebar div[x-data*="navigationOpen"] > ol li a.active span.material-symbols-outlined,
+#nav-sidebar ol li a.active span.material-symbols-outlined {
+    color: var(--proptech-primary, #408A71) !important;
+}
+
+.dark #nav-sidebar a.active,
+.dark #nav-sidebar a.nav-sidebar-link-active,
+.dark #nav-sidebar a.bg-white\/\[\.06\].active,
+.dark #nav-sidebar .nav-expanded-group li a.active,
+.dark #nav-sidebar div[x-data*="navigationOpen"] > ol li a.active,
+.dark #nav-sidebar ol li a.active {
+    background-color: rgba(64, 138, 113, 0.22) !important;
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+}
+
+.dark #nav-sidebar a.active span.material-symbols-outlined,
+.dark #nav-sidebar a.nav-sidebar-link-active span.material-symbols-outlined,
+.dark #nav-sidebar .nav-expanded-group li a.active span.material-symbols-outlined,
+.dark #nav-sidebar div[x-data*="navigationOpen"] > ol li a.active span.material-symbols-outlined,
+.dark #nav-sidebar ol li a.active span.material-symbols-outlined {
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+}
+
+/* Sidebar Separators */
+#nav-sidebar hr {
+    border-top-color: var(--proptech-borders, #E8EEEB) !important;
+    margin-top: 0.625rem !important;
+    margin-bottom: 0.625rem !important;
+}
+
+.dark #nav-sidebar hr {
+    border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Search Bar in Sidebar */
+#nav-sidebar [x-on\\:click="\\$dispatch('opencommand')"] > div {
+    border-color: var(--proptech-borders) !important;
+    background-color: #F9FAFB !important;
+    border-radius: 0.5rem !important;
+    transition: all 0.15s ease-in-out;
+}
+
+#nav-sidebar [x-on\\:click="\\$dispatch('opencommand')"] > div:hover {
+    border-color: var(--proptech-primary, #408A71) !important;
+    background-color: #FFFFFF !important;
+}
+
+/* ============================================================
+   4. PRIMARY BUTTONS & INTERACTIVE ELEMENTS
+   ============================================================ */
+
+button.bg-primary-600,
+a.bg-primary-600,
+input[type="submit"].bg-primary-600 {
+    background-color: var(--proptech-primary, #408A71) !important;
+    border-color: var(--proptech-hover, #34745C) !important;
+    color: #FFFFFF !important;
+    font-weight: 500 !important;
+    border-radius: 0.5rem !important;
+    transition: background-color 0.15s ease-in-out;
+}
+
+button.bg-primary-600:hover,
+a.bg-primary-600:hover,
+input[type="submit"].bg-primary-600:hover {
+    background-color: var(--proptech-hover, #34745C) !important;
+}
+
+/* Primary Links */
+a.text-primary-600 {
+    color: var(--proptech-primary, #408A71) !important;
+}
+
+a.text-primary-600:hover {
+    color: var(--proptech-hover, #34745C) !important;
+}
+
+/* Global Focus Outlines */
+*:focus-visible {
+    outline-color: var(--proptech-primary, #408A71) !important;
+}
+
+/* Subtle Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+}
+
+/* ============================================================
+   5. UNIFIED ADMINISTRATOR TOP-RIGHT ACCOUNT MENU
+   ============================================================ */
+
+.admin-user-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.3125rem 0.625rem;
+    border-radius: 0.625rem;
+    border: 1px solid transparent;
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+    text-align: left;
+    user-select: none;
+    background: transparent;
+}
+
+.admin-user-btn:hover,
+.admin-user-btn.is-active {
+    background-color: var(--proptech-subtle-green-bg, #EAF6F0) !important;
+    border-color: var(--proptech-light-accent, #A5E0CB) !important;
+}
+
+.dark .admin-user-btn:hover,
+.dark .admin-user-btn.is-active {
+    background-color: rgba(64, 138, 113, 0.18) !important;
+    border-color: rgba(165, 224, 203, 0.3) !important;
+}
+
+.admin-user-avatar {
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background-color: var(--proptech-subtle-green-bg, #EAF6F0) !important;
+    color: var(--proptech-primary, #408A71) !important;
+    border: 1.5px solid var(--proptech-light-accent, #A5E0CB) !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    user-select: none;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+.dark .admin-user-avatar {
+    background-color: rgba(64, 138, 113, 0.25) !important;
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+    border-color: rgba(165, 224, 203, 0.4) !important;
+}
+
+.admin-user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: 200px;
+    line-height: 1.25;
+}
+
+@media (max-width: 640px) {
+    .admin-user-info {
+        display: none !important;
+    }
+}
+
+.admin-user-name {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--proptech-primary-text, #111827);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dark .admin-user-name {
+    color: #F8FAFC !important;
+}
+
+.admin-user-meta {
+    font-size: 0.6875rem;
+    font-weight: 400;
+    color: var(--proptech-secondary-text, #64748B);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+}
+
+.dark .admin-user-meta {
+    color: #94A3B8 !important;
+}
+
+.admin-user-chevron {
+    font-size: 1.125rem !important;
+    color: var(--proptech-secondary-text, #64748B);
+    transition: transform 0.15s ease-in-out;
+    flex-shrink: 0;
+}
+
+.admin-user-btn:hover .admin-user-chevron {
+    color: var(--proptech-primary, #408A71);
+}
+
+.dark .admin-user-btn:hover .admin-user-chevron {
+    color: var(--proptech-light-accent, #A5E0CB);
+}
+
+.admin-user-chevron.rotate {
+    transform: rotate(180deg);
+}
+
+.admin-user-dropdown {
+    position: absolute;
+    right: 0;
+    margin-top: 0.5rem;
+    width: 16rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--proptech-borders, #E8EEEB);
+    background-color: #FFFFFF;
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+    z-index: 50;
+}
+
+.dark .admin-user-dropdown {
+    background-color: rgb(17, 24, 39) !important;
+    border-color: rgb(31, 41, 55) !important;
+}
+
+/* ============================================================
+   6. OVERVIEW DASHBOARD MODERN SAAS STYLING & COMPACT SPACING
+   ============================================================ */
+
+.dashboard-shell {
+    width: 100%;
+    max-width: 1760px;
+    margin-left: auto;
+    margin-right: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.125rem !important; /* Minimal, clean 18px gap between sections */
+    padding-bottom: 2rem;
+}
+
+/* Eliminate duplicate double-spacing */
+.dashboard-section {
+    margin-bottom: 0 !important;
+}
+
+.dashboard-header-bar {
+    padding-bottom: 0.875rem;
+    border-bottom: 1px solid var(--proptech-borders, #E8EEEB);
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+@media (min-width: 640px) {
+    .dashboard-header-bar {
+        flex-direction: row;
+        align-items: flex-end;
+        justify-content: space-between;
+    }
+}
+
+.dashboard-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+@media (min-width: 640px) {
+    .dashboard-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1024px) {
+    .dashboard-kpi-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1.125rem;
+    }
+}
+
+/* Compact, Polished KPI Card */
+.kpi-card {
+    position: relative;
+    border-radius: 0.75rem;
+    border: 1px solid var(--proptech-borders, #E8EEEB);
+    background-color: #FFFFFF;
+    padding: 1rem 1.125rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 122px;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    transition: all 0.15s ease-in-out;
+    overflow: hidden;
+    text-decoration: none !important;
+    cursor: pointer;
+    color: inherit;
+}
+
+.kpi-card:hover {
+    border-color: var(--proptech-light-accent, #A5E0CB) !important;
+    box-shadow: 0 8px 20px -4px rgba(64, 138, 113, 0.1), 0 4px 6px -2px rgba(64, 138, 113, 0.05);
+    transform: translateY(-2px);
+    text-decoration: none !important;
+}
+
+.kpi-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2.5px;
+    background: transparent;
+    transition: background-color 0.15s ease;
+}
+
+.kpi-card:hover {
+    border-color: var(--proptech-light-accent, #A5E0CB) !important;
+    box-shadow: 0 6px 16px -4px rgba(64, 138, 113, 0.08);
+    transform: translateY(-1px);
+}
+
+.kpi-card.accent-properties:hover::before {
+    background: var(--proptech-primary, #408A71);
+}
+
+.kpi-card.accent-tenancies:hover::before {
+    background: #0D9488;
+}
+
+.kpi-card.accent-reviews:hover::before {
+    background: #D97706;
+}
+
+.kpi-card.accent-rent:hover::before {
+    background: var(--proptech-deep-green, #0B493A);
+}
+
+.dark .kpi-card {
+    background-color: rgb(17, 24, 39);
+    border-color: rgb(31, 41, 55);
+}
+
+/* KPI Icon Badges */
+.kpi-badge-primary {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background-color: var(--proptech-subtle-green-bg, #EAF6F0) !important;
+    color: var(--proptech-primary, #408A71) !important;
+    border: 1px solid rgba(165, 224, 203, 0.6) !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dark .kpi-badge-primary {
+    background-color: rgba(64, 138, 113, 0.2) !important;
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+    border-color: rgba(165, 224, 203, 0.3) !important;
+}
+
+.kpi-badge-teal {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background-color: #F0FDFA !important;
+    color: #0D9488 !important;
+    border: 1px solid #CCFBF1 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dark .kpi-badge-teal {
+    background-color: rgba(13, 148, 136, 0.2) !important;
+    color: #5EEAD4 !important;
+    border-color: rgba(94, 234, 212, 0.3) !important;
+}
+
+.kpi-badge-amber {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background-color: #FFFBEB !important;
+    color: #D97706 !important;
+    border: 1px solid #FEF3C7 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dark .kpi-badge-amber {
+    background-color: rgba(217, 119, 6, 0.2) !important;
+    color: #FCD34D !important;
+    border-color: rgba(252, 211, 77, 0.3) !important;
+}
+
+.kpi-badge-emerald {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background-color: #ECFDF5 !important;
+    color: #047857 !important;
+    border: 1px solid #A7F3D0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dark .kpi-badge-emerald {
+    background-color: rgba(4, 120, 87, 0.2) !important;
+    color: #6EE7B7 !important;
+    border-color: rgba(110, 231, 183, 0.3) !important;
+}
+
+/* Sections Containers */
+.dashboard-card {
+    border-radius: 0.75rem;
+    border: 1px solid var(--proptech-borders, #E8EEEB);
+    background-color: #FFFFFF;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+}
+
+.dark .dashboard-card {
+    background-color: rgb(17, 24, 39);
+    border-color: rgb(31, 41, 55);
+}
+
+.dashboard-card-header {
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--proptech-borders, #E8EEEB);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #FFFFFF;
+}
+
+.dark .dashboard-card-header {
+    background-color: rgb(17, 24, 39);
+    border-color: rgb(31, 41, 55);
+}
+
+/* Needs Attention Action Item */
+.attention-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-radius: 0.625rem;
+    border: 1px solid var(--proptech-borders, #E8EEEB);
+    background-color: #FAFAFA;
+    transition: all 0.15s ease-in-out;
+}
+
+.attention-card:hover {
+    background-color: #FFFFFF;
+    border-color: var(--proptech-primary, #408A71);
+    box-shadow: 0 4px 12px 0 rgba(64, 138, 113, 0.08);
+    transform: translateY(-1px);
+}
+
+.dark .attention-card {
+    background-color: rgba(255, 255, 255, 0.02);
+    border-color: rgb(31, 41, 55);
+}
+
+.dark .attention-card:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: var(--proptech-light-accent, #A5E0CB);
+}
+
+/* Explicit Recent Activity Layout & Standards */
+.activity-row {
+    padding: 0.8125rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-bottom: 1px solid var(--proptech-borders, #E8EEEB);
+    transition: background-color 0.15s ease-in-out;
+}
+
+.activity-row:last-child {
+    border-bottom: none;
+}
+
+@media (min-width: 768px) {
+    .activity-row {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.25rem;
+    }
+}
+
+.activity-row:hover {
+    background-color: #F9FAFB;
+}
+
+.dark .activity-row:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.activity-info {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.activity-icon-box {
+    width: 2.25rem;
+    height: 2.25rem;
+    min-width: 2.25rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: 0.875rem !important; /* 14px clean space between icon and text */
+}
+
+/* Distinct Activity Icon Colors */
+.activity-icon-green {
+    background-color: var(--proptech-subtle-green-bg, #EAF6F0) !important;
+    color: var(--proptech-primary, #408A71) !important;
+    border: 1px solid rgba(165, 224, 203, 0.6) !important;
+}
+
+.activity-icon-blue {
+    background-color: #EFF6FF !important;
+    color: #2563EB !important;
+    border: 1px solid #BFDBFE !important;
+}
+
+.activity-icon-amber {
+    background-color: #FFFBEB !important;
+    color: #D97706 !important;
+    border: 1px solid #FDE68A !important;
+}
+
+.activity-icon-teal {
+    background-color: #F0FDFA !important;
+    color: #0D9488 !important;
+    border: 1px solid #99F6E4 !important;
+}
+
+.activity-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.activity-title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--proptech-primary-text, #111827);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dark .activity-title {
+    color: #F8FAFC;
+}
+
+.activity-record {
+    font-size: 0.75rem;
+    color: var(--proptech-secondary-text, #64748B);
+    margin-top: 0.125rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.activity-record a {
+    color: var(--proptech-secondary-text, #64748B);
+    transition: color 0.15s ease-in-out;
+}
+
+.activity-record a:hover {
+    color: var(--proptech-primary, #408A71) !important;
+    text-decoration: underline;
+}
+
+.dark .activity-record a:hover {
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+}
+
+/* Right Side Actions */
+.activity-meta-side {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+}
+
+/* Explicit Status Pills with Real Color Tints */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1875rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    border: 1px solid transparent;
+}
+
+.status-pill.pill-active,
+.status-pill.pill-completed {
+    background-color: #EAF6F0 !important;
+    color: #0B493A !important;
+    border-color: #A5E0CB !important;
+}
+
+.status-pill.pill-approved {
+    background-color: #F0FDFA !important;
+    color: #0F766E !important;
+    border-color: #99F6E4 !important;
+}
+
+.status-pill.pill-published,
+.status-pill.pill-available {
+    background-color: #ECFDF5 !important;
+    color: #047857 !important;
+    border-color: #A7F3D0 !important;
+}
+
+.status-pill.pill-pending,
+.status-pill.pill-submitted,
+.status-pill.pill-under_review {
+    background-color: #FFFBEB !important;
+    color: #92400E !important;
+    border-color: #FDE68A !important;
+}
+
+.status-pill.pill-default {
+    background-color: #F1F5F9 !important;
+    color: #475569 !important;
+    border-color: #CBD5E1 !important;
+}
+
+.activity-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--proptech-secondary-text, #64748B);
+    min-width: 105px;
+    justify-content: flex-end;
+}
+
+.activity-time span.material-symbols-outlined {
+    font-size: 0.8125rem !important;
+    color: #94A3B8;
+}
+
+.activity-arrow-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.375rem;
+    color: var(--proptech-secondary-text, #64748B);
+    transition: all 0.15s ease-in-out;
+}
+
+.activity-arrow-btn:hover {
+    background-color: var(--proptech-subtle-green-bg, #EAF6F0) !important;
+    color: var(--proptech-primary, #408A71) !important;
+}
+
+.dark .activity-arrow-btn:hover {
+    background-color: rgba(64, 138, 113, 0.2) !important;
+    color: var(--proptech-light-accent, #A5E0CB) !important;
+}
+
+/* ============================================================
+   8. ADMIN CHANGELIST TABLES & S.NO. ALIGNMENT
+   ============================================================ */
+
+/* Serial Number Column (S.No.) */
+#result_list th.column-serial_number,
+#result_list td.field-serial_number {
+    width: 4.5rem !important;
+    text-align: center !important;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+
+#result_list th.column-serial_number .text {
+    justify-content: center !important;
+    display: flex;
+}
+
+#result_list td.field-serial_number a {
+    color: var(--proptech-primary, #408A71) !important;
+    font-weight: 600;
+}
+
+/* Read Status Column */
+#result_list th.column-show_read_status,
+#result_list td.field-show_read_status {
+    width: 6rem !important;
+    text-align: center !important;
+}
+
+#result_list th.column-show_read_status .text {
+    justify-content: center !important;
+    display: flex;
+}
+
+/* Created At Column */
+#result_list th.column-created_at,
+#result_list td.field-created_at {
+    width: 12rem !important;
+    white-space: nowrap !important;
+}
+
+/* User Column */
+#result_list td.field-user {
+    font-weight: 500;
+}
+
+/* Title Column */
+#result_list td.field-title {
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Image Preview Column (Property Images) - Fixed Uniform Square Tiles */
+#result_list th.column-image_preview,
+#result_list td.field-image_preview {
+    width: 5rem !important;
+    min-width: 5rem !important;
+    max-width: 5rem !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    padding-left: 0.25rem !important;
+    padding-right: 0.25rem !important;
+}
+
+#result_list th.column-image_preview .text {
+    justify-content: center !important;
+    display: flex;
+}
+
+/* Container: strictly 52px by 52px square, preventing table layout distortion */
+#result_list td.field-image_preview a,
+#result_list td.field-image_preview div,
+.proptech-image-preview {
+    width: 52px !important;
+    height: 52px !important;
+    min-width: 52px !important;
+    max-width: 52px !important;
+    min-height: 52px !important;
+    max-height: 52px !important;
+    aspect-ratio: 1 / 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid var(--proptech-borders, #E8EEEB) !important;
+    background-color: #F9FAFB !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+    vertical-align: middle !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+#result_list td.field-image_preview a:hover {
+    border-color: var(--proptech-primary, #408A71) !important;
+    box-shadow: 0 1px 3px 0 rgba(64, 138, 113, 0.2) !important;
+}
+
+/* Image inside container: strictly 52px by 52px cropped to square with object-fit: cover */
+#result_list td.field-image_preview img,
+.proptech-image-preview img {
+    width: 52px !important;
+    height: 52px !important;
+    min-width: 52px !important;
+    max-width: 52px !important;
+    min-height: 52px !important;
+    max-height: 52px !important;
+    aspect-ratio: 1 / 1 !important;
+    object-fit: cover !important;
+    object-position: center !important;
+    display: block !important;
+    border-radius: calc(0.5rem - 1px) !important;
+}
+
+/* Inlines preview consistency */
+.inline-related td.field-image_preview a,
+.inline-related td.field-image_preview div,
+.inline-related td.field-image_preview img {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+    min-height: 48px !important;
+    max-height: 48px !important;
+    aspect-ratio: 1 / 1 !important;
+    object-fit: cover !important;
+    object-position: center !important;
+    border-radius: 0.375rem !important;
+}
+
+/* Display Order Column */
+#result_list th.column-display_order,
+#result_list td.field-display_order {
+    width: 6.5rem !important;
+    text-align: center !important;
+    font-variant-numeric: tabular-nums;
+}
+
+#result_list th.column-display_order .text {
+    justify-content: center !important;
+    display: flex;
+}
+
+/* Primary Badge Column */
+#result_list th.column-show_primary_badge,
+#result_list td.field-show_primary_badge {
+    width: 6.5rem !important;
+    text-align: center !important;
+}
+
+#result_list th.column-show_primary_badge .text {
+    justify-content: center !important;
+    display: flex;
+}
+
+/* Clean Caption Column */
+#result_list td.field-clean_caption {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+
+
+

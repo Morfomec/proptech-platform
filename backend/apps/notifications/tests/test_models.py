@@ -137,6 +137,8 @@ class NotificationModelTests(TestCase):
             "tenancy_cancelled",
             "tenancy_ended",
             "document_uploaded",
+            "listing_approved",
+            "listing_rejected",
         ]
         self.assertEqual(NotificationType.values, expected_types)
 
@@ -149,7 +151,7 @@ class NotificationModelTests(TestCase):
             self.assertEqual(notification.notification_type, notif_type)
 
     def test_supported_related_object_type_choices(self):
-        expected_related_types = ["application", "tenancy", "document"]
+        expected_related_types = ["application", "tenancy", "document", "listing"]
         self.assertEqual(RelatedObjectType.values, expected_related_types)
 
         for rel_type in expected_related_types:

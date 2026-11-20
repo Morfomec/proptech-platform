@@ -156,7 +156,14 @@ export const OwnerApplicationDetailPage: React.FC = () => {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => navigate(`/app/owner/properties/${matchedListing.property_id}`)}
+            onClick={() =>
+              navigate(`/app/owner/properties/${matchedListing.property_id}`, {
+                state: {
+                  from: `/app/owner/applications/${application.id}`,
+                  fromLabel: 'Applications',
+                },
+              })
+            }
           >
             Manage Property
           </Button>

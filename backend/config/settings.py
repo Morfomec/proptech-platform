@@ -6,6 +6,9 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.templatetags.static import static
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
 
 
 # ============================================================
@@ -40,6 +43,12 @@ ALLOWED_HOSTS = env.list(
 # ============================================================
 
 INSTALLED_APPS = [
+    # Admin Interface (Unfold must precede django.contrib.admin)
+    "unfold",
+    "unfold.contrib.filters",
+    "unfold.contrib.forms",
+    "unfold.contrib.inlines",
+
     # Django
     "django.contrib.admin",
     "django.contrib.auth",
@@ -63,6 +72,8 @@ INSTALLED_APPS = [
     "apps.leasing.apps.LeasingConfig",
     "apps.documents.apps.DocumentsConfig",
     "apps.notifications.apps.NotificationsConfig",
+    "apps.subscriptions.apps.SubscriptionsConfig",
+    "apps.rent.apps.RentConfig",
 ]
 
 
@@ -264,6 +275,7 @@ SPECTACULAR_SETTINGS = {
         "AmenityCategoryEnum": "apps.properties.models.amenity.AmenityCategory.choices",
         "PropertyStatusEnum": "apps.properties.models.property.PropertyStatus.choices",
         "ListingStatusEnum": "apps.listings.models.listing.ListingStatus.choices",
+        "ListingReviewStatusEnum": "apps.listings.models.listing.ReviewStatus.choices",
         "ListingCreateStatusEnum": [
             ("draft", "draft"),
             ("published", "published"),
@@ -283,6 +295,13 @@ SPECTACULAR_SETTINGS = {
         ),
         "NotificationTypeEnum": "apps.notifications.models.NotificationType",
         "RelatedObjectTypeEnum": "apps.notifications.models.RelatedObjectType",
+        "SubscriptionStatusEnum": "apps.subscriptions.models.subscription.SubscriptionStatus.choices",
+        "SubscriptionPaymentStatusEnum": "apps.subscriptions.models.payment.SubscriptionPaymentStatus.choices",
+        "SubscriptionPaymentMethodEnum": "apps.subscriptions.models.payment.SubscriptionPaymentMethod.choices",
+        "RentChargeTypeEnum": "apps.rent.models.rent_charge.RentChargeType.choices",
+        "RentChargeStatusEnum": "apps.rent.models.rent_charge.RentChargeStatus.choices",
+        "PaymentMethodEnum": "apps.rent.models.payment.PaymentMethod.choices",
+        "PaymentStatusEnum": "apps.rent.models.payment.PaymentStatus.choices",
     },
 }
 
@@ -323,7 +342,7 @@ CSRF_TRUSTED_ORIGINS = env.list(
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = env("DJANGO_TIME_ZONE", default="Asia/Kolkata")
 
 USE_I18N = True
 
@@ -337,6 +356,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
 
 MEDIA_URL = "/media/"
 
@@ -377,15 +400,40 @@ SECURE_SSL_REDIRECT = env.bool(
     default=not DEBUG,
 )
 
-SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = env.bool(
+    "DJANGO_SESSION_COOKIE_SECURE",
+    default=not DEBUG,
+)
 
-CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = env.bool(
+    "DJANGO_CSRF_COOKIE_SECURE",
+    default=not DEBUG,
+)
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
 X_FRAME_OPTIONS = "DENY"
 
-SECURE_HSTS_SECONDS = 0
+SECURE_HSTS_SECONDS = env.int(
+    "DJANGO_SECURE_HSTS_SECONDS",
+    default=31536000 if not DEBUG else 0,
+)
+
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    default=not DEBUG,
+)
+
+SECURE_HSTS_PRELOAD = env.bool(
+    "DJANGO_SECURE_HSTS_PRELOAD",
+    default=not DEBUG,
+)
+
+SECURE_PROXY_SSL_HEADER = (
+    ("HTTP_X_FORWARDED_PROTO", "https")
+    if env.bool("DJANGO_SECURE_PROXY_SSL_HEADER", default=not DEBUG)
+    else None
+)
 
 
 # ============================================================
@@ -396,3 +444,283 @@ GOOGLE_CLIENT_ID = env(
     "GOOGLE_CLIENT_ID",
     default="",
 )
+
+
+# ============================================================
+# PROPTECH BRAND DESIGN TOKENS
+# ============================================================
+
+PROPTECH_DESIGN_TOKENS = {
+    "primary": "#408A71",
+    "light_accent": "#A5E0CB",
+    "hover": "#34745C",
+    "deep_green": "#0B493A",
+    "main_bg": "#F9FAFB",
+    "surface": "#FFFFFF",
+    "primary_text": "#111827",
+    "secondary_text": "#64748B",
+    "borders": "#E8EEEB",
+    "subtle_green_bg": "#EAF6F0",
+}
+
+
+# ============================================================
+# DJANGO UNFOLD ADMIN
+# ============================================================
+
+UNFOLD = {
+    "SITE_TITLE": "PropTech Admin",
+    "SITE_HEADER": "PropTech Platform",
+    "SITE_SUBHEADER": "Property Management & Leasing Platform",
+    "SITE_SYMBOL": "apartment",
+    "SITE_URL": "/",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": True,
+    "DASHBOARD_CALLBACK": "config.admin_dashboard.dashboard_callback",
+    "ENVIRONMENT": None,
+    "STYLES": [
+        lambda request: static("admin/css/proptech_tokens.css"),
+    ],
+    "COLORS": {
+        "primary": {
+            "50": PROPTECH_DESIGN_TOKENS["subtle_green_bg"],  # #EAF6F0
+            "100": "#D2EDE2",
+            "200": PROPTECH_DESIGN_TOKENS["light_accent"],     # #A5E0CB
+            "300": "#7DCFB5",
+            "400": "#57B695",
+            "500": PROPTECH_DESIGN_TOKENS["primary"],          # #408A71
+            "600": PROPTECH_DESIGN_TOKENS["primary"],          # #408A71
+            "700": PROPTECH_DESIGN_TOKENS["hover"],            # #34745C
+            "800": "#225844",
+            "900": PROPTECH_DESIGN_TOKENS["deep_green"],       # #0B493A
+            "950": "#05281F",
+        },
+        "base": {
+            "50": PROPTECH_DESIGN_TOKENS["main_bg"],           # #F9FAFB
+            "100": "#F3F4F6",
+            "200": PROPTECH_DESIGN_TOKENS["borders"],          # #E8EEEB
+            "300": "#D1D5DB",
+            "400": "#94A3B8",
+            "500": PROPTECH_DESIGN_TOKENS["secondary_text"],   # #64748B
+            "600": "#475569",
+            "700": "#334155",
+            "800": "#1E293B",
+            "900": PROPTECH_DESIGN_TOKENS["primary_text"],     # #111827
+            "950": "#0F172A",
+        },
+        "font": {
+            "subtle-light": "var(--color-base-500)",
+            "subtle-dark": "var(--color-base-400)",
+            "default-light": "var(--color-base-900)",
+            "default-dark": "var(--color-base-200)",
+            "important-light": "var(--color-base-900)",
+            "important-dark": "#FFFFFF",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": _("Overview"),
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": _("Dashboard"),
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                ],
+            },
+            {
+                "title": _("Users & Access"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Users"),
+                        "icon": "person",
+                        "link": reverse_lazy("admin:accounts_user_changelist"),
+                        "permission": lambda request: request.user.has_perm("accounts.view_user"),
+                    },
+                    {
+                        "title": _("User Profiles"),
+                        "icon": "badge",
+                        "link": reverse_lazy("admin:accounts_userprofile_changelist"),
+                        "permission": lambda request: request.user.has_perm("accounts.view_userprofile"),
+                    },
+                    {
+                        "title": _("Social Accounts"),
+                        "icon": "link",
+                        "link": reverse_lazy("admin:accounts_socialaccount_changelist"),
+                        "permission": lambda request: request.user.has_perm("accounts.view_socialaccount"),
+                    },
+                    {
+                        "title": _("Groups & Permissions"),
+                        "icon": "admin_panel_settings",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                        "permission": lambda request: request.user.has_perm("auth.view_group"),
+                    },
+                ],
+            },
+            {
+                "title": _("Property Management"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Properties"),
+                        "icon": "apartment",
+                        "link": reverse_lazy("admin:properties_property_changelist"),
+                        "permission": lambda request: request.user.has_perm("properties.view_property"),
+                    },
+                    {
+                        "title": _("Property Images"),
+                        "icon": "photo_library",
+                        "link": reverse_lazy("admin:properties_propertyimage_changelist"),
+                        "permission": lambda request: request.user.has_perm("properties.view_propertyimage"),
+                    },
+                    {
+                        "title": _("Amenities"),
+                        "icon": "pool",
+                        "link": reverse_lazy("admin:properties_amenity_changelist"),
+                        "permission": lambda request: request.user.has_perm("properties.view_amenity"),
+                    },
+                    {
+                        "title": _("Property Amenities"),
+                        "icon": "checklist",
+                        "link": reverse_lazy("admin:properties_propertyamenity_changelist"),
+                        "permission": lambda request: request.user.has_perm("properties.view_propertyamenity"),
+                    },
+                ],
+            },
+            {
+                "title": _("Listing Moderation"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Listings"),
+                        "icon": "storefront",
+                        "link": reverse_lazy("admin:listings_listing_changelist"),
+                        "permission": lambda request: request.user.has_perm("listings.view_listing"),
+                    },
+                    {
+                        "title": _("Saved Properties"),
+                        "icon": "bookmark",
+                        "link": reverse_lazy("admin:listings_savedproperty_changelist"),
+                        "permission": lambda request: request.user.has_perm("listings.view_savedproperty"),
+                    },
+                ],
+            },
+            {
+                "title": _("Leasing"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Applications"),
+                        "icon": "assignment",
+                        "link": reverse_lazy("admin:leasing_application_changelist"),
+                        "permission": lambda request: request.user.has_perm("leasing.view_application"),
+                    },
+                    {
+                        "title": _("Application Status History"),
+                        "icon": "history",
+                        "link": reverse_lazy("admin:leasing_applicationstatushistory_changelist"),
+                        "permission": lambda request: request.user.has_perm("leasing.view_applicationstatushistory"),
+                    },
+                    {
+                        "title": _("Tenancies"),
+                        "icon": "vpn_key",
+                        "link": reverse_lazy("admin:leasing_tenancy_changelist"),
+                        "permission": lambda request: request.user.has_perm("leasing.view_tenancy"),
+                    },
+                    {
+                        "title": _("Documents"),
+                        "icon": "folder",
+                        "link": reverse_lazy("admin:documents_document_changelist"),
+                        "permission": lambda request: request.user.has_perm("documents.view_document"),
+                    },
+                ],
+            },
+            {
+                "title": _("Finance"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Rent Charges"),
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:rent_rentcharge_changelist"),
+                        "permission": lambda request: request.user.has_perm("rent.view_rentcharge"),
+                    },
+                    {
+                        "title": _("Payments"),
+                        "icon": "payments",
+                        "link": reverse_lazy("admin:rent_payment_changelist"),
+                        "permission": lambda request: request.user.has_perm("rent.view_payment"),
+                    },
+                    {
+                        "title": _("Payment Allocations"),
+                        "icon": "account_balance_wallet",
+                        "link": reverse_lazy("admin:rent_paymentallocation_changelist"),
+                        "permission": lambda request: request.user.has_perm("rent.view_paymentallocation"),
+                    },
+                    {
+                        "title": _("Refunds"),
+                        "icon": "currency_exchange",
+                        "link": reverse_lazy("admin:rent_paymentrefund_changelist"),
+                        "permission": lambda request: request.user.has_perm("rent.view_paymentrefund"),
+                    },
+                    {
+                        "title": _("Allocation Reversals"),
+                        "icon": "history_toggle_off",
+                        "link": reverse_lazy("admin:rent_paymentallocationreversal_changelist"),
+                        "permission": lambda request: request.user.has_perm("rent.view_paymentallocationreversal"),
+                    },
+                ],
+            },
+            {
+                "title": _("Subscriptions"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Subscription Plans"),
+                        "icon": "workspace_premium",
+                        "link": reverse_lazy("admin:subscriptions_subscriptionplan_changelist"),
+                        "permission": lambda request: request.user.has_perm("subscriptions.view_subscriptionplan"),
+                    },
+                    {
+                        "title": _("Owner Subscriptions"),
+                        "icon": "card_membership",
+                        "link": reverse_lazy("admin:subscriptions_subscription_changelist"),
+                        "permission": lambda request: request.user.has_perm("subscriptions.view_subscription"),
+                    },
+                    {
+                        "title": _("Subscription Payments"),
+                        "icon": "receipt",
+                        "link": reverse_lazy("admin:subscriptions_subscriptionpayment_changelist"),
+                        "permission": lambda request: request.user.has_perm("subscriptions.view_subscriptionpayment"),
+                    },
+                ],
+            },
+            {
+                "title": _("System"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Notifications"),
+                        "icon": "notifications",
+                        "link": reverse_lazy("admin:notifications_notification_changelist"),
+                        "permission": lambda request: request.user.has_perm("notifications.view_notification"),
+                    },
+                ],
+            },
+        ],
+    },
+}
