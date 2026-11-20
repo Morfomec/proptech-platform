@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q, QuerySet
 from django.utils import timezone
@@ -18,6 +19,8 @@ from apps.listings.services.exceptions import (
     ListingStateError,
     PropertyImageRequiredError,
 )
+from apps.notifications.models import NotificationType, RelatedObjectType
+from apps.notifications.services import create_notification
 from apps.properties.models import Property, PropertyImage, PropertyStatus
 
 EDITABLE_LISTING_FIELDS = {
@@ -112,8 +115,8 @@ def create_listing(
     - Verifies the property belongs to the owner.
     - Locks the property row to prevent concurrent open listing creation.
     - Enforces that no existing open listing (draft, published, paused) exists.
-    - Supports initial creation as draft or immediate publication (publish=True).
-    - Publishing does not require prior admin approval.
+    - Newly created listings always start in draft status and draft review status.
+    - Listings must be submitted for review and approved by an admin before publication.
     """
     _verify_owner_authentication(owner)
 
@@ -141,13 +144,11 @@ def create_listing(
             }
         )
 
-    # Determine initial publication status
+    # Determine initial publication validation
     wants_publish = publish or validated_data.get("status") == ListingStatus.PUBLISHED
 
-    # Publishing validates eligibility (draft -> available or already available) and image requirement
-    should_promote_property = False
     if wants_publish:
-        should_promote_property = _prepare_property_for_publication(locked_property)
+        _prepare_property_for_publication(locked_property)
         if not locked_property.images.exists():
             raise PropertyImageRequiredError(
                 {
@@ -157,28 +158,22 @@ def create_listing(
                 }
             )
 
-    initial_status = ListingStatus.PUBLISHED if wants_publish else ListingStatus.DRAFT
-
     # Sanitize payload: allow only editable content fields
     clean_data = {
         k: v for k, v in validated_data.items() if k in EDITABLE_LISTING_FIELDS
     }
 
-    published_at_val = timezone.now() if initial_status == ListingStatus.PUBLISHED else None
-
+    # All listings start as draft and review_status=draft
     listing = Listing(
         property=locked_property,
-        status=initial_status,
-        published_at=published_at_val,
-        review_status=ReviewStatus.PENDING,
+        status=ListingStatus.DRAFT,
+        published_at=None,
+        review_status=ReviewStatus.DRAFT,
         **clean_data,
     )
 
     listing.full_clean()
     listing.save()
-
-    if should_promote_property:
-        _promote_draft_property_to_available(locked_property)
 
     return listing
 
@@ -198,6 +193,8 @@ def update_listing(
       title, description, monthly_rent, security_deposit, available_from.
     - Rejects attempts to alter property association, ownership, review fields,
       status, or publication timestamps.
+    - Editing an approved or published listing immediately invalidates approval:
+      resets status=draft, review_status=draft, clears published_at, requiring re-review.
     """
     _verify_listing_ownership(owner, listing_instance)
 
@@ -223,6 +220,12 @@ def update_listing(
         if field_name in validated_data:
             setattr(listing, field_name, validated_data[field_name])
 
+    # If the listing was previously approved or published, editing it immediately invalidates approval
+    if listing.review_status == ReviewStatus.APPROVED or listing.status == ListingStatus.PUBLISHED:
+        listing.status = ListingStatus.DRAFT
+        listing.review_status = ReviewStatus.DRAFT
+        listing.published_at = None
+
     listing.full_clean()
     listing.save()
     return listing
@@ -235,10 +238,10 @@ def publish_listing(
     listing_instance: Listing,
 ) -> Listing:
     """
-    Publish a draft or paused listing directly by the owner.
+    Publish or unpause an already approved listing by the owner.
 
     - Verifies ownership.
-    - Does not require admin review approval (review_status may remain pending or approved).
+    - Requires review_status == ReviewStatus.APPROVED.
     - Idempotent if already published.
     - Prohibits publishing closed listings directly.
     - Sets published_at on initial publication and preserves it when republishing paused listings.
@@ -263,6 +266,30 @@ def publish_listing(
             }
         )
 
+    # Verify that the associated property has at least one uploaded image before publishing
+    if not locked_property.images.exists():
+        raise PropertyImageRequiredError(
+            {
+                "property": (
+                    "A property must have at least one uploaded image before its listing can be published."
+                )
+            }
+        )
+
+    # Validate physical property status
+    should_promote_property = _prepare_property_for_publication(locked_property)
+
+    # Direct publication without admin approval is prohibited
+    if listing.review_status != ReviewStatus.APPROVED:
+        raise ListingStateError(
+            {
+                "status": (
+                    "Listings cannot be published without administrator approval. "
+                    "Please submit the listing for approval first."
+                )
+            }
+        )
+
     # Verify no other open listing exists on the property
     has_conflicting_open = (
         Listing.objects.filter(
@@ -276,18 +303,6 @@ def publish_listing(
     if has_conflicting_open:
         raise DuplicateOpenListingError(
             {"property": "Another active listing is already open for this property."}
-        )
-
-    should_promote_property = _prepare_property_for_publication(locked_property)
-
-    # Verify that the associated property has at least one uploaded image before publishing
-    if not locked_property.images.exists():
-        raise PropertyImageRequiredError(
-            {
-                "property": (
-                    "A property must have at least one uploaded image before its listing can be published."
-                )
-            }
         )
 
     listing.status = ListingStatus.PUBLISHED
@@ -380,10 +395,216 @@ def get_listing_by_id(*, listing_id) -> Listing:
         raise ListingNotFoundError(f"Listing with id '{listing_id}' does not exist.")
 
 
+@transaction.atomic
+def submit_listing_for_approval(
+    *,
+    owner,
+    listing_instance: Listing,
+) -> Listing:
+    """
+    Submit a draft or rejected listing for platform administrator approval.
+
+    - Verifies ownership through the parent property.
+    - Listing must be in 'draft' status.
+    - Parent property must be in 'draft' or 'available' status.
+    - Requires non-empty title and valid non-negative monthly_rent.
+    - Requires at least one property image.
+    - Clears previous rejection_reason.
+    - Sets review_status='pending' and keeps status='draft'.
+    """
+    _verify_listing_ownership(owner, listing_instance)
+
+    locked_property = Property.objects.select_for_update().get(pk=listing_instance.property_id)
+    listing = Listing.objects.select_for_update().get(pk=listing_instance.pk)
+
+    if listing.status != ListingStatus.DRAFT:
+        raise ListingStateError(
+            {
+                "status": (
+                    f"Cannot submit a listing in '{listing.status}' status for review. "
+                    "Only draft listings can be submitted."
+                )
+            }
+        )
+
+    if locked_property.status not in [PropertyStatus.DRAFT, PropertyStatus.AVAILABLE]:
+        raise ListingStateError(
+            {
+                "property": (
+                    f"Cannot submit listing while property is in '{locked_property.status}' status. "
+                    "The property must be available or draft."
+                )
+            }
+        )
+
+    if not listing.title or not str(listing.title).strip():
+        raise ListingStateError(
+            {"title": "A title is required before submitting for approval."}
+        )
+
+    if listing.monthly_rent is None or listing.monthly_rent < 0:
+        raise ListingStateError(
+            {"monthly_rent": "Monthly rent must be greater than or equal to zero."}
+        )
+
+    if not locked_property.images.exists():
+        raise PropertyImageRequiredError(
+            {
+                "property": (
+                    "A property must have at least one uploaded image before its listing can be submitted for approval."
+                )
+            }
+        )
+
+    listing.review_status = ReviewStatus.PENDING
+    listing.status = ListingStatus.DRAFT
+    listing.rejection_reason = None
+    listing.full_clean()
+    listing.save(update_fields=["review_status", "status", "rejection_reason", "updated_at"])
+    return listing
+
+
+@transaction.atomic
+def approve_listing(
+    *,
+    admin_user,
+    listing_instance: Listing,
+) -> Listing:
+    """
+    Approve a pending listing and publish it to the marketplace.
+
+    - Enforces admin authorization.
+    - Promotes draft parent property to 'available'.
+    - Validates at least one image exists.
+    - Sets review_status='approved', status='published'.
+    - Sets reviewed_by, reviewed_at, and clears rejection_reason.
+    - Dispatches notification to owner.
+    """
+    if not admin_user or not getattr(admin_user, "is_authenticated", False) or not (
+        getattr(admin_user, "is_platform_admin", False)
+        or getattr(admin_user, "is_staff", False)
+        or getattr(admin_user, "is_superuser", False)
+    ):
+        raise ListingOwnershipError(
+            {"admin": "Only platform administrators can approve listings."}
+        )
+
+    locked_property = Property.objects.select_for_update().get(pk=listing_instance.property_id)
+    listing = Listing.objects.select_for_update().get(pk=listing_instance.pk)
+
+    if listing.status == ListingStatus.CLOSED:
+        raise ListingStateError({"status": "Closed listings cannot be approved or published."})
+
+    has_conflicting = (
+        Listing.objects.filter(
+            property_id=listing.property_id,
+            status=ListingStatus.PUBLISHED,
+        )
+        .exclude(pk=listing.pk)
+        .exists()
+    )
+    if has_conflicting:
+        raise DuplicateOpenListingError(
+            {"property": "Another active listing is already published for this property."}
+        )
+
+    should_promote_property = _prepare_property_for_publication(locked_property)
+
+    if not locked_property.images.exists():
+        raise PropertyImageRequiredError(
+            {
+                "property": (
+                    "A property must have at least one uploaded image before its listing can be approved."
+                )
+            }
+        )
+
+    listing.review_status = ReviewStatus.APPROVED
+    listing.status = ListingStatus.PUBLISHED
+    listing.reviewed_by = admin_user
+    listing.reviewed_at = timezone.now()
+    listing.rejection_reason = None
+    if listing.published_at is None:
+        listing.published_at = timezone.now()
+
+    listing.full_clean()
+    listing.save()
+
+    if should_promote_property:
+        _promote_draft_property_to_available(locked_property)
+
+    owner = listing.owner
+    if owner:
+        create_notification(
+            user=owner,
+            notification_type=NotificationType.LISTING_APPROVED,
+            title=f"Listing Approved: {listing.title}",
+            message=f"Your listing for '{locked_property.title}' has been approved by the platform administration and is now published.",
+            related_object_type=RelatedObjectType.LISTING,
+            related_object_id=listing.id,
+        )
+
+    return listing
+
+
+@transaction.atomic
+def reject_listing(
+    *,
+    admin_user,
+    listing_instance: Listing,
+    rejection_reason: str,
+) -> Listing:
+    """
+    Reject a listing with a mandatory reason.
+
+    - Enforces admin authorization.
+    - Requires non-empty rejection_reason.
+    - Sets review_status='rejected', status='draft'.
+    - Sets reviewed_by, reviewed_at, and rejection_reason.
+    - Dispatches notification to owner with reason.
+    """
+    if not admin_user or not getattr(admin_user, "is_authenticated", False) or not (
+        getattr(admin_user, "is_platform_admin", False)
+        or getattr(admin_user, "is_staff", False)
+        or getattr(admin_user, "is_superuser", False)
+    ):
+        raise ListingOwnershipError(
+            {"admin": "Only platform administrators can reject listings."}
+        )
+
+    if not rejection_reason or not str(rejection_reason).strip():
+        raise DjangoValidationError({"rejection_reason": "A non-empty rejection reason is required."})
+
+    listing = Listing.objects.select_for_update().get(pk=listing_instance.pk)
+
+    listing.review_status = ReviewStatus.REJECTED
+    listing.status = ListingStatus.DRAFT
+    listing.reviewed_by = admin_user
+    listing.reviewed_at = timezone.now()
+    listing.rejection_reason = str(rejection_reason).strip()
+
+    listing.full_clean()
+    listing.save(update_fields=["review_status", "status", "reviewed_by", "reviewed_at", "rejection_reason", "updated_at"])
+
+    owner = listing.owner
+    if owner:
+        create_notification(
+            user=owner,
+            notification_type=NotificationType.LISTING_REJECTED,
+            title=f"Listing Rejected: {listing.title}",
+            message=f"Your listing for '{listing.property.title}' was rejected by the platform administration. Reason: {listing.rejection_reason}",
+            related_object_type=RelatedObjectType.LISTING,
+            related_object_id=listing.id,
+        )
+
+    return listing
+
+
 def get_public_listings_queryset(queryset: Optional[QuerySet] = None) -> QuerySet:
     """
     Filter a Listing queryset to records eligible for public rental discovery:
     - Listing status is 'published' (excludes draft, paused, closed)
+    - Review status is 'approved' (excludes draft, pending, rejected)
     - Parent Property status is 'available' (excludes draft, maintenance, inactive, occupied)
     - Parent Property has at least one uploaded image (publication eligibility)
     """
@@ -394,6 +615,7 @@ def get_public_listings_queryset(queryset: Optional[QuerySet] = None) -> QuerySe
     return base_qs.filter(
         has_image_subquery,
         status=ListingStatus.PUBLISHED,
+        review_status=ReviewStatus.APPROVED,
         property__status=PropertyStatus.AVAILABLE,
     )
 
@@ -405,10 +627,10 @@ def get_visible_listings_for_user(
 ) -> QuerySet:
     """
     Resolve listing visibility for detail endpoints:
-    - Anonymous users and non-owners see only publicly discoverable listings.
+    - Anonymous users and non-owners see only publicly discoverable listings (published + approved).
     - Platform admins see all listings for read-only oversight.
     - Authenticated owners see publicly discoverable listings plus all listings
-      belonging to their own properties (regardless of draft/paused/closed/inactive state).
+      belonging to their own properties (regardless of draft/pending/rejected/paused/closed state).
     """
     base_qs = queryset if queryset is not None else Listing.objects.all()
     if not user or not getattr(user, "is_authenticated", False):
@@ -424,6 +646,7 @@ def get_visible_listings_for_user(
     ).filter(
         Q(
             status=ListingStatus.PUBLISHED,
+            review_status=ReviewStatus.APPROVED,
             property__status=PropertyStatus.AVAILABLE,
             _has_property_image=True,
         )

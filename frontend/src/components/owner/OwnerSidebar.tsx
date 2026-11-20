@@ -127,6 +127,28 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
       isActiveCheck: (p) => p.startsWith('/app/owner/tenancies'),
     },
     {
+      label: 'Rent & Payments',
+      path: '/app/owner/rent',
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect width="20" height="14" x="2" y="5" rx="2" />
+          <line x1="2" x2="22" y1="10" y2="10" />
+        </svg>
+      ),
+      isActiveCheck: (p) => p.startsWith('/app/owner/rent'),
+    },
+    {
       label: 'Documents',
       path: '/app/owner/documents',
       icon: (
@@ -146,6 +168,28 @@ export const OwnerSidebar: React.FC<OwnerSidebarProps> = ({ isOpen, onClose }) =
         </svg>
       ),
       isActiveCheck: (p) => p.startsWith('/app/owner/documents'),
+    },
+    {
+      label: 'Subscription',
+      path: '/app/owner/subscription',
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76z" />
+          <path d="m9 12 2 2 4-4" />
+        </svg>
+      ),
+      isActiveCheck: (p) => p.startsWith('/app/owner/subscription'),
     },
   ]
 

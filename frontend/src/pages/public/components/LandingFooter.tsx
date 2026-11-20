@@ -1,11 +1,15 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../../hooks/useAuth'
 
 export interface LandingFooterProps {
-  isAuthenticated: boolean
+  isAuthenticated?: boolean
 }
 
-export const LandingFooter: React.FC<LandingFooterProps> = ({ isAuthenticated }) => {
+export const LandingFooter: React.FC<LandingFooterProps> = () => {
+  const { user } = useAuth()
+  const ownerDestination = user?.is_owner ? '/app/owner/dashboard' : '/owner/get-started'
+
   return (
     <footer className="bg-[#F9FAFB] border-t border-gray-200 text-[#6B7280]">
       <div className="max-w-7xl mx-auto px-6 py-16 lg:py-20">
@@ -92,7 +96,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ isAuthenticated })
             <ul className="space-y-3 text-sm">
               <li>
                 <Link
-                  to={isAuthenticated ? '/app/owner/properties/new' : '/register'}
+                  to={ownerDestination}
                   className="hover:text-[#408A71] transition-colors"
                 >
                   List Your Property

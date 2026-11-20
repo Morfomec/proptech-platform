@@ -32,6 +32,7 @@ from apps.listings.services import (
     get_visible_listings_for_user,
     pause_listing,
     publish_listing,
+    submit_listing_for_approval,
     update_listing,
 )
 from apps.listings.services.exceptions import (
@@ -343,7 +344,52 @@ class ListingViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         tags=["Listings"],
-        summary="Publish a listing",
+        summary="Submit a listing for administrator approval",
+        request=None,
+        responses={
+            200: success_envelope("ListingSubmitResponse", ListingDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="submit")
+    def submit(self, request, pk=None):
+        """
+        Submit a draft or rejected listing for platform administrator approval.
+        """
+        instance = self.get_object()
+        try:
+            listing = submit_listing_for_approval(
+                owner=request.user,
+                listing_instance=instance,
+            )
+        except (PropertyImageRequiredError, DuplicateOpenListingError) as exc:
+            msg = exc.message_dict if hasattr(exc, "message_dict") else str(exc)
+            raise ValidationError(msg)
+        except ListingOwnershipError as exc:
+            raise PermissionDenied(str(exc))
+        except (ListingStateError, DjangoValidationError) as exc:
+            msg = exc.message_dict if hasattr(exc, "message_dict") else str(exc)
+            raise ValidationError(msg)
+
+        serializer = ListingDetailSerializer(
+            listing,
+            context=self.get_serializer_context(),
+        )
+        return Response(
+            {
+                "success": True,
+                "message": "Listing submitted for administrator approval successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @extend_schema(
+        tags=["Listings"],
+        summary="Publish or unpause an approved listing",
         request=None,
         responses={
             200: success_envelope("ListingPublishResponse", ListingDetailSerializer),
@@ -356,7 +402,7 @@ class ListingViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="publish")
     def publish(self, request, pk=None):
         """
-        Publish a draft or paused listing directly without admin approval.
+        Publish or unpause an already approved listing.
         """
         instance = self.get_object()
         try:

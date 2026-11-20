@@ -14,6 +14,7 @@ from apps.properties.services.exceptions import (
     PropertyOwnershipError,
     PropertyProtectedError,
 )
+from apps.subscriptions.services import validate_and_reserve_property_quota
 
 FORBIDDEN_CLIENT_FIELDS = {
     "owner",
@@ -52,6 +53,10 @@ def create_property(*, owner, validated_data, amenity_ids=None):
         amenity_ids = clean_data.pop("amenity_ids")
     elif "amenity_ids" in clean_data:
         clean_data.pop("amenity_ids")
+
+    # Validate and reserve subscription property quota
+    # Locks owner row and checks active plan max limit within this transaction
+    validate_and_reserve_property_quota(owner=owner)
 
     # Instantiate Property with derived owner
     requested_status = clean_data.get("status", PropertyStatus.DRAFT)

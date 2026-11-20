@@ -28,7 +28,7 @@ export const FormActionBar: React.FC<FormActionBarProps> = ({
           </span>
         ) : (
           <span className="text-gray-500">
-            At least 1 photo is required to publish
+            At least 1 photo is required to submit for approval
           </span>
         )}
       </div>
@@ -75,10 +75,10 @@ export const FormActionBar: React.FC<FormActionBarProps> = ({
                 {isSubmitting && submittingAction === 'publish' ? (
                   <>
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Publishing...</span>
+                    <span>Submitting...</span>
                   </>
                 ) : (
-                  <span>Save & Publish</span>
+                  <span>Submit for Approval</span>
                 )}
               </button>
             )}
@@ -110,10 +110,10 @@ export const FormActionBar: React.FC<FormActionBarProps> = ({
               {isSubmitting && submittingAction === 'publish' ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Publishing...</span>
+                  <span>Submitting...</span>
                 </>
               ) : (
-                <span>Save & Publish</span>
+                <span>Save & Submit for Approval</span>
               )}
             </button>
           </>

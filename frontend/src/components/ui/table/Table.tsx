@@ -52,7 +52,7 @@ export function Table<T extends Record<string, unknown>>({
   emptyState,
   onRowClick,
   hoverable = true,
-  striped = false,
+  striped = true,
   rowSelection,
   className = '',
   caption,
@@ -134,9 +134,9 @@ export function Table<T extends Record<string, unknown>>({
       className={`w-full overflow-hidden rounded-2xl border border-border bg-white shadow-card ${className}`}
     >
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+        <table className="w-full text-left border-collapse table-admin">
           {caption && <caption className="sr-only">{caption}</caption>}
-          <thead className="bg-[#F9FAFB] border-b border-border">
+          <thead className="bg-white border-b border-[#E5E7EB]">
             <tr>
               {/* Row selection header cell */}
               {rowSelection && (
@@ -226,9 +226,9 @@ export function Table<T extends Record<string, unknown>>({
                       isSelected
                         ? 'bg-brand-soft/20'
                         : striped && index % 2 === 1
-                        ? 'bg-[#F9FAFB]/50'
+                        ? 'bg-[#F8FAFC]'
                         : 'bg-white'
-                    } ${hoverable ? 'hover:bg-[#F9FAFB]/80' : ''} ${
+                    } ${hoverable ? 'hover:bg-[#F1F5F9]' : ''} ${
                       isClickable ? 'cursor-pointer' : ''
                     }`}
                   >

@@ -135,5 +135,25 @@ class TenancyActivateSerializer(serializers.Serializer):
     move_in_date = serializers.DateField(required=False)
 
 
+class TenancyDeductionItemSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=255)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+
+
 class TenancyEndSerializer(serializers.Serializer):
     move_out_date = serializers.DateField(required=False)
+    settle_deposit = serializers.BooleanField(default=False, required=False)
+    deductions = TenancyDeductionItemSerializer(many=True, required=False, default=list)
+    refund_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
+    refund_reference = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+
+
+class TenancySettlementPreviewSerializer(serializers.Serializer):
+    tenancy_id = serializers.UUIDField()
+    agreed_deposit = serializers.DecimalField(max_digits=12, decimal_places=2)
+    deposit_received = serializers.DecimalField(max_digits=12, decimal_places=2)
+    prior_refunds = serializers.DecimalField(max_digits=12, decimal_places=2)
+    deposit_held = serializers.DecimalField(max_digits=12, decimal_places=2)
+    max_refundable_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    status = serializers.CharField()
+

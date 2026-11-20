@@ -11,6 +11,8 @@ export interface PropertyCardListingData {
   security_deposit?: string | number | null
   available_from?: string | null
   status: 'published' | 'draft' | 'paused' | 'closed'
+  review_status?: 'draft' | 'pending' | 'approved' | 'rejected'
+  rejection_reason?: string | null
   published_at?: string | null
   property?: Partial<PublicListingProperty> | null
 }
@@ -19,6 +21,7 @@ export interface PropertyCardProps {
   property: PropertyListItem
   listing?: PropertyCardListingData | null
   onPublishListing?: (listingId: string, propertyId: string) => void
+  onSubmitForApproval?: (listingId: string) => void
   onPauseListing?: (listingId: string) => void
   onResumeListing?: (listingId: string) => void
   onCloseListing?: (listingId: string) => void
@@ -31,6 +34,21 @@ function getOwnerStatusBadge(
   propertyStatus: PropertyListItem['status']
 ): React.ReactNode {
   if (listing) {
+    if (listing.review_status === 'pending') {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50/95 px-2.5 py-1 text-xs font-medium text-amber-800 border border-amber-300 shadow-xs backdrop-blur-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          <span>PENDING APPROVAL</span>
+        </span>
+      )
+    }
+    if (listing.review_status === 'rejected') {
+      return (
+        <span className="inline-flex items-center rounded-full bg-red-50/95 px-2.5 py-1 text-xs font-medium text-red-700 border border-red-200 shadow-xs backdrop-blur-xs">
+          REJECTED
+        </span>
+      )
+    }
     if (listing.status === 'published') {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-xs font-medium text-[#15803D] border border-emerald-200 shadow-xs backdrop-blur-xs">
@@ -70,7 +88,7 @@ function getOwnerStatusBadge(
 export const PropertyCard: React.FC<PropertyCardProps> = ({
   property,
   listing,
-  onPublishListing,
+  onSubmitForApproval,
   onPauseListing,
   onResumeListing,
   onCloseListing,
@@ -115,24 +133,28 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
   const dropdownItems: DropdownMenuItem[] = []
 
   if (listing) {
-    if (listing.status === 'draft' && onPublishListing) {
-      dropdownItems.push({
-        id: 'publish',
-        label: 'Publish Listing',
-        icon: (
-          <svg
-            className="w-4 h-4 text-emerald-600"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 11l7-7 7 7M12 4v16" />
-          </svg>
-        ),
-        disabled: isActionLoading,
-        onClick: () => onPublishListing(listing.id, property.id),
-      })
+    if (listing.status === 'draft') {
+      if (listing.review_status === 'pending') {
+        // Awaiting admin review: no publish or submit action
+      } else if (onSubmitForApproval) {
+        dropdownItems.push({
+          id: 'submit-approval',
+          label: listing.review_status === 'rejected' ? 'Resubmit for Approval' : 'Submit for Approval',
+          icon: (
+            <svg
+              className="w-4 h-4 text-[#408A71]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ),
+          disabled: isActionLoading,
+          onClick: () => onSubmitForApproval(listing.id),
+        })
+      }
     } else if (listing.status === 'published') {
       if (onPauseListing) {
         dropdownItems.push({

@@ -25,6 +25,7 @@ from .tenancy_service import (
     activate_tenancy,
     cancel_tenancy,
     end_tenancy,
+    get_tenancy_settlement_preview,
 )
 
 __all__ = [
@@ -44,11 +45,11 @@ __all__ = [
     "activate_tenancy",
     "cancel_tenancy",
     "end_tenancy",
+    "get_tenancy_settlement_preview",
     "TenancyApplicationError",
     "TenancyOwnershipError",
     "TenancyStateError",
     "TenancyOverlapError",
     "TenancyNotFoundError",
     "TenancyServiceError",
-    
 ]

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 
 export interface HowItWorksProps {
@@ -7,27 +7,8 @@ export interface HowItWorksProps {
 }
 
 export const HowItWorks: React.FC<HowItWorksProps> = () => {
-  const { isAuthenticated, user } = useAuth()
-  const navigate = useNavigate()
-
-  const handleOwnerClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    if (!isAuthenticated) {
-      navigate('/login', {
-        state: { from: { pathname: '/app/owner/properties/new' } },
-      })
-    } else if (user?.is_owner === true) {
-      navigate('/app/owner/dashboard')
-    } else {
-      navigate('/app/owner/properties/new')
-    }
-  }
-
-  const ownerCta = !isAuthenticated
-    ? { to: '/login', state: { from: { pathname: '/app/owner/properties/new' } } }
-    : user?.is_owner === true
-    ? { to: '/app/owner/dashboard', state: undefined }
-    : { to: '/app/owner/properties/new', state: undefined }
+  const { user } = useAuth()
+  const ownerDestination = user?.is_owner ? '/app/owner/dashboard' : '/owner/get-started'
 
   return (
     <section id="how-it-works" className="py-20 bg-white border-t border-gray-100">
@@ -186,9 +167,7 @@ export const HowItWorks: React.FC<HowItWorksProps> = () => {
 
             {/* CTA */}
             <Link
-              to={ownerCta.to}
-              state={ownerCta.state}
-              onClick={handleOwnerClick}
+              to={ownerDestination}
               className="w-full inline-flex items-center justify-center rounded-xl bg-[#1E293B] hover:bg-[#0F172A] text-white py-3.5 px-6 font-semibold text-sm transition-colors shadow-xs cursor-pointer"
             >
               List Your Property

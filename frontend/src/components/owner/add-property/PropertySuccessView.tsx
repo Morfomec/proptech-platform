@@ -36,6 +36,14 @@ function resolveStatusBadge(
   const effectiveListingStatus =
     listingStatus ?? (mode === 'published' ? 'published' : null)
 
+  if (mode === 'published') {
+    return {
+      label: 'Pending Approval',
+      classes: 'bg-amber-50 text-amber-800 border-amber-300',
+      dot: true,
+    }
+  }
+
   if (effectiveListingStatus === 'published') {
     return {
       label: 'Live',
@@ -101,21 +109,23 @@ export const PropertySuccessView: React.FC<PropertySuccessViewProps> = ({
   const badgeMeta = resolveStatusBadge(data.listingStatus, data.propertyStatus, data.mode)
   const resolvedImageUrl = data.primaryImageUrl ? getMediaUrl(data.primaryImageUrl) : null
 
-  const headingText = isPublished
+  const isSubmitted = data.mode === 'published'
+
+  const headingText = isSubmitted
     ? isEditMode
-      ? 'Property Updated Successfully'
-      : 'Property Published Successfully'
+      ? 'Property Updated & Submitted'
+      : 'Submitted for Approval'
     : isEditMode
       ? 'Property Updated Successfully'
       : 'Property Saved as Draft'
 
-  const subtitleText = isPublished
-    ? 'Your listing is live on the marketplace and ready for prospective tenants.'
+  const subtitleText = isSubmitted
+    ? 'Your listing has been submitted for administrator review. You will be notified once it is approved and live on the marketplace.'
     : effectiveStatus === 'paused'
       ? 'Your property changes have been saved. The listing remains paused until resumed.'
       : effectiveStatus === 'closed'
         ? 'Your property changes have been saved. The listing remains closed.'
-        : 'Your property changes are saved. You can review or publish anytime from My Properties.'
+        : 'Your property changes are saved. You can submit for approval anytime from Property Details.'
 
   return (
     <div className="py-10 sm:py-14 max-w-[580px] mx-auto px-4">

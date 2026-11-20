@@ -20,11 +20,15 @@ class NotificationType(models.TextChoices):
 
     DOCUMENT_UPLOADED = "document_uploaded", "Document Uploaded"
 
+    LISTING_APPROVED = "listing_approved", "Listing Approved"
+    LISTING_REJECTED = "listing_rejected", "Listing Rejected"
+
 
 class RelatedObjectType(models.TextChoices):
     APPLICATION = "application", "Application"
     TENANCY = "tenancy", "Tenancy"
     DOCUMENT = "document", "Document"
+    LISTING = "listing", "Listing"
 
 
 class Notification(models.Model):

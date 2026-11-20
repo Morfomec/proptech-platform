@@ -51,6 +51,17 @@ export function useOwnerTenancyDetail(tenancyId?: string) {
   })
 }
 
+export function useTenancySettlementPreview(tenancyId?: string, enabled = true) {
+  const { isAuthenticated, user } = useAuth()
+  return useQuery({
+    queryKey: ['owner', 'tenancies', tenancyId ?? '', 'settlement-preview'],
+    queryFn: () => tenancyService.getSettlementPreview(tenancyId!),
+    select: (res) => res.data,
+    enabled: isAuthenticated && Boolean(user?.is_owner) && Boolean(tenancyId) && enabled,
+    staleTime: 0,
+  })
+}
+
 function invalidateTenancyRelatedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   tenancyId?: string

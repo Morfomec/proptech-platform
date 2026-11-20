@@ -20,6 +20,8 @@ export type ListingFurnishingStatus = 'unfurnished' | 'semi_furnished' | 'fully_
 
 export type ListingSortOption = 'newest' | 'rent_low_to_high' | 'rent_high_to_low'
 
+export type ReviewStatus = 'draft' | 'pending' | 'approved' | 'rejected'
+
 export interface PublicListingProperty {
   id: string
   title: string
@@ -48,6 +50,9 @@ export interface PublicListingItem {
   security_deposit: string | null
   available_from: string | null
   status: 'published' | 'draft' | 'paused' | 'closed'
+  review_status?: ReviewStatus
+  rejection_reason?: string | null
+  reviewed_at?: string | null
   published_at: string | null
   created_at: string
   property: PublicListingProperty
@@ -173,6 +178,9 @@ export interface ListingDetailItem {
   security_deposit: string | null
   available_from: string | null
   status: 'draft' | 'published' | 'paused' | 'closed'
+  review_status?: ReviewStatus
+  rejection_reason?: string | null
+  reviewed_at?: string | null
   published_at: string | null
   created_at: string
   updated_at: string

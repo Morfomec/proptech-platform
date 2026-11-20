@@ -4,6 +4,7 @@ from typing import Optional
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.core.permissions import _matches_user
 from apps.listings.models import Listing, ListingStatus
 from apps.properties.models import Property
 from apps.properties.serializers import (
@@ -167,10 +168,24 @@ class ListingListSerializer(serializers.ModelSerializer):
             "security_deposit",
             "available_from",
             "status",
+            "review_status",
+            "rejection_reason",
+            "reviewed_at",
             "published_at",
             "created_at",
         ]
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        is_owner = user and user.is_authenticated and _matches_user(instance.property.owner_id, user)
+        is_staff = user and user.is_authenticated and (getattr(user, "is_staff", False) or getattr(user, "is_platform_admin", False))
+        if not (is_owner or is_staff):
+            ret.pop("rejection_reason", None)
+            ret.pop("reviewed_at", None)
+        return ret
 
 
 class ListingDetailSerializer(serializers.ModelSerializer):
@@ -194,11 +209,25 @@ class ListingDetailSerializer(serializers.ModelSerializer):
             "security_deposit",
             "available_from",
             "status",
+            "review_status",
+            "rejection_reason",
+            "reviewed_at",
             "published_at",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        is_owner = user and user.is_authenticated and _matches_user(instance.property.owner_id, user)
+        is_staff = user and user.is_authenticated and (getattr(user, "is_staff", False) or getattr(user, "is_platform_admin", False))
+        if not (is_owner or is_staff):
+            ret.pop("rejection_reason", None)
+            ret.pop("reviewed_at", None)
+        return ret
 
     @extend_schema_field(serializers.DictField())
     def get_owner(self, obj):
@@ -273,8 +302,10 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             )
 
         status_val = attrs.get("status")
-        if status_val == ListingStatus.PUBLISHED:
-            attrs["publish"] = True
+        if status_val == ListingStatus.PUBLISHED or attrs.get("publish"):
+            raise serializers.ValidationError(
+                {"status": "Listings cannot be published directly upon creation. All listings must be reviewed and approved by an administrator."}
+            )
 
         return attrs
 

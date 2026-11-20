@@ -17,6 +17,7 @@ class ListingStatus(models.TextChoices):
 
 
 class ReviewStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
     PENDING = "pending", "Pending"
     APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
@@ -70,7 +71,7 @@ class Listing(BaseModel):
     review_status = models.CharField(
         max_length=20,
         choices=ReviewStatus.choices,
-        default=ReviewStatus.PENDING,
+        default=ReviewStatus.DRAFT,
     )
 
     reviewed_by = models.ForeignKey(

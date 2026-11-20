@@ -389,31 +389,20 @@ export const TenantHeader: React.FC<TenantHeaderProps> = ({ onOpenSidebar }) => 
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-64 rounded-xl bg-white shadow-xl border border-[#E5E7EB] py-1.5 z-50">
+            <div className="absolute right-0 mt-2 w-64 rounded-xl bg-white shadow-xl border border-[#E5E7EB] py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-4 py-3 border-b border-[#F3F4F6]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-[#408A71]/15 text-[#408A71] font-bold text-xs flex items-center justify-center ring-1 ring-[#408A71]/30 shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-[#408A71]/15 text-[#408A71] font-semibold text-xs flex items-center justify-center ring-1 ring-[#408A71]/30 shrink-0">
                     {userInitials}
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-bold text-[#111827] truncate">
+                    <span className="text-xs font-medium text-[#111827] truncate">
                       {userFullName}
                     </span>
                     <span className="text-[11px] text-[#6B7280] truncate">
                       {user?.email}
                     </span>
                   </div>
-                </div>
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#408A71]/10 text-[#408A71]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#408A71]" />
-                    Tenant Account
-                  </span>
-                  {user?.is_owner && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Owner Enabled
-                    </span>
-                  )}
                 </div>
               </div>
 

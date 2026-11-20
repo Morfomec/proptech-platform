@@ -4,7 +4,7 @@ A property-centric rental marketplace and portfolio management platform supporti
 
 ## Architecture
 
-- **Backend (`backend/`):** Django 6 + Django REST Framework + PostgreSQL + SimpleJWT modular monolith structured by domain (`apps.core`, `apps.accounts`, `apps.properties`, `apps.listings`, `apps.leasing`, `apps.documents`, `apps.notifications`) following a strict `ViewSet → Serializer → Service → Model` layer separation, with OpenAPI schema generation via `drf-spectacular`.
+- **Backend (`backend/`):** Django 6 + Django REST Framework + PostgreSQL + SimpleJWT modular monolith structured by domain (`apps.core`, `apps.accounts`, `apps.properties`, `apps.listings`, `apps.leasing`, `apps.documents`, `apps.notifications`, `apps.subscriptions`, `apps.rent`) following a strict `ViewSet → Serializer → Service → Model` layer separation, with OpenAPI schema generation via `drf-spectacular` and a custom administration interface powered by Django Unfold.
 - **Frontend (`frontend/`):** React 19 + TypeScript + Vite + Tailwind CSS v4 + React Router + TanStack React Query + Axios single-page application separated into public property discovery, a dedicated **Tenant Workspace**, and a dedicated **Owner Workspace**.
 
 ## Project Status
@@ -17,15 +17,17 @@ A property-centric rental marketplace and portfolio management platform supporti
 - **Leasing (`apps.leasing`):** Rental application submission, withdrawal, owner review workflow (`submitted`, `under_review`, `approved`, `rejected`) with audit status history, and tenancy creation + lifecycle management (`pending`, `confirmed`, `active`, `ended`, `cancelled`).
 - **Documents (`apps.documents`):** Private document upload, editing/replacement, attachment-scope filtering, and authenticated streaming download/preview across personal, property, application, and tenancy documents.
 - **Notifications (`apps.notifications`):** Cross-party notifications for application, tenancy, and document events, unread counts, and mark-read actions.
-- **Tenant Workspace (`/app/tenant/*`):** Overview dashboard, Browse Properties, Saved Properties, Applications & detail view, Active Tenancy view, Documents management, Notifications centre, and Shared Account Settings.
-- **Owner Workspace (`/app/owner/*`):** Portfolio Overview dashboard, My Properties, Add/Edit Property wizard, Applications review, Tenancies lifecycle management, Documents management, Header Notification Bell & Notifications centre, and Shared Account Settings.
+- **Subscriptions & Owner Onboarding (`apps.subscriptions`):** Multi-tier subscription model (Starter, Growth, Pro, Enterprise), automated 90-day Starter free trial with idempotent activation, property quota tracking and enforcement, plan upgrades/downgrades with quota validation, and public owner onboarding flow (`/owner/get-started`).
+- **Rent & Financial Management (`apps.rent`):** Monthly rent charge generation, security deposit tracking, manual payment recording (cash, bank transfer, cheque, other), automated FIFO payment allocation across outstanding charges, payment refunds, and per-tenancy running balance financial ledgers.
+- **Platform Administration (Django Unfold):** Custom-styled Django Unfold Admin interface (`/admin/`) featuring branded KPI metric cards, grouped domain navigation, and administrative controls across all platform models.
+- **Tenant Workspace (`/app/tenant/*`):** Overview dashboard, Browse Properties, Saved Properties, Applications & detail view, My Tenancy view (rent schedule, payment history, and security deposit status), Documents management, Notifications centre, and Shared Account Settings.
+- **Owner Workspace (`/app/owner/*`):** Portfolio Overview dashboard, My Properties, Add/Edit Property wizard, Applications review, Tenancies lifecycle management, Rent & Payments management (charge generation, payment recording, and refund logging), Subscription & Quota management, Documents management, Header Notification Bell & Notifications centre, and Shared Account Settings.
 
 ### Planned / Future Phases
 
-- Owner subscription tiers and property quota tracking
-- Rent charges, payment logging, refunds, and ledger allocations
-- AI-assisted rental listing description generation
-- Dedicated REST Admin oversight endpoints
+- AI-assisted rental listing description generation (deferred)
+- Integrated online payment gateway (e.g. Stripe, Razorpay)
+- Dedicated REST Admin oversight endpoints (beyond Django Unfold Admin)
 
 ## Local Development Setup
 
@@ -69,12 +71,52 @@ A property-centric rental marketplace and portfolio management platform supporti
   .venv/bin/python manage.py makemigrations --check --dry-run
   .venv/bin/python manage.py test
   ```
+- **Backend production deployment readiness check:**
+  ```bash
+  cd backend
+  .venv/bin/python manage.py check --deploy --settings=config.settings_production
+  ```
 - **Frontend lint & production build:**
   ```bash
   cd frontend
   npm run lint
   npm run build
   ```
+
+## Production & Deployment Configuration
+
+For production deployments, PropTech Platform includes a dedicated production settings profile (`config.settings_production`) enforcing strict HTTPS, secure cookie handling, HSTS, and reverse-proxy header detection.
+
+### Activating Production Settings
+
+Set the Django settings module in your production environment:
+```bash
+export DJANGO_SETTINGS_MODULE=config.settings_production
+```
+
+### Required Production Environment Variables
+
+| Variable | Description | Example / Default |
+|---|---|---|
+| `DJANGO_SECRET_KEY` | Cryptographically strong secret key | *Required (no default)* |
+| `DJANGO_DEBUG` | Disables debug mode in production | `False` |
+| `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed domain names/IPs | `api.proptech.com,proptech.com` |
+| `DB_NAME` | Production PostgreSQL database name | `proptech_platform_db` |
+| `DB_USER` | Production PostgreSQL username | `proptech_user` |
+| `DB_PASSWORD` | Production PostgreSQL password | *Required* |
+| `DB_HOST` | Production database host | `db.internal.example.com` |
+| `DB_PORT` | PostgreSQL port | `5432` |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated frontend origins | `https://proptech.com` |
+| `CSRF_TRUSTED_ORIGINS` | Comma-separated trusted origins for CSRF | `https://proptech.com` |
+| `FRONTEND_URL` | Canonical public URL of the frontend | `https://proptech.com` |
+| `DJANGO_SECURE_SSL_REDIRECT` | Redirects all HTTP traffic to HTTPS | `True` |
+| `DJANGO_SECURE_PROXY_SSL_HEADER` | Trust `X-Forwarded-Proto: https` from load balancer/proxy | `True` |
+| `DJANGO_SESSION_COOKIE_SECURE` | Enforces HTTPS-only transmission of session cookies | `True` |
+| `DJANGO_CSRF_COOKIE_SECURE` | Enforces HTTPS-only transmission of CSRF cookies | `True` |
+| `DJANGO_SECURE_HSTS_SECONDS` | HTTP Strict Transport Security duration (seconds) | `31536000` (1 year) |
+| `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS` | Enforces HSTS policy across all subdomains | `True` |
+| `DJANGO_SECURE_HSTS_PRELOAD` | Allows domain submission to browser HSTS preload list | `True` |
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID for social authentication | *(Optional)* |
 
 ## Project Documentation
 

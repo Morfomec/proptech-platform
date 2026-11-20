@@ -27,7 +27,7 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           {showHeader && (
-            <thead className="bg-[#F9FAFB] border-b border-border">
+            <thead className="bg-white border-b border-[#E5E7EB]">
               <tr>
                 {Array.from({ length: columns }).map((_, colIdx) => (
                   <th
@@ -41,9 +41,9 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
               </tr>
             </thead>
           )}
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-[#E5E7EB]">
             {Array.from({ length: rows }).map((_, rowIdx) => (
-              <tr key={`row-${rowIdx}`} className="bg-white">
+              <tr key={`row-${rowIdx}`} className={rowIdx % 2 === 1 ? 'bg-[#F8FAFC]' : 'bg-white'}>
                 {Array.from({ length: columns }).map((_, colIdx) => {
                   const widthClass = cellWidths[(rowIdx + colIdx) % cellWidths.length]
                   return (

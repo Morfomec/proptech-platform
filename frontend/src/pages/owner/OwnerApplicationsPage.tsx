@@ -40,6 +40,7 @@ const STATUS_TABS: { id: StatusTab; label: string }[] = [
   { id: 'approved', label: 'Approved' },
   { id: 'rejected', label: 'Rejected' },
   { id: 'withdrawn', label: 'Withdrawn' },
+  { id: 'tenancy_cancelled', label: 'Cancelled' },
 ]
 
 /**
@@ -80,6 +81,7 @@ export const OwnerApplicationsPage: React.FC = () => {
   const { data: approvedCount = 0 } = useReceivedApplicationsCount('approved')
   const { data: rejectedCount = 0 } = useReceivedApplicationsCount('rejected')
   const { data: withdrawnCount = 0 } = useReceivedApplicationsCount('withdrawn')
+  const { data: cancelledCount = 0 } = useReceivedApplicationsCount('tenancy_cancelled')
 
   const { data: ownerListingsData } = useOwnerListings({ page: 1, page_size: 100 })
 
@@ -110,6 +112,7 @@ export const OwnerApplicationsPage: React.FC = () => {
       approved: approvedCount,
       rejected: rejectedCount,
       withdrawn: withdrawnCount,
+      tenancy_cancelled: cancelledCount,
     } as Record<StatusTab, number>,
   }
 
@@ -361,7 +364,8 @@ export const OwnerApplicationsPage: React.FC = () => {
                           to={`/app/owner/applications/${app.id}`}
                           className="text-sm sm:text-base font-medium text-[#111827] hover:text-[#408A71] transition-colors truncate"
                         >
-                          {app.applicant_name || 'Applicant'}
+                          <span className="text-[#6B7280] font-normal text-xs mr-1.5">Tenant:</span>
+                          <span className="font-medium text-[#111827]">{app.applicant_name || 'Applicant'}</span>
                         </Link>
                         <Badge variant={statusMeta.variant} size="sm" dot>
                           {statusMeta.label}
@@ -370,6 +374,7 @@ export const OwnerApplicationsPage: React.FC = () => {
 
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#4B5563]">
                         <span className="font-medium text-[#111827]">
+                          <span className="text-[#6B7280] font-normal mr-1">Property:</span>
                           {app.property_title || app.listing_title}
                         </span>
                         {app.listing_title && app.listing_title !== app.property_title && (

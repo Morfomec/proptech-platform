@@ -87,6 +87,15 @@ export const listingService = {
   },
 
   /**
+   * Submit a draft or rejected listing for administrator approval.
+   * Connects to POST /api/v1/listings/{id}/submit/.
+   */
+  async submitListing(id: string): Promise<ApiResponse<ListingDetailItem>> {
+    const response = await apiClient.post<ApiResponse<ListingDetailItem>>(`/listings/${id}/submit/`)
+    return response.data
+  },
+
+  /**
    * Publish a draft or paused listing.
    * Connects to POST /api/v1/listings/{id}/publish/.
    */

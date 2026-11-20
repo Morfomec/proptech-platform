@@ -1,0 +1,160 @@
+{% load i18n static unfold %}
+
+{% if not is_popup %}
+    <div class="flex flex-row gap-3 items-center ml-auto">
+        {% action_list %}
+
+        {% if nav_global_side %}
+            {{ nav_global_side }}
+        {% endif %}
+
+        {% if request.user.is_authenticated %}
+        <!-- Unified Administrator Account Menu -->
+        <div class="relative" x-data="{ openUserMenu: false }">
+            <button type="button"
+                    x-on:click="openUserMenu = !openUserMenu"
+                    class="admin-user-btn"
+                    :class="{'is-active': openUserMenu}">
+                
+                <!-- Circular Avatar using Administrator Initials (Brand Palette) -->
+                <div class="admin-user-avatar">
+                    {% if request.user.first_name and request.user.last_name %}
+                        {{ request.user.first_name.0|upper }}{{ request.user.last_name.0|upper }}
+                    {% elif request.user.first_name %}
+                        {{ request.user.first_name.0|upper }}
+                    {% else %}
+                        {{ request.user.email.0|upper }}
+                    {% endif %}
+                </div>
+
+                <!-- Administrator Identity: Name & Role/Email -->
+                <div class="admin-user-info">
+                    <span class="admin-user-name">
+                        {% if request.user.first_name and request.user.last_name %}
+                            {{ request.user.first_name }} {{ request.user.last_name }}
+                        {% elif request.user.first_name %}
+                            {{ request.user.first_name }}
+                        {% else %}
+                            {{ request.user.email }}
+                        {% endif %}
+                    </span>
+                    <span class="admin-user-meta">
+                        {% if request.user.first_name %}
+                            {{ request.user.email }}
+                        {% elif request.user.is_superuser %}
+                            {% trans "Administrator" %}
+                        {% else %}
+                            {% trans "Staff Member" %}
+                        {% endif %}
+                    </span>
+                </div>
+
+                <!-- Subtle Dropdown Chevron -->
+                <span class="material-symbols-outlined admin-user-chevron"
+                      :class="{'rotate': openUserMenu}">
+                    expand_more
+                </span>
+            </button>
+
+            <!-- Minimalist Account Dropdown Card -->
+            <div x-cloak
+                 x-show="openUserMenu"
+                 x-transition:enter="transition ease-out duration-100"
+                 x-transition:enter-start="transform opacity-0 scale-95"
+                 x-transition:enter-end="transform opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-75"
+                 x-transition:leave-start="transform opacity-100 scale-100"
+                 x-transition:leave-end="transform opacity-0 scale-95"
+                 x-on:click.outside="openUserMenu = false"
+                 class="admin-user-dropdown"
+                 style="border-color: var(--proptech-borders);">
+                
+                <!-- User Summary Header -->
+                <div class="px-4 py-3 border-b border-base-100 dark:border-base-800 flex items-center gap-3">
+                    <div class="admin-user-avatar">
+                        {% if request.user.first_name and request.user.last_name %}
+                            {{ request.user.first_name.0|upper }}{{ request.user.last_name.0|upper }}
+                        {% elif request.user.first_name %}
+                            {{ request.user.first_name.0|upper }}
+                        {% else %}
+                            {{ request.user.email.0|upper }}
+                        {% endif %}
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                        <div class="text-xs font-medium text-important truncate">
+                            {% if request.user.first_name and request.user.last_name %}
+                                {{ request.user.first_name }} {{ request.user.last_name }}
+                            {% elif request.user.first_name %}
+                                {{ request.user.first_name }}
+                            {% else %}
+                                {{ request.user.email }}
+                            {% endif %}
+                        </div>
+                        <div class="text-[11px] font-normal text-subtle truncate mt-0.5">
+                            {{ request.user.email }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Items -->
+                <div class="py-1">
+                    <!-- My Profile -->
+                    <a href="{% url 'admin:accounts_user_change' request.user.id %}"
+                       class="flex items-center gap-2.5 px-4 py-2 text-xs font-normal text-important hover:bg-base-50 hover:text-primary-600 dark:hover:bg-white/[.04] dark:hover:text-primary-400 transition-colors">
+                        <span class="material-symbols-outlined text-base text-subtle">person</span>
+                        <span>{% trans "My Profile" %}</span>
+                    </a>
+
+                    <!-- Change Password -->
+                    {% if request.user.has_usable_password %}
+                    <a href="{% url 'admin:password_change' %}"
+                       class="flex items-center gap-2.5 px-4 py-2 text-xs font-normal text-important hover:bg-base-50 hover:text-primary-600 dark:hover:bg-white/[.04] dark:hover:text-primary-400 transition-colors">
+                        <span class="material-symbols-outlined text-base text-subtle">lock_reset</span>
+                        <span>{% trans "Change Password" %}</span>
+                    </a>
+                    {% endif %}
+
+                    <!-- Theme Switcher (Light / Dark Mode) -->
+                    <div class="border-t border-base-100 dark:border-base-800 my-1 pt-2 px-4 pb-1">
+                        <div class="flex items-center justify-between text-[11px] text-subtle mb-1.5">
+                            <span>{% trans "Theme" %}</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-1 bg-base-100 dark:bg-base-800 p-0.5 rounded-lg text-xs">
+                            <button type="button"
+                                    x-on:click="switchTheme('light')"
+                                    class="flex items-center justify-center py-1 rounded text-[11px] transition-colors cursor-pointer"
+                                    :class="adminTheme === 'light' ? 'bg-white dark:bg-base-700 text-primary-600 font-medium shadow-xs' : 'text-subtle hover:text-important'">
+                                <span class="material-symbols-outlined text-sm">light_mode</span>
+                            </button>
+                            <button type="button"
+                                    x-on:click="switchTheme('dark')"
+                                    class="flex items-center justify-center py-1 rounded text-[11px] transition-colors cursor-pointer"
+                                    :class="adminTheme === 'dark' ? 'bg-white dark:bg-base-700 text-primary-600 font-medium shadow-xs' : 'text-subtle hover:text-important'">
+                                <span class="material-symbols-outlined text-sm">dark_mode</span>
+                            </button>
+                            <button type="button"
+                                    x-on:click="switchTheme('auto')"
+                                    class="flex items-center justify-center py-1 rounded text-[11px] transition-colors cursor-pointer"
+                                    :class="adminTheme === 'auto' ? 'bg-white dark:bg-base-700 text-primary-600 font-medium shadow-xs' : 'text-subtle hover:text-important'">
+                                <span class="material-symbols-outlined text-sm">computer</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Secure POST Sign Out -->
+                <div class="border-t border-base-100 dark:border-base-800 pt-1">
+                    <form id="header-logout-form" method="post" action="{% url 'admin:logout' %}" class="m-0">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-normal text-red-600 hover:bg-red-50/60 dark:text-red-400 dark:hover:bg-red-950/30 transition-colors cursor-pointer text-left">
+                            <span class="material-symbols-outlined text-base text-red-500">logout</span>
+                            <span>{% trans "Sign Out" %}</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+{% endif %}

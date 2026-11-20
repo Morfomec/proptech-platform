@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 import { Avatar } from '../../../components/ui/avatar'
 import { Dropdown, type DropdownMenuItem } from '../../../components/ui/dropdown'
-import { resolveDefaultWorkspaceRoute, setStoredWorkspace } from '../../../utils/workspace'
 
 export interface LandingHeaderProps {
   activeNav?: string
@@ -80,80 +79,6 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
       ),
       onClick: () => navigate('/app/profile'),
     },
-    {
-      id: 'saved-properties',
-      label: 'Saved Properties',
-      icon: (
-        <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-          />
-        </svg>
-      ),
-      onClick: () => navigate('/saved-properties'),
-    },
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: (
-        <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5zm10 0a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5zM4 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4zm10-5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-9z"
-          />
-        </svg>
-      ),
-      onClick: () => navigate(resolveDefaultWorkspaceRoute(user)),
-    },
-    ...(user?.is_tenant
-      ? [
-          {
-            id: 'tenant-workspace',
-            label: 'Tenant Workspace',
-            icon: (
-              <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                />
-              </svg>
-            ),
-            onClick: () => {
-              setStoredWorkspace('tenant')
-              navigate('/app/tenant/dashboard')
-            },
-          },
-        ]
-      : []),
-    ...(user?.is_owner
-      ? [
-          {
-            id: 'owner-workspace',
-            label: 'Owner Workspace',
-            icon: (
-              <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                />
-              </svg>
-            ),
-            onClick: () => {
-              setStoredWorkspace('owner')
-              navigate('/app/owner/dashboard')
-            },
-          },
-        ]
-      : []),
     {
       separator: true,
     },
@@ -510,64 +435,6 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
                   </svg>
                   My Profile
                 </Link>
-
-                <Link
-                  to="/app/dashboard"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#111827] hover:bg-gray-50 transition-colors"
-                >
-                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5zm10 0a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5zM4 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4zm10-5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-9z"
-                    />
-                  </svg>
-                  Dashboard
-                </Link>
-
-                {user?.is_tenant && (
-                  <Link
-                    to="/app/tenant/dashboard"
-                    onClick={() => {
-                      setStoredWorkspace('tenant')
-                      setMobileMenuOpen(false)
-                    }}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#408A71] hover:bg-[#F0FDF4] transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                      />
-                    </svg>
-                    Tenant Workspace
-                  </Link>
-                )}
-
-                {user?.is_owner && (
-                  <Link
-                    to="/app/owner/dashboard"
-                    onClick={() => {
-                      setStoredWorkspace('owner')
-                      setMobileMenuOpen(false)
-                    }}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#408A71] hover:bg-[#F0FDF4] transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-[#408A71]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                      />
-                    </svg>
-                    Owner Workspace
-                  </Link>
-                )}
 
                 <div className="h-[1px] bg-gray-100 my-1" />
 

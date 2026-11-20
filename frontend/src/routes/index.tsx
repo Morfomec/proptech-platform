@@ -12,6 +12,7 @@ import TenantApplicationsPage from '../pages/tenant/TenantApplicationsPage'
 import TenantApplicationDetailPage from '../pages/tenant/TenantApplicationDetailPage'
 import TenantTenancyPage from '../pages/tenant/TenantTenancyPage'
 import TenantTenancyDetailPage from '../pages/tenant/TenantTenancyDetailPage'
+import TenantPaymentsPage from '../pages/tenant/TenantPaymentsPage'
 import TenantDocumentsPage from '../pages/tenant/TenantDocumentsPage'
 import TenantNotificationsPage from '../pages/tenant/TenantNotificationsPage'
 import OwnerDashboardPage from '../pages/owner/OwnerDashboardPage'
@@ -19,8 +20,10 @@ import OwnerApplicationsPage from '../pages/owner/OwnerApplicationsPage'
 import OwnerApplicationDetailPage from '../pages/owner/OwnerApplicationDetailPage'
 import OwnerTenanciesPage from '../pages/owner/OwnerTenanciesPage'
 import OwnerTenancyDetailPage from '../pages/owner/OwnerTenancyDetailPage'
+import OwnerRentPage from '../pages/owner/OwnerRentPage'
 import OwnerDocumentsPage from '../pages/owner/OwnerDocumentsPage'
 import OwnerNotificationsPage from '../pages/owner/OwnerNotificationsPage'
+import OwnerSubscriptionPage from '../pages/owner/OwnerSubscriptionPage'
 import MyPropertiesPage from '../pages/owner/MyPropertiesPage'
 import AddPropertyWizardPage from '../pages/owner/AddPropertyWizardPage'
 import PropertyDetailPage from '../pages/owner/PropertyDetailPage'
@@ -35,6 +38,7 @@ import LandingPage from '../pages/public/LandingPage'
 import BrowseRentalsPage from '../pages/public/BrowseRentalsPage'
 import PublicPropertyDetailPage from '../pages/public/PublicPropertyDetailPage'
 import SavedPropertiesPage from '../pages/public/SavedPropertiesPage'
+import OwnerGetStartedPage from '../pages/public/OwnerGetStartedPage'
 import NotFoundPage from '../pages/public/NotFoundPage'
 import GuestRoute from './GuestRoute'
 import ProtectedRoute from './ProtectedRoute'
@@ -83,6 +87,10 @@ export const router = createBrowserRouter([
       {
         path: '/saved',
         element: <Navigate to="/saved-properties" replace />,
+      },
+      {
+        path: '/owner/get-started',
+        element: <OwnerGetStartedPage />,
       },
     ],
   },
@@ -185,8 +193,16 @@ export const router = createBrowserRouter([
                 element: <OwnerTenancyDetailPage />,
               },
               {
+                path: 'rent',
+                element: <OwnerRentPage />,
+              },
+              {
                 path: 'documents',
                 element: <OwnerDocumentsPage />,
+              },
+              {
+                path: 'subscription',
+                element: <OwnerSubscriptionPage />,
               },
               {
                 path: 'notifications',
@@ -247,6 +263,10 @@ export const router = createBrowserRouter([
               {
                 path: 'tenancy/:tenancyId',
                 element: <TenantTenancyDetailPage />,
+              },
+              {
+                path: 'payments',
+                element: <TenantPaymentsPage />,
               },
               {
                 path: 'documents',

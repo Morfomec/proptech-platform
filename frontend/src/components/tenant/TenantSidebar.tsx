@@ -90,6 +90,16 @@ export const TenantSidebar: React.FC<TenantSidebarProps> = ({ isOpen, onClose })
       ),
     },
     {
+      label: 'My Payments',
+      path: '/app/tenant/payments',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.9">
+          <rect width="20" height="14" x="2" y="5" rx="2" />
+          <line x1="2" x2="22" y1="10" y2="10" />
+        </svg>
+      ),
+    },
+    {
       label: 'Documents',
       path: '/app/tenant/documents',
       icon: (

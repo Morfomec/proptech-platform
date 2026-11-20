@@ -353,6 +353,10 @@ def activate_tenancy(
     property.status = PropertyStatus.OCCUPIED
     property.save(update_fields=["status", "updated_at"])
 
+    # Generate initial rent charge for active tenancy via rent service
+    from apps.rent.services import generate_initial_rent_charge
+    generate_initial_rent_charge(tenancy=tenancy)
+
     create_notification(
         user=tenancy.tenant,
         notification_type=NotificationType.TENANCY_ACTIVATED,
@@ -416,14 +420,76 @@ def cancel_tenancy(*, owner, tenancy_id):
     return tenancy
 
 
+def get_tenancy_settlement_preview(*, owner, tenancy_id) -> dict:
+    """
+    Returns pre-calculated settlement numbers for checkout:
+    agreed deposit, deposit received, prior refunds, and current deposit held.
+    """
+    property, tenancy = _get_locked_property_and_tenancy(tenancy_id=tenancy_id)
+    _verify_property_owner(property=property, owner=owner)
+
+    from django.db.models import Sum
+    from apps.rent.models import (
+        PaymentAllocation,
+        PaymentRefund,
+        PaymentRefundStatus,
+        PaymentStatus,
+        RentCharge,
+        RentChargeType,
+    )
+
+    deposit_charges = RentCharge.objects.filter(
+        tenancy=tenancy, charge_type=RentChargeType.SECURITY_DEPOSIT
+    )
+    agreed_deposit = tenancy.security_deposit or Decimal("0.00")
+    deposit_allocations = PaymentAllocation.objects.filter(
+        tenancy=tenancy,
+        rent_charge__in=deposit_charges,
+        payment__status=PaymentStatus.COMPLETED,
+    )
+    effective_deposit_received = sum(
+        (a.effective_amount for a in deposit_allocations), Decimal("0.00")
+    )
+
+    prior_refunds = (
+        PaymentRefund.objects.filter(
+            payment__tenancy=tenancy,
+            payment__allocations__rent_charge__in=deposit_charges,
+            status=PaymentRefundStatus.COMPLETED,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0.00")
+    )
+
+    deposit_held = max(Decimal("0.00"), effective_deposit_received - prior_refunds)
+
+    return {
+        "tenancy_id": tenancy.id,
+        "agreed_deposit": str(agreed_deposit.quantize(Decimal("0.01"))),
+        "deposit_received": str(effective_deposit_received.quantize(Decimal("0.01"))),
+        "prior_refunds": str(prior_refunds.quantize(Decimal("0.01"))),
+        "deposit_held": str(deposit_held.quantize(Decimal("0.01"))),
+        "max_refundable_amount": str(deposit_held.quantize(Decimal("0.01"))),
+        "status": tenancy.status,
+    }
+
+
 @transaction.atomic
 def end_tenancy(
     *,
     owner,
     tenancy_id,
     move_out_date=None,
+    settle_deposit=False,
+    deductions=None,
+    refund_amount=None,
+    refund_reference=None,
 ):
-    """End an active tenancy and record actual move-out."""
+    """
+    End an active tenancy and record actual move-out.
+    Optionally settles the security deposit: records itemised deductions
+    and executes net refund via PaymentRefund and reversal services.
+    Enforces: Total deductions + completed refunds <= effective deposit received.
+    """
 
     property, tenancy = _get_locked_property_and_tenancy(
         tenancy_id=tenancy_id
@@ -437,6 +503,116 @@ def end_tenancy(
         )
 
     move_out_date = move_out_date or timezone.localdate()
+
+    if settle_deposit:
+        from django.db.models import Sum
+        from apps.rent.models import (
+            Payment,
+            PaymentAllocation,
+            PaymentRefund,
+            PaymentRefundStatus,
+            PaymentStatus,
+            RentCharge,
+            RentChargeStatus,
+            RentChargeType,
+        )
+        from apps.rent.services import create_refund
+
+        deposit_charges = RentCharge.objects.filter(
+            tenancy=tenancy, charge_type=RentChargeType.SECURITY_DEPOSIT
+        )
+        deposit_allocations = PaymentAllocation.objects.filter(
+            tenancy=tenancy,
+            rent_charge__in=deposit_charges,
+            payment__status=PaymentStatus.COMPLETED,
+        )
+        effective_deposit_received = sum(
+            (a.effective_amount for a in deposit_allocations), Decimal("0.00")
+        )
+
+        prior_refunds = (
+            PaymentRefund.objects.filter(
+                payment__tenancy=tenancy,
+                payment__allocations__rent_charge__in=deposit_charges,
+                status=PaymentRefundStatus.COMPLETED,
+            ).aggregate(total=Sum("amount"))["total"]
+            or Decimal("0.00")
+        )
+
+        total_deductions = Decimal("0.00")
+        deduction_items_text = []
+
+        if deductions:
+            for idx, item in enumerate(deductions):
+                try:
+                    amt = Decimal(str(item.get("amount", "0"))).quantize(Decimal("0.01"))
+                except Exception:
+                    raise TenancyStateError({"deductions": f"Invalid amount in deduction item #{idx + 1}."})
+
+                if amt <= Decimal("0.00"):
+                    raise TenancyStateError({"deductions": f"Deduction amount must be strictly greater than zero in item #{idx + 1}."})
+
+                reason = str(item.get("reason") or "").strip()
+                if not reason:
+                    raise TenancyStateError({"deductions": f"Reason is required for deduction item #{idx + 1}."})
+
+                total_deductions += amt
+                deduction_items_text.append(f"{reason} (₹{amt})")
+
+        refund_val = Decimal(str(refund_amount or "0.00")).quantize(Decimal("0.01"))
+        if refund_val < Decimal("0.00"):
+            raise TenancyStateError({"settlement": "Refund amount cannot be negative."})
+
+        # Invariant check: deductions + prior refunds + new refund <= deposit received
+        if total_deductions + prior_refunds + refund_val > effective_deposit_received:
+            raise TenancyStateError({
+                "settlement": (
+                    f"Total deductions (₹{total_deductions}) and refund (₹{refund_val}) "
+                    f"exceed effective deposit held (₹{effective_deposit_received - prior_refunds})."
+                )
+            })
+
+        # Option A Record for Deductions
+        if total_deductions > Decimal("0.00"):
+            summary_text = "; ".join(deduction_items_text)
+            deduction_desc = f"Move-out deductions: {summary_text} [Approved by {owner.email} on {move_out_date}]"[:255]
+            RentCharge.objects.create(
+                tenancy=tenancy,
+                charge_type=RentChargeType.MAINTENANCE,
+                billing_period_start=move_out_date,
+                billing_period_end=move_out_date,
+                due_date=move_out_date,
+                amount=total_deductions,
+                status=RentChargeStatus.PAID,
+                description=deduction_desc,
+            )
+
+        # Process Refund if requested
+        if refund_val > Decimal("0.00"):
+            dep_payment = Payment.objects.filter(
+                tenancy=tenancy,
+                allocations__rent_charge__in=deposit_charges,
+                status=PaymentStatus.COMPLETED,
+            ).first()
+            if not dep_payment:
+                dep_payment = Payment.objects.filter(
+                    tenancy=tenancy, status=PaymentStatus.COMPLETED
+                ).first()
+
+            if not dep_payment:
+                raise TenancyStateError({
+                    "settlement": "Cannot process refund: no completed deposit payment found for this tenancy."
+                })
+
+            refund_reason = f"Checkout deposit settlement: Refund ₹{refund_val} (Deductions: ₹{total_deductions})"
+            create_refund(
+                user=owner,
+                payment_id=dep_payment.id,
+                amount=refund_val,
+                reason=refund_reason[:255],
+                refund_reference=refund_reference,
+                status=PaymentRefundStatus.COMPLETED,
+            )
 
     tenancy.actual_move_out_date = move_out_date
     tenancy.status = TenancyStatus.ENDED

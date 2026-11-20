@@ -1,10 +1,15 @@
 import React, { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useDocuments, useTenancyDetail } from '../../hooks/useTenantWorkspace'
+import {
+  useDocuments,
+  useTenancyDetail,
+  useTenantPayments,
+  useTenantRentCharges,
+  useTenantSecurityDeposits,
+} from '../../hooks/useTenantWorkspace'
 import documentService from '../../services/document.service'
 import {
   Alert,
-  Badge,
   Button,
   EmptyState,
   Skeleton,
@@ -18,56 +23,289 @@ import {
 } from '../../utils/application'
 import { getMediaUrl } from '../../utils/imageUrl'
 import {
-  calculateContractDurationLabel,
-  calculateTenancyProgress,
   DOCUMENT_TYPE_LABELS,
   formatFileSize,
   getTenancyStatusMeta,
 } from '../../utils/tenancy'
 import type { DocumentItem } from '../../types/document'
+import type { PaymentItem, RentChargeItem } from '../../types/rent'
+
+type LedgerFilter = 'all' | 'rent' | 'deposit' | 'payments'
+
+interface LedgerEntry {
+  id: string
+  date: string
+  dateRaw: string
+  timestamp: number
+  type: 'rent' | 'deposit' | 'payment'
+  title: string
+  subtitle: string
+  charged: number | null
+  paid: number | null
+  balance: number
+  status: 'due' | 'overdue' | 'paid'
+  statusLabel: string
+  payment?: PaymentItem
+}
+
+/**
+ * Helper to compute merged chronological ledger with running balance.
+ */
+function computeTenancyLedger(
+  charges: RentChargeItem[],
+  payments: PaymentItem[],
+  tenancySecurityDeposit?: string,
+  tenancyStartDate?: string
+): LedgerEntry[] {
+  const entries: Omit<LedgerEntry, 'balance'>[] = []
+  const today = new Date().toISOString().split('T')[0]
+
+  // 1. Rent charges
+  for (const chg of charges) {
+    if (chg.charge_type === 'rent') {
+      const isOverdue =
+        chg.is_overdue ||
+        (parseFloat(chg.outstanding_amount || '0') > 0 && chg.due_date && chg.due_date < today)
+      const isPaid = chg.status === 'paid' || parseFloat(chg.outstanding_amount || '0') === 0
+
+      let periodLabel = ''
+      if (chg.billing_period_start) {
+        const d = new Date(chg.billing_period_start)
+        periodLabel = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      }
+
+      entries.push({
+        id: `charge-${chg.id}`,
+        date: formatDate(chg.due_date || chg.created_at),
+        dateRaw: chg.due_date || chg.created_at,
+        timestamp: new Date(chg.due_date || chg.created_at).getTime(),
+        type: 'rent',
+        title: 'Rent charge',
+        subtitle: periodLabel || 'Monthly schedule',
+        charged: parseFloat(chg.amount || '0'),
+        paid: null,
+        status: isPaid ? 'paid' : isOverdue ? 'overdue' : 'due',
+        statusLabel: isPaid ? 'Paid' : isOverdue ? 'Overdue' : 'Due',
+      })
+    }
+  }
+
+  // 2. Security deposit charges
+  const depositCharges = charges.filter((c) => c.charge_type === 'security_deposit')
+  if (depositCharges.length > 0) {
+    for (const dep of depositCharges) {
+      const isOverdue =
+        dep.is_overdue ||
+        (parseFloat(dep.outstanding_amount || '0') > 0 && dep.due_date && dep.due_date < today)
+      const isPaid = dep.status === 'paid' || parseFloat(dep.outstanding_amount || '0') === 0
+
+      entries.push({
+        id: `charge-${dep.id}`,
+        date: formatDate(dep.due_date || dep.created_at),
+        dateRaw: dep.due_date || dep.created_at,
+        timestamp: new Date(dep.due_date || dep.created_at).getTime(),
+        type: 'deposit',
+        title: 'Security deposit',
+        subtitle: 'One-time, refundable',
+        charged: parseFloat(dep.amount || '0'),
+        paid: null,
+        status: isPaid ? 'paid' : isOverdue ? 'overdue' : 'due',
+        statusLabel: isPaid ? 'Paid' : isOverdue ? 'Overdue' : 'Due',
+      })
+    }
+  } else if (tenancySecurityDeposit && parseFloat(tenancySecurityDeposit) > 0) {
+    // If deposit charge is not yet created in RentCharge, record agreed deposit obligation
+    const dateStr = tenancyStartDate || today
+    entries.push({
+      id: 'deposit-obligation',
+      date: formatDate(dateStr),
+      dateRaw: dateStr,
+      timestamp: new Date(dateStr).getTime(),
+      type: 'deposit',
+      title: 'Security deposit',
+      subtitle: 'One-time, refundable',
+      charged: parseFloat(tenancySecurityDeposit),
+      paid: null,
+      status: 'due',
+      statusLabel: 'Due',
+    })
+  }
+
+  // 3. Payment receipts
+  for (const pmt of payments) {
+    if (pmt.status !== 'failed') {
+      const pmtDate = pmt.paid_at || pmt.created_at
+      const methodDisplay = pmt.payment_method_display || pmt.payment_method.toUpperCase()
+      const refDisplay = pmt.transaction_reference ? ` · ref ${pmt.transaction_reference}` : ''
+
+      entries.push({
+        id: `payment-${pmt.id}`,
+        date: formatDate(pmtDate),
+        dateRaw: pmtDate,
+        timestamp: new Date(pmtDate).getTime() + 1, // Charges precede payments on identical dates
+        type: 'payment',
+        title: 'Payment',
+        subtitle: `${methodDisplay}${refDisplay}`,
+        charged: null,
+        paid: parseFloat(pmt.amount || '0'),
+        status: 'paid',
+        statusLabel: 'Paid',
+        payment: pmt,
+      })
+    }
+  }
+
+  // Sort chronological ascending (oldest first) to compute running balance
+  entries.sort((a, b) => a.timestamp - b.timestamp)
+
+  let runningBalance = 0
+  const result: LedgerEntry[] = []
+
+  for (const item of entries) {
+    if (item.charged) {
+      runningBalance += item.charged
+    }
+    if (item.paid) {
+      runningBalance = Math.max(0, runningBalance - item.paid)
+    }
+    result.push({
+      ...item,
+      balance: runningBalance,
+    })
+  }
+
+  // Return newest first
+  return result.reverse()
+}
 
 /**
  * TenantTenancyDetailPage
- * Compact Tenant Tenancy Detail view at `/app/tenant/tenancy/:tenancyId`,
- * matching the Owner Tenancy Detail layout.
+ * Read-only Tenant Tenancy view at `/app/tenant/tenancy/:tenancyId`.
+ * Presents top-to-bottom hierarchy with summary metrics, read-only payments ledger,
+ * documents list, and rental terms.
  */
 export const TenantTenancyDetailPage: React.FC = () => {
   const { tenancyId } = useParams<{ tenancyId: string }>()
   const navigate = useNavigate()
   const { addToast } = useToast()
 
+  const [activeFilter, setActiveFilter] = useState<LedgerFilter>('all')
   const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null)
 
+  // 1. Core Tenancy Detail
   const {
     data: detailResponse,
-    isLoading,
-    isError,
-    refetch,
+    isLoading: isLoadingTenancy,
+    isError: isErrorTenancy,
+    refetch: refetchTenancy,
   } = useTenancyDetail(tenancyId)
 
   const tenancy = detailResponse?.data
 
+  // 2. Tenancy Documents
   const {
     data: documentsData,
     isLoading: documentsLoading,
     isError: documentsError,
   } = useDocuments({ page: 1, page_size: 100 })
 
-  const { rentalAgreements, otherTenancyDocuments } = useMemo(() => {
-    if (!tenancy) {
-      return {
-        rentalAgreements: [] as DocumentItem[],
-        otherTenancyDocuments: [] as DocumentItem[],
-      }
-    }
+  const tenancyDocuments = useMemo(() => {
+    if (!tenancy) return []
     const allDocs = documentsData?.results ?? []
-    const linked = allDocs.filter((doc) => doc.tenancy === tenancy.id)
-    return {
-      rentalAgreements: linked.filter((doc) => doc.document_type === 'rental_agreement'),
-      otherTenancyDocuments: linked.filter((doc) => doc.document_type !== 'rental_agreement'),
-    }
+    return allDocs.filter((doc) => doc.tenancy === tenancy.id)
   }, [documentsData, tenancy])
 
+  // 3. Read-Only Rent Charges, Payments, and Deposits for this Tenancy
+  const { data: rentChargesData, isLoading: isLoadingCharges } = useTenantRentCharges(tenancyId)
+  const { data: tenancyPaymentsData, isLoading: isLoadingPayments } = useTenantPayments(tenancyId)
+  const { data: tenancyDeposits = [], isLoading: isLoadingDeposits } = useTenantSecurityDeposits(tenancyId)
+
+  const rawCharges = useMemo(() => rentChargesData?.results ?? [], [rentChargesData])
+  const rawPayments = useMemo(() => tenancyPaymentsData?.results ?? [], [tenancyPaymentsData])
+  const depositRecord = tenancyDeposits[0]
+
+  // Compute merged ledger
+  const fullLedger = useMemo(() => {
+    if (!tenancy) return []
+    return computeTenancyLedger(
+      rawCharges,
+      rawPayments,
+      tenancy.security_deposit,
+      tenancy.start_date || undefined
+    )
+  }, [rawCharges, rawPayments, tenancy])
+
+  // Filter ledger client-side
+  const filteredLedger = useMemo(() => {
+    if (activeFilter === 'all') return fullLedger
+    return fullLedger.filter((item) => {
+      if (activeFilter === 'rent') return item.type === 'rent'
+      if (activeFilter === 'deposit') return item.type === 'deposit'
+      if (activeFilter === 'payments') return item.type === 'payment'
+      return true
+    })
+  }, [fullLedger, activeFilter])
+
+  // Summary strip financial aggregates
+  const {
+    totalOutstanding,
+    overdueRent,
+    totalPaid,
+    depositReceived,
+    depositPending,
+  } = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]
+
+    let overdueSum = 0
+    let outstandingSum = 0
+
+    for (const chg of rawCharges) {
+      const out = parseFloat(chg.outstanding_amount || '0')
+      if (out > 0) {
+        outstandingSum += out
+        if (chg.charge_type === 'rent') {
+          const isOverdue = chg.is_overdue || (chg.due_date && chg.due_date < today)
+          if (isOverdue) {
+            overdueSum += out
+          }
+        }
+      }
+    }
+
+    // If no deposit charge exists yet, add agreed deposit to outstanding if unpaid
+    const hasDepositCharge = rawCharges.some((c) => c.charge_type === 'security_deposit')
+    if (!hasDepositCharge && tenancy?.security_deposit) {
+      outstandingSum += parseFloat(tenancy.security_deposit)
+    }
+
+    let paidSum = 0
+    for (const pmt of rawPayments) {
+      if (pmt.status === 'completed') {
+        paidSum += parseFloat(pmt.amount || '0')
+      }
+    }
+
+    const recDeposit =
+      depositRecord?.deposit_received ||
+      rawCharges.find((c) => c.charge_type === 'security_deposit')?.paid_amount ||
+      '0.00'
+
+    const pendDeposit =
+      depositRecord?.outstanding_deposit ||
+      rawCharges.find((c) => c.charge_type === 'security_deposit')?.outstanding_amount ||
+      tenancy?.security_deposit ||
+      '0.00'
+
+    return {
+      totalOutstanding: outstandingSum,
+      overdueRent: overdueSum,
+      totalPaid: paidSum,
+      depositReceived: recDeposit,
+      depositPending: parseFloat(pendDeposit || '0'),
+    }
+  }, [rawCharges, rawPayments, depositRecord, tenancy])
+
+  // Handle document download
   const handleDownloadDocument = async (doc: DocumentItem) => {
     if (downloadingDocId) return
     setDownloadingDocId(doc.id)
@@ -84,40 +322,39 @@ export const TenantTenancyDetailPage: React.FC = () => {
     }
   }
 
-  if (isLoading) {
+  if (isLoadingTenancy) {
     return (
-      <div className="space-y-4 pb-10">
+      <div className="max-w-[1200px] mx-auto space-y-5 pb-10">
         <Skeleton className="h-5 w-36" />
-        <Skeleton className="h-36 w-full rounded-xl" />
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <Skeleton className="lg:col-span-7 h-64 rounded-xl" />
-          <Skeleton className="lg:col-span-5 h-64 rounded-xl" />
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <Skeleton className="lg:col-span-2 h-96 rounded-xl" />
+          <Skeleton className="h-96 rounded-xl" />
         </div>
       </div>
     )
   }
 
-  if (isError || !tenancy) {
+  if (isErrorTenancy || !tenancy) {
     return (
-      <div className="space-y-4 pb-10">
-        <Link
-          to="/app/tenant/tenancy"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#408A71] hover:text-[#34745C]"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          <span>Back to My Tenancy</span>
-        </Link>
+      <div className="max-w-[1200px] mx-auto space-y-5 pb-10">
+        <nav aria-label="Breadcrumb" className="text-xs sm:text-sm font-normal text-[#6B7280] flex items-center gap-1.5">
+          <Link to="/app/tenant/tenancy" className="hover:text-[#408A71] transition-colors">
+            My Tenancy
+          </Link>
+          <span className="text-[#9CA3AF]">/</span>
+          <span className="text-[#111827] font-medium">Tenancy Detail</span>
+        </nav>
 
         <div className="rounded-xl border border-[#E5E7EB] bg-white p-8">
           <EmptyState
             size="md"
             title="Tenancy not found"
-            description="We could not load this tenancy record."
+            description="We could not load your tenancy record. It may not exist or access has expired."
             action={
               <div className="flex items-center gap-2.5">
-                <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                <Button variant="outline" size="sm" onClick={() => void refetchTenancy()}>
                   Retry
                 </Button>
                 <Button variant="primary" size="sm" onClick={() => navigate('/app/tenant/tenancy')}>
@@ -132,31 +369,30 @@ export const TenantTenancyDetailPage: React.FC = () => {
   }
 
   const statusMeta = getTenancyStatusMeta(tenancy.status)
-  const durationLabel = calculateContractDurationLabel(tenancy.start_date, tenancy.end_date)
-  const progress =
-    tenancy.status === 'active' || tenancy.status === 'confirmed'
-      ? calculateTenancyProgress(tenancy.start_date, tenancy.end_date)
-      : null
+  const moveInDateStr = tenancy.actual_move_in_date
+    ? formatDate(tenancy.actual_move_in_date)
+    : formatDate(tenancy.start_date)
+  const endDateStr = tenancy.end_date ? formatDate(tenancy.end_date) : 'Open-ended'
 
   return (
-    <div className="space-y-4 pb-10">
-      {/* 1. Breadcrumb & ID */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="max-w-[1200px] mx-auto space-y-5 pb-10">
+      {/* 1. Breadcrumb: "My Tenancy / {propertyName}" */}
+      <nav aria-label="Breadcrumb" className="text-xs sm:text-sm font-normal text-[#6B7280] flex items-center gap-1.5">
         <Link
           to="/app/tenant/tenancy"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#408A71] hover:text-[#34745C]"
+          className="hover:text-[#408A71] transition-colors"
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          <span>Back to My Tenancy</span>
+          My Tenancy
         </Link>
-      </div>
+        <span className="text-[#9CA3AF]">/</span>
+        <span className="text-[#111827] font-medium">{tenancy.property_title || 'Tenancy Detail'}</span>
+      </nav>
 
-      {/* 2. Compact Top Overview Header with Property Photo */}
-      <div className="rounded-xl border border-[#E5E7EB] bg-white p-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch">
-          <div className="w-full sm:w-44 h-32 sm:h-auto sm:min-h-[108px] shrink-0 rounded-lg overflow-hidden border border-[#E5E7EB] bg-[#F4FAF7] flex flex-col items-center justify-center text-center">
+      {/* 2. Header card (single card, flex row, wraps on small screens) */}
+      <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          {/* Property Thumbnail (88x88, rounded 12px) */}
+          <div className="w-20 h-20 sm:w-[88px] sm:h-[88px] rounded-xl shrink-0 overflow-hidden border border-[#E5E7EB] bg-[#ECF5F2] flex items-center justify-center">
             {tenancy.property_image_url ? (
               <img
                 src={getMediaUrl(tenancy.property_image_url)}
@@ -164,275 +400,437 @@ export const TenantTenancyDetailPage: React.FC = () => {
                 className="w-full h-full object-cover object-center"
               />
             ) : (
-              <div className="p-3 flex flex-col items-center text-[#408A71]">
-                <svg className="w-6 h-6 opacity-75 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.6">
+              <div className="flex flex-col items-center text-[#408A71]">
+                <svg className="w-7 h-7 opacity-75 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.6">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                   />
                 </svg>
-                <span className="text-[11px] font-medium">No photo</span>
+                <span className="text-[10px] font-medium">No photo</span>
               </div>
             )}
           </div>
 
-          <div className="flex-1 min-w-0 flex flex-col justify-between gap-2.5">
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-              <div className="space-y-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-lg font-medium tracking-tight text-[#111827] mb-0 truncate">
-                    {tenancy.property_title || 'Property Tenancy'}
-                  </h1>
-                  <Badge variant={statusMeta.variant} size="sm" dot>
-                    {statusMeta.label}
-                  </Badge>
-                </div>
-                {tenancy.property_address && (
-                  <p className="text-xs font-normal text-[#6B7280] truncate">
-                    {tenancy.property_address}
-                  </p>
-                )}
-                <p className="text-xs font-normal text-[#4B5563]">{statusMeta.description}</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/app/tenant/documents')}
-                >
-                  All Documents
-                </Button>
-                {tenancy.application_id && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      navigate(`/app/tenant/applications/${tenancy.application_id}`)
-                    }
-                  >
-                    Source Application
-                  </Button>
-                )}
-              </div>
+          {/* Middle: property name + "Active tenancy" status pill, address below, moved-in line */}
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl font-medium tracking-tight text-[#111827] mb-0">
+                {tenancy.property_title || 'Property Tenancy'}
+              </h1>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#ECF5F2] text-[#408A71]">
+                {statusMeta.label === 'Active' ? 'Active tenancy' : statusMeta.label}
+              </span>
             </div>
-
-            {progress && (
-              <div className="pt-2 border-t border-[#F3F4F6] space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-normal text-[#6B7280]">Agreement Progress</span>
-                  <span className="font-medium text-[#111827] tabular-nums">
-                    {progress.percent}% ({progress.daysRemaining}{' '}
-                    {progress.daysRemaining === 1 ? 'day' : 'days'} remaining)
-                  </span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-[#E5E7EB] overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-[#408A71] transition-all"
-                    style={{ width: `${progress.percent}%` }}
-                  />
-                </div>
-              </div>
+            {tenancy.property_address && (
+              <p className="text-xs font-normal text-[#6B7280] truncate">
+                {tenancy.property_address}
+              </p>
             )}
+            <p className="text-xs font-normal text-[#6B7280]">
+              Moved in {moveInDateStr} · {endDateStr}
+            </p>
           </div>
+        </div>
+
+        {/* Right: two outline buttons, "All documents" and "Source application" */}
+        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/app/tenant/documents')}
+            className="border-[#408A71] text-[#408A71] hover:bg-[#ECF5F2]"
+          >
+            All documents
+          </Button>
+          {tenancy.application_id && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/app/tenant/applications/${tenancy.application_id}`)}
+              className="border-[#408A71] text-[#408A71] hover:bg-[#ECF5F2]"
+            >
+              Source application
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* 3. Main Two-Column Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* Left Column: Rental Terms & Tenancy Documents */}
-        <div className="lg:col-span-7 space-y-4">
-          <section className="rounded-xl border border-[#E5E7EB] bg-white p-4 space-y-3">
-            <h2 className="text-sm font-medium text-[#111827]">Rental Terms</h2>
+      {/* 3. Summary strip: ONE card with 4 equal columns separated by thin dividers */}
+      <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#E5E7EB]">
+        {/* Col 1: Total outstanding */}
+        <div className="px-0 sm:px-4 first:pl-0 last:pr-0 py-3 sm:py-0 space-y-1">
+          <span className="text-xs font-normal text-[#6B7280]">Total outstanding</span>
+          <p className={`text-xl font-medium tabular-nums ${totalOutstanding > 0 ? 'text-rose-600' : 'text-[#111827]'}`}>
+            {formatINR(totalOutstanding)}
+          </p>
+          {overdueRent > 0 ? (
+            <p className="text-xs font-medium text-rose-600">
+              Includes {formatINR(overdueRent)} overdue rent
+            </p>
+          ) : (
+            <p className="text-xs font-normal text-[#6B7280]">
+              {totalOutstanding > 0 ? 'Due for payment' : 'Up to date'}
+            </p>
+          )}
+        </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] px-3 py-2">
-                <p className="text-[11px] font-normal text-[#6B7280]">Monthly Rent</p>
-                <p className="mt-0.5 text-sm font-medium text-[#111827] tabular-nums">
-                  {formatINR(tenancy.monthly_rent)}/mo
-                </p>
-              </div>
+        {/* Col 2: Monthly rent */}
+        <div className="px-0 sm:px-4 first:pl-0 last:pr-0 py-3 sm:py-0 space-y-1">
+          <span className="text-xs font-normal text-[#6B7280]">Monthly rent</span>
+          <p className="text-xl font-medium text-[#111827] tabular-nums">
+            {formatINR(tenancy.monthly_rent)}
+          </p>
+          <p className="text-xs font-normal text-[#6B7280]">
+            Due day {tenancy.rent_due_day || 1} of every month
+          </p>
+        </div>
 
-              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] px-3 py-2">
-                <p className="text-[11px] font-normal text-[#6B7280]">Security Deposit</p>
-                <p className="mt-0.5 text-sm font-medium text-[#111827] tabular-nums">
-                  {formatINR(tenancy.security_deposit)}
-                </p>
-              </div>
+        {/* Col 3: Total paid so far */}
+        <div className="px-0 sm:px-4 first:pl-0 last:pr-0 py-3 sm:py-0 space-y-1">
+          <span className="text-xs font-normal text-[#6B7280]">Total paid so far</span>
+          <p className="text-xl font-medium text-[#111827] tabular-nums">
+            {formatINR(totalPaid)}
+          </p>
+          <p className="text-xs font-normal text-[#6B7280]">
+            {totalPaid > 0 ? 'Recorded payments' : 'No payments recorded yet'}
+          </p>
+        </div>
 
-              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] px-3 py-2">
-                <p className="text-[11px] font-normal text-[#6B7280]">Start Date</p>
-                <p className="mt-0.5 font-medium text-[#111827]">
-                  {formatDate(tenancy.start_date)}
-                </p>
-              </div>
+        {/* Col 4: Security deposit */}
+        <div className="px-0 sm:px-4 first:pl-0 last:pr-0 py-3 sm:py-0 space-y-1">
+          <span className="text-xs font-normal text-[#6B7280]">Security deposit</span>
+          <p className="text-xl font-medium text-[#111827] tabular-nums">
+            {formatINR(depositReceived)} of {formatINR(tenancy.security_deposit)}
+          </p>
+          {depositPending > 0 ? (
+            <p className="text-xs font-medium text-amber-700">
+              {formatINR(depositPending)} to pay
+            </p>
+          ) : (
+            <p className="text-xs font-medium text-[#408A71]">Fully paid</p>
+          )}
+        </div>
+      </div>
 
-              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] px-3 py-2">
-                <p className="text-[11px] font-normal text-[#6B7280]">End Date</p>
-                <p className="mt-0.5 font-medium text-[#111827]">
-                  {tenancy.end_date ? formatDate(tenancy.end_date) : 'Open-ended'}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] px-3 py-2">
-                <p className="text-[11px] font-normal text-[#6B7280]">Contract Duration</p>
-                <p className="mt-0.5 font-medium text-[#111827]">{durationLabel}</p>
-              </div>
-
-              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] px-3 py-2">
-                <p className="text-[11px] font-normal text-[#6B7280]">Rent Due Day</p>
-                <p className="mt-0.5 font-medium text-[#111827]">
-                  {tenancy.rent_due_day ? `Day ${tenancy.rent_due_day} of month` : '—'}
-                </p>
-              </div>
+      {/* 4. Two-column grid: left 2fr, right 1fr (min 280px), gap 20px */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {/* LEFT COLUMN (2fr) */}
+        <div className="lg:col-span-2 space-y-5">
+          {/* a) "Payments ledger" card */}
+          <section className="rounded-xl border border-[#E5E7EB] bg-white p-5 space-y-4">
+            <div>
+              <h2 className="text-base font-medium text-[#111827]">Payments ledger</h2>
+              <p className="text-xs font-normal text-[#6B7280] mt-0.5">
+                Every charge and payment for this tenancy, with a running balance.
+              </p>
             </div>
 
-            {tenancy.notes && (
-              <div className="rounded-lg border border-[#DCE8E2] bg-[#F4FAF7] px-3 py-2.5">
-                <h3 className="text-[11px] font-medium text-[#1A382A] mb-0.5">Agreement Notes</h3>
-                <p className="text-xs text-[#374151] whitespace-pre-wrap leading-relaxed">
-                  {tenancy.notes}
+            {/* Filter chips: All | Rent | Deposit | Payments */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {(['all', 'rent', 'deposit', 'payments'] as const).map((chip) => {
+                const isActive = activeFilter === chip
+                const labels = {
+                  all: 'All',
+                  rent: 'Rent',
+                  deposit: 'Deposit',
+                  payments: 'Payments',
+                }
+                return (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setActiveFilter(chip)}
+                    className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-[#ECF5F2] text-[#408A71] border border-[#408A71] font-medium'
+                        : 'bg-white text-[#6B7280] border border-[#E5E7EB] hover:text-[#111827] hover:border-gray-400 font-normal'
+                    }`}
+                  >
+                    {labels[chip]}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Table or Stacked List */}
+            {isLoadingCharges || isLoadingPayments || isLoadingDeposits ? (
+              <div className="space-y-2 py-4">
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+              </div>
+            ) : filteredLedger.length === 0 ? (
+              <div className="py-8 text-center border border-dashed border-[#E5E7EB] rounded-lg p-6 bg-[#F9FAFB]">
+                <p className="text-xs font-medium text-[#111827]">
+                  No charges or payments yet. Your first rent of {formatINR(tenancy.monthly_rent)} is due on {formatDate(tenancy.start_date)}.
                 </p>
               </div>
+            ) : (
+              <>
+                {/* Desktop view (min-width 720px table) */}
+                <div className="overflow-x-auto min-w-full hidden sm:block">
+                  <table className="min-w-[720px] w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#E5E7EB] text-[#6B7280]">
+                        <th className="py-2.5 px-3 font-normal">Date</th>
+                        <th className="py-2.5 px-3 font-normal">Description</th>
+                        <th className="py-2.5 px-3 text-right font-normal">Charged</th>
+                        <th className="py-2.5 px-3 text-right font-normal">Paid</th>
+                        <th className="py-2.5 px-3 text-right font-normal">Balance</th>
+                        <th className="py-2.5 px-3 text-right pr-3 font-normal">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F3F4F6] text-[#111827]">
+                      {filteredLedger.map((row) => {
+                        const statusPillClasses =
+                          row.status === 'overdue'
+                            ? 'bg-rose-50 text-rose-700'
+                            : row.status === 'due'
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-[#ECF5F2] text-[#408A71]'
+
+                        return (
+                          <tr key={row.id} className="hover:bg-[#F9FAFB] transition-colors">
+                            <td className="py-3 px-3 text-[#6B7280] whitespace-nowrap">
+                              {row.date}
+                            </td>
+                            <td className="py-3 px-3">
+                              <p className="font-medium text-[#111827] leading-tight">
+                                {row.title}
+                              </p>
+                              <p className="text-[11px] text-[#6B7280] mt-0.5 font-normal">
+                                {row.subtitle}
+                              </p>
+                            </td>
+                            <td className="py-3 px-3 text-right tabular-nums font-normal text-[#111827]">
+                              {row.charged ? formatINR(row.charged) : '–'}
+                            </td>
+                            <td className="py-3 px-3 text-right tabular-nums font-normal text-[#408A71]">
+                              {row.paid ? formatINR(row.paid) : '–'}
+                            </td>
+                            <td className="py-3 px-3 text-right tabular-nums font-medium text-[#111827]">
+                              {formatINR(row.balance)}
+                            </td>
+                            <td className="py-3 px-3 text-right pr-3 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${statusPillClasses}`}
+                              >
+                                {row.statusLabel}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile view (<640px stacked cards) */}
+                <div className="block sm:hidden space-y-3">
+                  {filteredLedger.map((row) => {
+                    const statusPillClasses =
+                      row.status === 'overdue'
+                        ? 'bg-rose-50 text-rose-700'
+                        : row.status === 'due'
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-[#ECF5F2] text-[#408A71]'
+
+                    return (
+                      <div
+                        key={row.id}
+                        className="rounded-xl border border-[#E5E7EB] p-3.5 bg-white space-y-2.5 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[#6B7280]">{row.date}</span>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${statusPillClasses}`}
+                          >
+                            {row.statusLabel}
+                          </span>
+                        </div>
+
+                        <div>
+                          <p className="font-medium text-[#111827] text-sm">{row.title}</p>
+                          <p className="text-[11px] text-[#6B7280] font-normal">{row.subtitle}</p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#F3F4F6] text-center">
+                          <div>
+                            <p className="text-[10px] text-[#6B7280] font-normal">Charged</p>
+                            <p className="font-normal text-[#111827] tabular-nums mt-0.5">
+                              {row.charged ? formatINR(row.charged) : '–'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-[#6B7280] font-normal">Paid</p>
+                            <p className="font-normal text-[#408A71] tabular-nums mt-0.5">
+                              {row.paid ? formatINR(row.paid) : '–'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-[#6B7280] font-normal">Balance</p>
+                            <p className="font-medium text-[#111827] tabular-nums mt-0.5">
+                              {formatINR(row.balance)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
+
+            {/* Footer row inside the card with a small "Status guide" showing the three pills */}
+            <div className="pt-3 border-t border-[#F3F4F6] flex items-center gap-2.5 text-xs text-[#6B7280] flex-wrap">
+              <span className="font-normal">Status guide:</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700">
+                Due
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 text-rose-700">
+                Overdue
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#ECF5F2] text-[#408A71]">
+                Paid
+              </span>
+            </div>
           </section>
 
-          <section className="rounded-xl border border-[#E5E7EB] bg-white p-4 space-y-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-medium text-[#111827]">Rental Agreement &amp; Documents</h2>
-              <Link
-                to="/app/tenant/documents"
-                className="text-xs font-medium text-[#408A71] hover:text-[#34745C]"
-              >
-                Documents →
-              </Link>
-            </div>
+          {/* b) "Rental agreement & documents" card */}
+          <section className="rounded-xl border border-[#E5E7EB] bg-white p-5 space-y-3">
+            <h2 className="text-base font-medium text-[#111827]">Rental agreement &amp; documents</h2>
 
             {documentsError && (
               <Alert variant="error">Unable to load tenancy documents right now.</Alert>
             )}
 
             {documentsLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-12 w-full rounded-lg" />
-                <Skeleton className="h-12 w-full rounded-lg" />
+              <div className="space-y-2 py-2">
+                <Skeleton className="h-10 w-full rounded-lg" />
+                <Skeleton className="h-10 w-full rounded-lg" />
               </div>
-            ) : rentalAgreements.length > 0 || otherTenancyDocuments.length > 0 ? (
-              <div className="space-y-2">
-                {rentalAgreements.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="rounded-lg border border-[#CBE7DC] bg-[#F4FAF7] px-3 py-2.5 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <Badge variant="success" size="sm">
-                        Rental Agreement
-                      </Badge>
-                      <p className="mt-1 text-xs font-medium text-[#111827] truncate">
-                        {doc.title || doc.original_filename}
-                      </p>
-                      <p className="text-[11px] text-[#6B7280]">
-                        {formatFileSize(doc.file_size_bytes)} · Uploaded {formatDate(doc.created_at)}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      isLoading={downloadingDocId === doc.id}
-                      onClick={() => void handleDownloadDocument(doc)}
-                    >
-                      Download
-                    </Button>
-                  </div>
-                ))}
+            ) : tenancyDocuments.length > 0 ? (
+              <div className="space-y-2.5">
+                {tenancyDocuments.map((doc) => {
+                  const typeLabel = DOCUMENT_TYPE_LABELS[doc.document_type] ?? doc.document_type
+                  const isDownloading = downloadingDocId === doc.id
 
-                {otherTenancyDocuments.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[#111827] truncate">
-                        {doc.title || doc.original_filename}
-                      </p>
-                      <p className="text-[11px] text-[#6B7280]">
-                        {DOCUMENT_TYPE_LABELS[doc.document_type] ?? doc.document_type} ·{' '}
-                        {formatFileSize(doc.file_size_bytes)}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      isLoading={downloadingDocId === doc.id}
-                      onClick={() => void handleDownloadDocument(doc)}
+                  return (
+                    <div
+                      key={doc.id}
+                      className="rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs"
                     >
-                      Download
-                    </Button>
-                  </div>
-                ))}
+                      <div className="min-w-0">
+                        <p className="font-medium text-[#111827] truncate">
+                          {doc.title || doc.original_filename}
+                        </p>
+                        <p className="text-[11px] text-[#6B7280] mt-0.5 font-normal">
+                          {typeLabel} · {formatFileSize(doc.file_size_bytes)} · Uploaded {formatDate(doc.created_at)}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isDownloading}
+                        onClick={() => void handleDownloadDocument(doc)}
+                        className="border-[#408A71] text-[#408A71] hover:bg-[#ECF5F2] shrink-0"
+                      >
+                        {isDownloading ? 'Downloading...' : 'Download'}
+                      </Button>
+                    </div>
+                  )
+                })}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-[#D1D5DB] bg-[#F9FAFB] p-3.5 text-center">
+              <div className="rounded-xl border border-dashed border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center">
                 <p className="text-xs font-medium text-[#111827]">No rental agreement uploaded yet</p>
-                <p className="mt-0.5 text-[11px] text-[#6B7280]">
-                  Once a rental agreement document is attached, you can download it here.
+                <p className="mt-1 text-xs text-[#6B7280]">
+                  Once your owner attaches it, you can download it here.
                 </p>
               </div>
             )}
           </section>
         </div>
 
-        {/* Right Column: Status & Milestones */}
-        <aside className="lg:col-span-5 space-y-4">
-          <section className="rounded-xl border border-[#E5E7EB] bg-white p-4 space-y-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-medium text-[#111827]">Tenancy Status</h2>
-              <Badge variant={statusMeta.variant} size="sm" dot>
-                {statusMeta.label}
-              </Badge>
+        {/* RIGHT COLUMN (1fr, min 280px, stacked cards) */}
+        <div className="space-y-5">
+          {/* a) "Rental terms" card */}
+          <section className="rounded-xl border border-[#E5E7EB] bg-white p-5 space-y-1">
+            <h2 className="text-base font-medium text-[#111827] mb-2">Rental terms</h2>
+            <div className="divide-y divide-[#F3F4F6] text-xs">
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6] first:border-t-0">
+                <span className="font-normal text-[#6B7280]">Start date</span>
+                <span className="font-medium text-[#111827] text-right">
+                  {formatDate(tenancy.start_date)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6]">
+                <span className="font-normal text-[#6B7280]">End date</span>
+                <span className="font-medium text-[#111827] text-right">{endDateStr}</span>
+              </div>
+
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6]">
+                <span className="font-normal text-[#6B7280]">Rent due</span>
+                <span className="font-medium text-[#111827] text-right">
+                  Day {tenancy.rent_due_day || 1} of month
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6]">
+                <span className="font-normal text-[#6B7280]">Monthly rent</span>
+                <span className="font-medium text-[#111827] text-right tabular-nums">
+                  {formatINR(tenancy.monthly_rent)}
+                </span>
+              </div>
             </div>
-            <p className="text-xs text-[#4B5563]">{statusMeta.description}</p>
+
+            {tenancy.notes && (
+              <div className="mt-3 pt-3 border-t border-[#F3F4F6]">
+                <span className="text-[11px] font-normal text-[#6B7280]">Agreement notes</span>
+                <p className="mt-1 text-xs text-[#111827] whitespace-pre-wrap leading-relaxed">
+                  {tenancy.notes}
+                </p>
+              </div>
+            )}
           </section>
 
-          <section className="rounded-xl border border-[#E5E7EB] bg-white p-4 space-y-2.5">
-            <h2 className="text-sm font-medium text-[#111827]">Tenancy Dates &amp; Milestones</h2>
-
-            <dl className="space-y-1.5 text-xs">
-              <div className="flex items-center justify-between gap-3 py-1.5 border-b border-[#F3F4F6]">
-                <dt className="font-normal text-[#6B7280]">Created</dt>
-                <dd className="font-medium text-[#111827]">{formatDateTime(tenancy.created_at)}</dd>
+          {/* b) "Key dates" card */}
+          <section className="rounded-xl border border-[#E5E7EB] bg-white p-5 space-y-1">
+            <h2 className="text-base font-medium text-[#111827] mb-2">Key dates</h2>
+            <div className="divide-y divide-[#F3F4F6] text-xs">
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6] first:border-t-0">
+                <span className="font-normal text-[#6B7280]">Created</span>
+                <span className="font-medium text-[#111827] text-right">
+                  {formatDateTime(tenancy.created_at)}
+                </span>
               </div>
 
-              <div className="flex items-center justify-between gap-3 py-1.5 border-b border-[#F3F4F6]">
-                <dt className="font-normal text-[#6B7280]">Actual Move-In Date</dt>
-                <dd className="font-medium text-[#111827]">
-                  {tenancy.actual_move_in_date
-                    ? formatDate(tenancy.actual_move_in_date)
-                    : 'Not yet recorded'}
-                </dd>
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6]">
+                <span className="font-normal text-[#6B7280]">Move-in</span>
+                <span className="font-medium text-[#111827] text-right">{moveInDateStr}</span>
               </div>
 
-              <div className="flex items-center justify-between gap-3 py-1.5 border-b border-[#F3F4F6]">
-                <dt className="font-normal text-[#6B7280]">Actual Move-Out Date</dt>
-                <dd className="font-medium text-[#111827]">
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6]">
+                <span className="font-normal text-[#6B7280]">Move-out</span>
+                <span className="font-medium text-[#111827] text-right">
                   {tenancy.actual_move_out_date
                     ? formatDate(tenancy.actual_move_out_date)
-                    : 'Not yet recorded'}
-                </dd>
+                    : 'Not recorded'}
+                </span>
               </div>
 
-              <div className="flex items-center justify-between gap-3 py-1.5">
-                <dt className="font-normal text-[#6B7280]">Last Updated</dt>
-                <dd className="font-medium text-[#111827]">{formatDateTime(tenancy.updated_at)}</dd>
+              <div className="flex items-center justify-between py-2.5 border-t border-[#F3F4F6]">
+                <span className="font-normal text-[#6B7280]">Last updated</span>
+                <span className="font-medium text-[#111827] text-right">
+                  {formatDateTime(tenancy.updated_at)}
+                </span>
               </div>
-            </dl>
+            </div>
           </section>
-        </aside>
+        </div>
       </div>
     </div>
   )
