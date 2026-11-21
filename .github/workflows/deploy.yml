@@ -13,6 +13,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to OCI Self-Hosted Runner
+    if: github.ref == 'refs/heads/develop'
     runs-on: [self-hosted, linux, ARM64]
     timeout-minutes: 15
 

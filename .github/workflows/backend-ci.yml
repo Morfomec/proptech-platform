@@ -112,5 +112,8 @@ jobs:
       - name: Lint frontend code
         run: npm run lint
 
+      - name: Validate TypeScript
+        run: npx tsc -b
+
       - name: Build frontend
         run: npm run build
