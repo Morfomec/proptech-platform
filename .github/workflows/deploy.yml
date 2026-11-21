@@ -54,7 +54,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
           cache: "pip"
           cache-dependency-path: "backend/requirements-lock.txt"
 
@@ -107,38 +107,66 @@ jobs:
   deploy:
     name: Deploy to OCI Self-Hosted Runner
     needs: [test, frontend-check]
+    if: github.ref == 'refs/heads/develop'
     runs-on: [self-hosted, linux, ARM64]
     timeout-minutes: 15
 
     steps:
-      - name: Update Production Repository
+      - name: Update Production Repository to Tested Commit
         run: |
+          set -euo pipefail
           cd /home/ubuntu/proptech-platform
-          git fetch origin develop
-          git reset --hard origin/develop
+          git fetch origin "${GITHUB_SHA}"
+          git reset --hard "${GITHUB_SHA}"
 
       - name: Update Backend Dependencies & Run Migrations
         run: |
+          set -euo pipefail
           cd /home/ubuntu/proptech-platform/backend
-          .venv/bin/pip install -r requirements-lock.txt
+          export PATH="$HOME/.local/bin:$PATH"
+          uv pip install --python .venv/bin/python -r requirements-lock.txt
           .venv/bin/python manage.py migrate --noinput
+
+      - name: Collect & Synchronize Static Files
+        run: |
+          set -euo pipefail
+          cd /home/ubuntu/proptech-platform/backend
           .venv/bin/python manage.py collectstatic --noinput
+          rsync -av --delete --chmod=D755,F644 staticfiles/ /var/www/proptech-static/
 
       - name: Build & Deploy Frontend
         run: |
+          set -euo pipefail
           cd /home/ubuntu/proptech-platform/frontend
           npm ci
           npm run build
-          rsync -a --delete dist/ /var/www/proptech-frontend/
+          rsync -av --delete --chmod=D755,F644 dist/ /var/www/proptech-frontend/
 
       - name: Reload Backend & Web Server
         run: |
+          set -euo pipefail
           sudo /bin/systemctl restart proptech-gunicorn.service
           sudo /usr/sbin/nginx -t
           sudo /bin/systemctl reload nginx.service
 
-      - name: Health Check
+      - name: Verify Services & API Health Check
         run: |
-          sleep 2
-          curl -f http://127.0.0.1:8000/api/docs/ || curl -f http://127.0.0.1:8000/admin/login/
-          echo "Deployment successfully completed and verified!"
+          set -euo pipefail
+          sleep 3
+
+          echo "Verifying Gunicorn service status..."
+          sudo /bin/systemctl status proptech-gunicorn.service --no-pager > /dev/null
+
+          echo "Verifying Nginx service status..."
+          sudo /bin/systemctl status nginx.service --no-pager > /dev/null
+
+          echo "Verifying Gunicorn direct backend response..."
+          curl -sSf -H "Host: api.proptech.domioo.in" -H "X-Forwarded-Proto: https" http://127.0.0.1:8000/api/docs/ > /dev/null
+
+          echo "Verifying Nginx frontend delivery (TLS validated)..."
+          curl -sSf --resolve proptech.domioo.in:443:127.0.0.1 https://proptech.domioo.in/ > /dev/null
+
+          echo "Verifying Nginx API proxy (TLS validated)..."
+          curl -sSf --resolve api.proptech.domioo.in:443:127.0.0.1 https://api.proptech.domioo.in/api/docs/ > /dev/null
+
+          echo "Production deployment successfully completed and verified!"
