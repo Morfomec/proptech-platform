@@ -725,6 +725,108 @@ a.text-primary-600:hover {
     border-color: rgba(110, 231, 183, 0.3) !important;
 }
 
+/* Header Platform Status Badge */
+.header-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    background-color: #EAF6F0;
+    border: 1px solid rgba(165, 224, 203, 0.6);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #0B493A;
+}
+
+.dark .header-status-badge,
+html.dark .header-status-badge {
+    background-color: rgba(64, 138, 113, 0.25) !important;
+    border-color: rgba(165, 224, 203, 0.4) !important;
+    color: #A5E0CB !important;
+}
+
+.header-status-dot {
+    height: 0.375rem;
+    width: 0.375rem;
+    border-radius: 9999px;
+    background-color: #408A71;
+}
+
+.dark .header-status-dot,
+html.dark .header-status-dot {
+    background-color: #A5E0CB !important;
+}
+
+/* KPI Subtitle Undertext Pills */
+.kpi-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.375rem;
+    border-width: 1px;
+    border-style: solid;
+    line-height: 1.25rem;
+}
+
+/* 1. Properties */
+.kpi-pill-properties {
+    background-color: #EAF6F0;
+    color: #0B493A;
+    border-color: rgba(165, 224, 203, 0.6);
+}
+
+.dark .kpi-pill-properties,
+html.dark .kpi-pill-properties {
+    background-color: rgba(64, 138, 113, 0.25) !important;
+    color: #A5E0CB !important;
+    border-color: rgba(165, 224, 203, 0.4) !important;
+}
+
+/* 2. Tenancies */
+.kpi-pill-tenancies {
+    background-color: #F0FDFA;
+    color: #0F766E;
+    border-color: #CCFBF1;
+}
+
+.dark .kpi-pill-tenancies,
+html.dark .kpi-pill-tenancies {
+    background-color: rgba(13, 148, 136, 0.25) !important;
+    color: #5EEAD4 !important;
+    border-color: rgba(94, 234, 212, 0.4) !important;
+}
+
+/* 3. Reviews */
+.kpi-pill-reviews {
+    background-color: #FFFBEB;
+    color: #92400E;
+    border-color: #FEF3C7;
+}
+
+.dark .kpi-pill-reviews,
+html.dark .kpi-pill-reviews {
+    background-color: rgba(217, 119, 6, 0.25) !important;
+    color: #FCD34D !important;
+    border-color: rgba(252, 211, 77, 0.4) !important;
+}
+
+/* 4. Outstanding Rent */
+.kpi-pill-rent {
+    background-color: #ECFDF5;
+    color: #065F46;
+    border-color: #A7F3D0;
+}
+
+.dark .kpi-pill-rent,
+html.dark .kpi-pill-rent {
+    background-color: rgba(4, 120, 87, 0.25) !important;
+    color: #6EE7B7 !important;
+    border-color: rgba(110, 231, 183, 0.4) !important;
+}
+
 /* Sections Containers */
 .dashboard-card {
     border-radius: 0.75rem;

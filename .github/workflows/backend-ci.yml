@@ -1,12 +1,13 @@
-name: Backend CI
+name: Pull Request CI
 
 on:
-  push:
-    branches:
-      - develop
   pull_request:
     branches:
       - develop
+
+concurrency:
+  group: pr-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend-ci:
@@ -52,9 +53,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
-          cache: "pip"
-          cache-dependency-path: "backend/requirements-lock.txt"
+          python-version: "3.12"
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements-lock.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install backend dependencies
         run: |
@@ -72,3 +79,41 @@ jobs:
 
       - name: Validate OpenAPI schema generation
         run: python manage.py spectacular --validate --fail-on-warn
+
+  frontend-ci:
+    name: Frontend Lint & Build Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint frontend code
+        run: npm run lint
+
+      - name: Validate TypeScript
+        run: npx tsc -b
+
+      - name: Build frontend
+        run: npm run build
