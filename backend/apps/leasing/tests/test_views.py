@@ -483,7 +483,7 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         self.assertTrue(res.data["success"])
         tenancy_id = res.data["data"]["id"]
-        self.assertEqual(res.data["data"]["status"], TenancyStatus.CONFIRMED)
+        self.assertEqual(res.data["data"]["status"], TenancyStatus.PENDING)
 
         # Owner sees in /managed/.
         managed_res = self.client.get(reverse("leasing:tenancy-managed"))
@@ -499,6 +499,15 @@ class TenancyAPITests(LeasingAPITestMixin, APITestCase):
             reverse("leasing:tenancy-detail", kwargs={"pk": tenancy_id})
         )
         self.assertEqual(det_res.status_code, status.HTTP_200_OK)
+
+        # Tenant accepts proposal -> moves to CONFIRMED.
+        accept_res = self.client.post(
+            reverse("leasing:tenancy-accept", kwargs={"pk": tenancy_id}),
+            {},
+            format="json",
+        )
+        self.assertEqual(accept_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(accept_res.data["data"]["status"], TenancyStatus.CONFIRMED)
 
         # Unrelated tenant gets 404; admin gets 200.
         self.client.force_authenticate(user=self.other_tenant)

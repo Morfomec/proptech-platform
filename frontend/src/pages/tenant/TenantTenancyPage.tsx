@@ -27,6 +27,7 @@ type StatusFilter = 'all' | TenancyStatus
 
 const STATUS_TABS: { id: StatusFilter; label: string }[] = [
   { id: 'active', label: 'Active' },
+  { id: 'pending', label: 'Proposals' },
   { id: 'confirmed', label: 'Upcoming' },
   { id: 'ended', label: 'Completed' },
   { id: 'cancelled', label: 'Cancelled' },
@@ -315,6 +316,7 @@ export const TenantTenancyPage: React.FC = () => {
       active: 0,
       ended: 0,
       cancelled: 0,
+      rejected: 0,
     }
     for (const item of allTenancies) {
       counts[item.status] = (counts[item.status] ?? 0) + 1
@@ -570,6 +572,41 @@ export const TenantTenancyPage: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* 2b. Pending Proposals Notification Banner */}
+      {tabCounts.pending > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-amber-900">
+                Action Required: {tabCounts.pending} Tenancy Proposal{tabCounts.pending > 1 ? 's' : ''} Awaiting Your Approval
+              </p>
+              <p className="text-xs text-amber-700">
+                A property owner has proposed agreement terms for your rental application. Please review and accept or reject.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveStatus('pending')
+              setCurrentPage(1)
+            }}
+            className="px-3.5 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-900 text-xs sm:text-sm font-medium hover:bg-amber-50 transition-colors shrink-0 cursor-pointer"
+          >
+            Review Proposals
+          </button>
+        </div>
+      )}
 
       {/* 3. Error State */}
       {isError && (

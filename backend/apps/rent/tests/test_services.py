@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.leasing.models import Tenancy, TenancyStatus
-from apps.leasing.services.tenancy_service import activate_tenancy, create_tenancy
+from apps.leasing.services.tenancy_service import accept_tenancy_proposal, activate_tenancy, create_tenancy
 from apps.properties.models import Property, PropertyCategory, PropertyStatus, PropertyType
 from apps.rent.models import RentCharge, RentChargeStatus, RentChargeType
 from apps.rent.services import (
@@ -280,8 +280,13 @@ class TenancyActivationRentIntegrationTests(TestCase):
             security_deposit=Decimal("50000.00"),
             rent_due_day=1,
         )
-        self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
+        self.assertEqual(tenancy.status, TenancyStatus.PENDING)
         self.assertEqual(RentCharge.objects.filter(tenancy=tenancy).count(), 0)
+
+        # Tenant accepts proposal
+        accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
+        tenancy.refresh_from_db()
+        self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
 
         # Activating tenancy
         activated = activate_tenancy(
@@ -315,6 +320,8 @@ class TenancyActivationRentIntegrationTests(TestCase):
             monthly_rent=Decimal("20000.00"),
             security_deposit=Decimal("40000.00"),
         )
+        accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
+        tenancy.refresh_from_db()
         self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
 
         # Simulate exception inside generate_initial_rent_charge

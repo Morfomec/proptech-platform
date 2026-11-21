@@ -24,6 +24,7 @@ import {
   TenancyLifecycleModal,
   type OwnerTenancyAction,
 } from '../../components/owner/TenancyLifecycleModal'
+import { UpdateTenancyTermsModal } from '../../components/owner/UpdateTenancyTermsModal'
 import { DocumentUploadModal } from '../../components/tenant/DocumentUploadModal'
 import { DocumentPreviewModal } from '../../components/tenant/DocumentPreviewModal'
 import {
@@ -64,6 +65,7 @@ export const OwnerTenancyDetailPage: React.FC = () => {
   // Financial Activity state
   const [activeLedgerTab, setActiveLedgerTab] = useState<'charges' | 'payments' | 'deposit' | 'documents'>('charges')
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false)
+  const [isEditTermsOpen, setIsEditTermsOpen] = useState(false)
   const [recordInitialAmount, setRecordInitialAmount] = useState<string | undefined>()
   const [recordInitialChargeType, setRecordInitialChargeType] = useState<'rent' | 'security_deposit'>('rent')
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null)
@@ -300,6 +302,16 @@ export const OwnerTenancyDetailPage: React.FC = () => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+          {(tenancy.status === 'pending' || tenancy.status === 'confirmed' || tenancy.status === 'rejected') && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditTermsOpen(true)}
+            >
+              Edit terms
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -342,6 +354,57 @@ export const OwnerTenancyDetailPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* 2b. Pending approval alert banner */}
+      {tenancy.status === 'pending' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <p className="text-xs sm:text-sm text-amber-900 font-medium">
+              Awaiting Tenant Approval
+            </p>
+            <p className="text-xs text-amber-800">
+              The proposed agreement terms were sent to the tenant on{' '}
+              {formatDateTime(tenancy.proposed_at || tenancy.created_at)}. The tenancy cannot be activated until the tenant reviews and accepts.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsEditTermsOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-900 text-xs sm:text-sm font-medium hover:bg-amber-50 transition-colors shrink-0 cursor-pointer"
+          >
+            Edit Terms
+          </button>
+        </div>
+      )}
+
+      {/* 2c. Rejected proposal alert banner */}
+      {tenancy.status === 'rejected' && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <p className="text-xs sm:text-sm text-rose-900 font-medium">
+              Tenant Declined Proposal
+            </p>
+            <p className="text-xs text-rose-800">
+              The tenant declined the proposed agreement on{' '}
+              {formatDateTime(tenancy.tenant_responded_at || tenancy.updated_at)}.
+              {tenancy.rejection_reason && (
+                <span className="block mt-1 font-normal text-rose-900 bg-rose-100/60 p-2 rounded border border-rose-200">
+                  Reason: &ldquo;{tenancy.rejection_reason}&rdquo;
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsEditTermsOpen(true)}
+              className="px-3.5 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-800 text-xs sm:text-sm font-medium hover:bg-rose-50 transition-colors shrink-0 cursor-pointer"
+            >
+              Update Terms & Resubmit
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 3. Overdue alert banner (only render when rent outstanding > 0) */}
       {showOverdueBanner && (
@@ -999,7 +1062,44 @@ export const OwnerTenancyDetailPage: React.FC = () => {
 
           {/* Card 4: Checkout / End tenancy */}
           <div className="rounded-xl border border-[#E5E7EB] bg-white p-5">
-            {canEnd ? (
+            {tenancy.status === 'pending' ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditTermsOpen(true)}
+                  className="w-full py-2.5 rounded-lg border border-[#408A71] text-[#408A71] bg-white hover:bg-[#ECF5F2] text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+                >
+                  Edit proposed terms
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLifecycleAction('cancel')}
+                  className="w-full py-2.5 rounded-lg border border-rose-300 text-rose-700 bg-white hover:bg-rose-50 text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+                >
+                  Cancel proposal
+                </button>
+                <p className="text-[11px] text-center text-[#6B7280]">
+                  Awaiting tenant review. Move-in activation will be available once the tenant accepts.
+                </p>
+              </div>
+            ) : tenancy.status === 'rejected' ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditTermsOpen(true)}
+                  className="w-full py-2.5 rounded-lg border border-[#408A71] text-[#408A71] bg-white hover:bg-[#ECF5F2] text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+                >
+                  Update terms & resubmit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLifecycleAction('cancel')}
+                  className="w-full py-2.5 rounded-lg border border-rose-300 text-rose-700 bg-white hover:bg-rose-50 text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+                >
+                  Cancel tenancy
+                </button>
+              </div>
+            ) : canEnd ? (
               <button
                 type="button"
                 onClick={() => setLifecycleAction('end')}
@@ -1008,13 +1108,29 @@ export const OwnerTenancyDetailPage: React.FC = () => {
                 Checkout / end tenancy
               </button>
             ) : canActivate ? (
-              <button
-                type="button"
-                onClick={() => setLifecycleAction('activate')}
-                className="w-full py-2.5 rounded-lg border border-[#408A71] text-[#408A71] bg-white hover:bg-[#ECF5F2] text-xs sm:text-sm font-medium transition-colors cursor-pointer"
-              >
-                Activate tenancy (move-in)
-              </button>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setLifecycleAction('activate')}
+                  className="w-full py-2.5 rounded-lg border border-[#408A71] text-[#408A71] bg-white hover:bg-[#ECF5F2] text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+                >
+                  Activate tenancy (move-in)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditTermsOpen(true)}
+                  className="w-full py-2 rounded-lg border border-[#E5E7EB] text-[#4B5563] bg-white hover:bg-[#F9FAFB] text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Edit agreed terms
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLifecycleAction('cancel')}
+                  className="w-full py-2 rounded-lg border border-rose-200 text-rose-600 bg-white hover:bg-rose-50 text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Cancel tenancy
+                </button>
+              </div>
             ) : canCancel ? (
               <button
                 type="button"
@@ -1041,6 +1157,13 @@ export const OwnerTenancyDetailPage: React.FC = () => {
         tenancy={tenancy}
         action={lifecycleAction}
         onClose={() => setLifecycleAction(null)}
+      />
+
+      <UpdateTenancyTermsModal
+        open={isEditTermsOpen}
+        tenancy={tenancy}
+        onClose={() => setIsEditTermsOpen(false)}
+        onUpdated={() => void refetch()}
       />
 
       <DocumentUploadModal

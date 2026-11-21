@@ -5,6 +5,7 @@ import type {
   CreateTenancyPayload,
   EndTenancyPayload,
   TenancyStatus,
+  UpdateTenancyTermsPayload,
 } from '../types/leasing'
 import { useAuth } from './useAuth'
 import { OWNER_APPLICATIONS_QUERY_KEYS } from './useOwnerApplications'
@@ -129,6 +130,22 @@ export function useEndTenancy() {
       tenancyId: string
       payload?: EndTenancyPayload
     }) => tenancyService.endTenancy(tenancyId, payload),
+    onSuccess: (_response, variables) => {
+      invalidateTenancyRelatedQueries(queryClient, variables.tenancyId)
+    },
+  })
+}
+
+export function useUpdateTenancyTerms() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      tenancyId,
+      payload,
+    }: {
+      tenancyId: string
+      payload: UpdateTenancyTermsPayload
+    }) => tenancyService.updateTerms(tenancyId, payload),
     onSuccess: (_response, variables) => {
       invalidateTenancyRelatedQueries(queryClient, variables.tenancyId)
     },

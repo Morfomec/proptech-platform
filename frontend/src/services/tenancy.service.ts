@@ -4,10 +4,12 @@ import type {
   ActivateTenancyPayload,
   CreateTenancyPayload,
   EndTenancyPayload,
+  RejectTenancyProposalPayload,
   TenancyDetail,
   TenancyListItem,
   TenancySettlementPreview,
   TenancyStatus,
+  UpdateTenancyTermsPayload,
 } from '../types/leasing'
 import type { PaginationParams } from './application.service'
 
@@ -51,6 +53,48 @@ export const tenancyService = {
   async getTenancyDetail(tenancyId: string): Promise<ApiResponse<TenancyDetail>> {
     const response = await apiClient.get<ApiResponse<TenancyDetail>>(
       `/tenancies/${tenancyId}/`
+    )
+    return response.data
+  },
+
+  /**
+   * Accepts a pending tenancy proposal (pending -> confirmed).
+   * Connects to POST /api/v1/tenancies/{id}/accept/.
+   */
+  async acceptProposal(tenancyId: string): Promise<ApiResponse<TenancyDetail>> {
+    const response = await apiClient.post<ApiResponse<TenancyDetail>>(
+      `/tenancies/${tenancyId}/accept/`,
+      {}
+    )
+    return response.data
+  },
+
+  /**
+   * Rejects a pending tenancy proposal (pending -> rejected).
+   * Connects to POST /api/v1/tenancies/{id}/reject/.
+   */
+  async rejectProposal(
+    tenancyId: string,
+    payload?: RejectTenancyProposalPayload
+  ): Promise<ApiResponse<TenancyDetail>> {
+    const response = await apiClient.post<ApiResponse<TenancyDetail>>(
+      `/tenancies/${tenancyId}/reject/`,
+      payload ?? {}
+    )
+    return response.data
+  },
+
+  /**
+   * Updates proposed terms for a tenancy (resets status to pending).
+   * Connects to PATCH /api/v1/tenancies/{id}/update-terms/.
+   */
+  async updateTerms(
+    tenancyId: string,
+    payload: UpdateTenancyTermsPayload
+  ): Promise<ApiResponse<TenancyDetail>> {
+    const response = await apiClient.patch<ApiResponse<TenancyDetail>>(
+      `/tenancies/${tenancyId}/update-terms/`,
+      payload
     )
     return response.data
   },

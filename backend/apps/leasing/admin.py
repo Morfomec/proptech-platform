@@ -4,7 +4,12 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import display
 
 from apps.core.admin import SerialNumberAdminMixin
-from apps.leasing.models import Application, ApplicationStatusHistory, Tenancy
+from apps.leasing.models import (
+    Application,
+    ApplicationStatusHistory,
+    Tenancy,
+    TenancyTermsHistory,
+)
 from apps.leasing.models.application import ApplicationStatus
 
 STATUS_DISPLAY_MAP = dict(ApplicationStatus.choices)
@@ -225,11 +230,44 @@ class ApplicationStatusHistoryAdmin(SerialNumberAdminMixin, ModelAdmin):
         return (obj.new_status, display_val)
 
 
+class TenancyTermsHistoryInline(TabularInline):
+    model = TenancyTermsHistory
+    extra = 0
+    can_delete = False
+    fields = (
+        "version",
+        "status",
+        "monthly_rent",
+        "security_deposit",
+        "start_date",
+        "end_date",
+        "rent_due_day",
+        "responded_at",
+        "rejection_reason",
+        "created_at",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Tenancy)
 class TenancyAdmin(SerialNumberAdminMixin, ModelAdmin):
     list_per_page = 25
     date_hierarchy = "created_at"
     ordering = ("-created_at",)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    inlines = [TenancyTermsHistoryInline]
 
     list_display = (
         "serial_number",

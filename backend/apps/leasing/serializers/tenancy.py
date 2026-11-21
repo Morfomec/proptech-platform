@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from apps.leasing.models import Tenancy
+from apps.leasing.models import Tenancy, TenancyTermsHistory
 
 
 def _format_property_address(prop) -> str:
@@ -41,6 +41,9 @@ class TenancyListSerializer(serializers.ModelSerializer):
             "monthly_rent",
             "security_deposit",
             "status",
+            "proposed_at",
+            "tenant_responded_at",
+            "rejection_reason",
             "created_at",
         ]
 
@@ -64,12 +67,37 @@ class TenancyListSerializer(serializers.ModelSerializer):
         return _format_user_name(obj.tenant)
 
 
+class TenancyTermsHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TenancyTermsHistory
+        fields = [
+            "id",
+            "version",
+            "status",
+            "responded_at",
+            "rejection_reason",
+            "proposed_by_id",
+            "monthly_rent",
+            "security_deposit",
+            "start_date",
+            "end_date",
+            "rent_due_day",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
 class TenancyDetailSerializer(TenancyListSerializer):
     tenant_email = serializers.EmailField(source="tenant.email", read_only=True)
+    proposed_by_id = serializers.UUIDField(read_only=True)
+    terms_history = TenancyTermsHistorySerializer(many=True, read_only=True)
 
     class Meta(TenancyListSerializer.Meta):
         fields = TenancyListSerializer.Meta.fields + [
             "tenant_email",
+            "proposed_by_id",
+            "terms_history",
             "rent_due_day",
             "actual_move_in_date",
             "actual_move_out_date",
@@ -157,3 +185,47 @@ class TenancySettlementPreviewSerializer(serializers.Serializer):
     max_refundable_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     status = serializers.CharField()
 
+
+class TenancyProposalResponseSerializer(serializers.Serializer):
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=1000,
+    )
+
+
+class TenancyUpdateTermsSerializer(serializers.Serializer):
+    start_date = serializers.DateField(required=False)
+    end_date = serializers.DateField(required=False, allow_null=True)
+    monthly_rent = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+    )
+    security_deposit = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+    )
+    rent_due_day = serializers.IntegerField(
+        min_value=1,
+        max_value=28,
+        required=False,
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date")
+        end_date = attrs.get("end_date")
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({
+                "end_date": "End date cannot be before start date."
+            })
+        return attrs

@@ -27,14 +27,19 @@ from apps.leasing.serializers import (
     TenancyDetailSerializer,
     TenancyEndSerializer,
     TenancyListSerializer,
+    TenancyProposalResponseSerializer,
     TenancySettlementPreviewSerializer,
+    TenancyUpdateTermsSerializer,
 )
 from apps.leasing.services import (
+    accept_tenancy_proposal,
     activate_tenancy,
     cancel_tenancy,
     create_tenancy,
     end_tenancy,
     get_tenancy_settlement_preview,
+    reject_tenancy_proposal,
+    update_tenancy_proposal,
 )
 from apps.leasing.services.exceptions import (
     TenancyApplicationError,
@@ -83,17 +88,17 @@ class TenancyViewSet(viewsets.GenericViewSet):
         "application",
     ).prefetch_related("property__images")
 
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
     lookup_value_regex = r"[0-9a-f-]{36}"
 
     def get_permissions(self):
         if self.action == "create":
             permission_classes = [IsAuthenticated, IsOwner]
 
-        elif self.action == "me":
+        elif self.action in ["me", "accept", "reject"]:
             permission_classes = [IsAuthenticated, IsTenant]
 
-        elif self.action == "managed":
+        elif self.action in ["managed", "update_terms"]:
             permission_classes = [IsAuthenticated, IsOwner]
 
         elif self.action == "retrieve":
@@ -107,7 +112,7 @@ class TenancyViewSet(viewsets.GenericViewSet):
     def get_queryset(self):
         user = self.request.user
 
-        if self.action == "me":
+        if self.action in ["me", "accept", "reject"]:
             return self.queryset.filter(tenant=user)
 
         if self.action in [
@@ -115,6 +120,7 @@ class TenancyViewSet(viewsets.GenericViewSet):
             "activate",
             "cancel",
             "end",
+            "update_terms",
         ]:
             return self.queryset.filter(property__owner=user)
 
@@ -136,6 +142,12 @@ class TenancyViewSet(viewsets.GenericViewSet):
 
         if self.action == "end":
             return TenancyEndSerializer
+
+        if self.action == "reject":
+            return TenancyProposalResponseSerializer
+
+        if self.action == "update_terms":
+            return TenancyUpdateTermsSerializer
 
         if self.action in ["me", "managed"]:
             return TenancyListSerializer
@@ -466,4 +478,126 @@ class TenancyViewSet(viewsets.GenericViewSet):
         return Response({
             "success": True,
             "data": preview_data,
+        })
+
+    @extend_schema(
+        tags=["Tenancies"],
+        summary="Accept a tenancy proposal (tenant)",
+        description="Tenant accepts the proposed terms, moving tenancy from pending to confirmed.",
+        request=None,
+        responses={
+            200: success_envelope("TenancyAcceptResponse", TenancyDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept(self, request, *args, **kwargs):
+        tenancy = self.get_object()
+        try:
+            tenancy = accept_tenancy_proposal(
+                tenant=request.user,
+                tenancy_id=tenancy.pk,
+            )
+        except (
+            TenancyNotFoundError,
+            TenancyOwnershipError,
+            TenancyStateError,
+            TenancyOverlapError,
+            DjangoValidationError,
+        ) as exc:
+            self._translate_service_exception(exc)
+
+        return Response({
+            "success": True,
+            "message": "Tenancy proposal accepted successfully.",
+            "data": TenancyDetailSerializer(
+                tenancy,
+                context=self.get_serializer_context(),
+            ).data,
+        })
+
+    @extend_schema(
+        tags=["Tenancies"],
+        summary="Reject a tenancy proposal (tenant)",
+        description="Tenant rejects the proposed terms, moving tenancy to rejected status.",
+        request=TenancyProposalResponseSerializer,
+        responses={
+            200: success_envelope("TenancyRejectResponse", TenancyDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="reject")
+    def reject(self, request, *args, **kwargs):
+        tenancy = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenancy = reject_tenancy_proposal(
+                tenant=request.user,
+                tenancy_id=tenancy.pk,
+                reason=serializer.validated_data.get("reason"),
+            )
+        except (
+            TenancyNotFoundError,
+            TenancyOwnershipError,
+            TenancyStateError,
+            DjangoValidationError,
+        ) as exc:
+            self._translate_service_exception(exc)
+
+        return Response({
+            "success": True,
+            "message": "Tenancy proposal rejected.",
+            "data": TenancyDetailSerializer(
+                tenancy,
+                context=self.get_serializer_context(),
+            ).data,
+        })
+
+    @extend_schema(
+        tags=["Tenancies"],
+        summary="Update tenancy proposed terms (owner)",
+        description="Owner updates the proposed terms, resetting the tenancy to pending approval.",
+        request=TenancyUpdateTermsSerializer,
+        responses={
+            200: success_envelope("TenancyUpdateTermsResponse", TenancyDetailSerializer),
+            400: ApiErrorResponseSerializer,
+            401: ApiErrorResponseSerializer,
+            403: ApiErrorResponseSerializer,
+            404: ApiErrorResponseSerializer,
+        },
+    )
+    @action(detail=True, methods=["patch"], url_path="update-terms")
+    def update_terms(self, request, *args, **kwargs):
+        tenancy = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenancy = update_tenancy_proposal(
+                owner=request.user,
+                tenancy_id=tenancy.pk,
+                **serializer.validated_data,
+            )
+        except (
+            TenancyNotFoundError,
+            TenancyOwnershipError,
+            TenancyStateError,
+            TenancyOverlapError,
+            DjangoValidationError,
+        ) as exc:
+            self._translate_service_exception(exc)
+
+        return Response({
+            "success": True,
+            "message": "Tenancy terms updated. Tenant approval requested.",
+            "data": TenancyDetailSerializer(
+                tenancy,
+                context=self.get_serializer_context(),
+            ).data,
         })

@@ -63,6 +63,7 @@ export type TenancyStatus =
   | 'pending'
   | 'confirmed'
   | 'active'
+  | 'rejected'
   | 'ended'
   | 'cancelled'
 
@@ -80,11 +81,34 @@ export interface TenancyListItem {
   monthly_rent: string
   security_deposit: string
   status: TenancyStatus
+  proposed_at?: string | null
+  tenant_responded_at?: string | null
+  rejection_reason?: string | null
+  created_at: string
+}
+
+export type TermsProposalStatus = 'pending' | 'accepted' | 'rejected' | 'superseded'
+
+export interface TenancyTermsHistoryItem {
+  id: string
+  version: number
+  status?: TermsProposalStatus
+  responded_at?: string | null
+  rejection_reason?: string | null
+  proposed_by_id?: string | null
+  monthly_rent: string
+  security_deposit: string
+  start_date: string
+  end_date: string | null
+  rent_due_day: number
+  notes?: string | null
   created_at: string
 }
 
 export interface TenancyDetail extends TenancyListItem {
   tenant_email?: string | null
+  proposed_by_id?: string | null
+  terms_history?: TenancyTermsHistoryItem[]
   rent_due_day: number | null
   actual_move_in_date: string | null
   actual_move_out_date: string | null
@@ -99,6 +123,19 @@ export interface CreateTenancyPayload {
   start_date: string
   end_date?: string | null
   monthly_rent: string | number
+  security_deposit?: string | number
+  rent_due_day?: number
+  notes?: string | null
+}
+
+export interface RejectTenancyProposalPayload {
+  reason?: string
+}
+
+export interface UpdateTenancyTermsPayload {
+  start_date?: string
+  end_date?: string | null
+  monthly_rent?: string | number
   security_deposit?: string | number
   rent_due_day?: number
   notes?: string | null

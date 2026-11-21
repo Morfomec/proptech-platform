@@ -19,6 +19,7 @@ class TenancyStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     CONFIRMED = "confirmed", "Confirmed"
     ACTIVE = "active", "Active"
+    REJECTED = "rejected", "Rejected"
     ENDED = "ended", "Ended"
     CANCELLED = "cancelled", "Cancelled"
 
@@ -87,6 +88,34 @@ class Tenancy(BaseModel):
     notes = models.TextField(
         null=True,
         blank=True,
+    )
+
+    proposed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when terms were proposed or last updated by the owner.",
+    )
+
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposed_tenancies",
+        db_column="proposed_by_id",
+        help_text="Owner user who created or last modified the proposal terms.",
+    )
+
+    tenant_responded_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when the tenant accepted or rejected the proposal.",
+    )
+
+    rejection_reason = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Reason provided by the tenant if the proposal was rejected.",
     )
 
 
