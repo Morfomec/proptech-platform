@@ -21,8 +21,8 @@
             </p>
         </div>
         <div class="flex items-center gap-2">
-            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#EAF6F0] dark:bg-primary-950/50 border border-[#A5E0CB]/60 dark:border-primary-800/60 text-xs font-medium text-[#0B493A] dark:text-[#A5E0CB]">
-                <span class="h-1.5 w-1.5 rounded-full bg-[#408A71] dark:bg-[#A5E0CB] animate-pulse"></span>
+            <div class="header-status-badge">
+                <span class="header-status-dot animate-pulse"></span>
                 <span>{% trans "Platform Active" %}</span>
             </div>
         </div>
@@ -48,7 +48,7 @@
                         {{ kpi_data.total_properties|default:0 }}
                     </div>
                     <div class="flex items-center gap-1.5 mt-1.5">
-                        <span class="inline-flex items-center text-[11px] font-medium text-[#408A71] dark:text-[#A5E0CB] bg-[#EAF6F0] dark:bg-primary-950/60 px-2 py-0.5 rounded-md border border-[#A5E0CB]/40">
+                        <span class="kpi-pill kpi-pill-properties">
                             {% trans "Managed physical assets" %}
                         </span>
                     </div>
@@ -72,7 +72,7 @@
                         {{ kpi_data.active_tenancies|default:0 }}
                     </div>
                     <div class="flex items-center gap-1.5 mt-1.5">
-                        <span class="inline-flex items-center text-[11px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-200/50">
+                        <span class="kpi-pill kpi-pill-tenancies">
                             {% trans "Current active leases" %}
                         </span>
                     </div>
@@ -96,7 +96,7 @@
                         {{ kpi_data.pending_listing_reviews|default:0 }}
                     </div>
                     <div class="flex items-center gap-1.5 mt-1.5">
-                        <span class="inline-flex items-center text-[11px] font-medium text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200/60">
+                        <span class="kpi-pill kpi-pill-reviews">
                             {% trans "Listings awaiting moderation" %}
                         </span>
                     </div>
@@ -120,7 +120,7 @@
                         ₹{{ kpi_data.outstanding_rent|floatformat:2 }}
                     </div>
                     <div class="flex items-center gap-1.5 mt-1.5">
-                        <span class="inline-flex items-center text-[11px] font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                        <span class="kpi-pill kpi-pill-rent">
                             {% trans "Uncollected eligible charges" %}
                         </span>
                     </div>
