@@ -313,7 +313,10 @@ class PropertyViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
-        serializer = PropertyImageSerializer(data=request.data)
+        serializer = PropertyImageSerializer(
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
         serializer.is_valid(raise_exception=True)
 
         image = add_property_image(
