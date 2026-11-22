@@ -61,10 +61,12 @@ class ListingAPITests(APITestCase):
         )
 
         # 2. Amenities
-        self.amenity = Amenity.objects.create(
+        self.amenity, _ = Amenity.objects.get_or_create(
             name="High-speed Wi-Fi",
-            category=AmenityCategory.CONNECTIVITY,
-            is_active=True,
+            defaults={
+                "category": AmenityCategory.CONNECTIVITY,
+                "is_active": True,
+            },
         )
 
         # 3. Properties
