@@ -22,6 +22,9 @@ from .exceptions import (
 )
 from .tenancy_service import (
     create_tenancy,
+    accept_tenancy_proposal,
+    reject_tenancy_proposal,
+    update_tenancy_proposal,
     activate_tenancy,
     cancel_tenancy,
     end_tenancy,
@@ -42,6 +45,9 @@ __all__ = [
     "DuplicateApplicationError",
     "ListingUnavailableError",
     "create_tenancy",
+    "accept_tenancy_proposal",
+    "reject_tenancy_proposal",
+    "update_tenancy_proposal",
     "activate_tenancy",
     "cancel_tenancy",
     "end_tenancy",

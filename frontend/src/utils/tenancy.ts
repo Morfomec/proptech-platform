@@ -18,14 +18,20 @@ export const TENANCY_STATUS_META: Record<TenancyStatus, TenancyStatusMeta> = {
   confirmed: {
     label: 'Confirmed',
     variant: 'info',
-    description: 'Your tenancy is confirmed and awaiting activation on move-in.',
+    description: 'Your tenancy is confirmed and awaiting move-in activation.',
     isCurrentGroup: true,
   },
   pending: {
-    label: 'Pending',
+    label: 'Pending Approval',
     variant: 'warning',
-    description: 'Tenancy terms have been created and await owner confirmation.',
+    description: 'The property owner has proposed tenancy terms. Please review and accept or reject.',
     isCurrentGroup: true,
+  },
+  rejected: {
+    label: 'Proposal Rejected',
+    variant: 'danger',
+    description: 'You have rejected the proposed tenancy terms.',
+    isCurrentGroup: false,
   },
   ended: {
     label: 'Ended',
@@ -122,15 +128,15 @@ export function formatFileSize(bytes?: number | null): string {
 
 export const OWNER_TENANCY_STATUS_META: Record<TenancyStatus, TenancyStatusMeta> = {
   pending: {
-    label: 'Pending Confirmation',
+    label: 'Awaiting Tenant Approval',
     variant: 'warning',
-    description: 'Tenancy terms are saved and awaiting your confirmation.',
+    description: 'Tenancy terms proposed. Awaiting tenant decision.',
     isCurrentGroup: true,
   },
   confirmed: {
-    label: 'Upcoming',
+    label: 'Confirmed',
     variant: 'info',
-    description: 'Tenancy is confirmed and ready to activate upon tenant move-in.',
+    description: 'Tenant accepted proposed terms. Ready to activate upon move-in.',
     isCurrentGroup: true,
   },
   active: {
@@ -138,6 +144,12 @@ export const OWNER_TENANCY_STATUS_META: Record<TenancyStatus, TenancyStatusMeta>
     variant: 'success',
     description: 'Tenancy is currently active and move-in has been recorded.',
     isCurrentGroup: true,
+  },
+  rejected: {
+    label: 'Proposal Rejected',
+    variant: 'danger',
+    description: 'The tenant rejected the proposed terms.',
+    isCurrentGroup: false,
   },
   ended: {
     label: 'Completed',

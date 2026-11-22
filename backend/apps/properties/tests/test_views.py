@@ -66,15 +66,19 @@ class PropertyAPITests(APITestCase):
         )
 
         # Active & Inactive Amenities
-        self.active_amenity = Amenity.objects.create(
+        self.active_amenity, _ = Amenity.objects.get_or_create(
             name="Clubhouse",
-            category=AmenityCategory.RECREATION,
-            is_active=True,
+            defaults={
+                "category": AmenityCategory.BUILDING,
+                "is_active": True,
+            },
         )
-        self.inactive_amenity = Amenity.objects.create(
+        self.inactive_amenity, _ = Amenity.objects.get_or_create(
             name="Valet Parking",
-            category=AmenityCategory.BUILDING,
-            is_active=False,
+            defaults={
+                "category": AmenityCategory.BUILDING,
+                "is_active": False,
+            },
         )
 
         # Property belonging to Owner A

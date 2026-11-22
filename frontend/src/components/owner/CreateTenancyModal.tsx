@@ -109,8 +109,8 @@ export const CreateTenancyModal: React.FC<CreateTenancyModalProps> = ({
       })
 
       addToast({
-        title: 'Tenancy Created & Confirmed',
-        description: `Tenancy confirmed for ${tenantDisplay} and published listing paused. Activate it upon move-in.`,
+        title: 'Tenancy Proposal Sent',
+        description: `Tenancy terms proposed to ${tenantDisplay}. The tenancy will await tenant approval before activation.`,
         variant: 'success',
       })
 
@@ -135,8 +135,8 @@ export const CreateTenancyModal: React.FC<CreateTenancyModalProps> = ({
       onClose={handleClose}
       closeOnBackdropClick={!createMutation.isPending}
       closeOnEscape={!createMutation.isPending}
-      title="Create Tenancy"
-      description="Create and confirm a tenancy agreement from this approved application. Any published listing will be paused automatically."
+      title="Propose Tenancy Terms"
+      description="Specify the agreement terms for this approved application. The proposal will be sent to the tenant for their review and approval before activation."
       size="md"
       footer={
         <div className="flex items-center justify-end gap-2.5 w-full">
@@ -154,15 +154,18 @@ export const CreateTenancyModal: React.FC<CreateTenancyModalProps> = ({
             variant="primary"
             size="sm"
             isLoading={createMutation.isPending}
-            loadingText="Creating..."
+            loadingText="Sending Proposal..."
             onClick={() => void handleSubmit()}
           >
-            Create Tenancy
+            Send Tenancy Proposal
           </Button>
         </div>
       }
     >
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+        <div className="rounded-lg bg-[#F4FAF7] border border-[#CDE5DB] p-3 text-xs text-[#285747]">
+          <span className="font-medium">Mutual Agreement:</span> After sending, the tenant must review and accept these proposed terms. Active status and rent charges will only begin upon move-in after tenant acceptance.
+        </div>
         {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
 
         <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4 space-y-2 text-xs">

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from apps.core.permissions import _matches_user
@@ -12,6 +12,8 @@ from apps.leasing.models import (
     ApplicationStatusHistory,
     Tenancy,
     TenancyStatus,
+    TenancyTermsHistory,
+    TermsProposalStatus,
 )
 from apps.leasing.services.exceptions import (
     TenancyApplicationError,
@@ -274,6 +276,7 @@ def create_tenancy(
         end_date=end_date,
     )
 
+    now = timezone.now()
     tenancy = Tenancy(
         property=property,
         tenant=tenant,
@@ -283,22 +286,272 @@ def create_tenancy(
         monthly_rent=monthly_rent,
         security_deposit=security_deposit,
         rent_due_day=rent_due_day,
-        status=TenancyStatus.CONFIRMED,
+        status=TenancyStatus.PENDING,
+        proposed_at=now,
+        proposed_by=owner,
         notes=notes,
     )
 
     _save_tenancy(tenancy=tenancy)
 
-    _pause_published_listing(
-        property=property,
-        owner=owner,
+    # If the previous version is still PENDING, mark it SUPERSEDED.
+    # Preserve ACCEPTED or REJECTED versions unchanged.
+    latest_terms = (
+        TenancyTermsHistory.objects
+        .filter(tenancy=tenancy)
+        .order_by("-version")
+        .first()
+    )
+    if latest_terms and latest_terms.status == TermsProposalStatus.PENDING:
+        latest_terms.transition_status(
+            TermsProposalStatus.SUPERSEDED,
+            responded_at=now,
+        )
+
+    latest_version = latest_terms.version if latest_terms else 0
+    next_version = latest_version + 1
+
+    TenancyTermsHistory.objects.create(
+        tenancy=tenancy,
+        version=next_version,
+        proposed_by=owner,
+        monthly_rent=tenancy.monthly_rent,
+        security_deposit=tenancy.security_deposit,
+        start_date=tenancy.start_date,
+        end_date=tenancy.end_date,
+        rent_due_day=tenancy.rent_due_day,
+        notes=tenancy.notes,
+        status=TermsProposalStatus.PENDING,
     )
 
     create_notification(
         user=tenancy.tenant,
-        notification_type=NotificationType.TENANCY_CREATED,
-        title="New tenancy created",
-        message="A new confirmed tenancy has been created for you.",
+        notification_type=NotificationType.TENANCY_PROPOSED,
+        title="Tenancy proposal received",
+        message=f"The property owner has sent you a tenancy proposal for '{property.title}'. Please review and approve the terms.",
+        related_object_type=RelatedObjectType.TENANCY,
+        related_object_id=tenancy.id,
+    )
+
+    return tenancy
+
+
+@transaction.atomic
+def accept_tenancy_proposal(*, tenant, tenancy_id):
+    """
+    Allow the tenant to review and accept the proposed tenancy terms.
+    Transitions tenancy from PENDING -> CONFIRMED and pauses any published listing.
+    """
+    property, tenancy = _get_locked_property_and_tenancy(tenancy_id=tenancy_id)
+
+    if not _matches_user(tenancy.tenant, tenant):
+        raise TenancyOwnershipError(
+            "Only the tenant associated with this proposal can accept it."
+        )
+
+    if tenancy.status != TenancyStatus.PENDING:
+        if tenancy.status in [TenancyStatus.CONFIRMED, TenancyStatus.ACTIVE]:
+            raise TenancyStateError(
+                {"status": "This tenancy proposal has already been accepted."}
+            )
+        if tenancy.status == TenancyStatus.REJECTED:
+            raise TenancyStateError(
+                {"status": "Cannot accept a rejected proposal. The owner must update the proposal terms first."}
+            )
+        raise TenancyStateError(
+            {"status": f"Cannot accept a tenancy proposal in '{tenancy.status}' status."}
+        )
+
+    _verify_property_available_for_tenancy(
+        property=property,
+        exclude_tenancy_id=tenancy.pk,
+    )
+    _check_overlapping_tenancies(
+        property=property,
+        start_date=tenancy.start_date,
+        end_date=tenancy.end_date,
+        exclude_tenancy_id=tenancy.pk,
+    )
+
+    now = timezone.now()
+    tenancy.status = TenancyStatus.CONFIRMED
+    tenancy.tenant_responded_at = now
+    _save_tenancy(tenancy=tenancy)
+
+    pending_terms = (
+        TenancyTermsHistory.objects
+        .filter(tenancy=tenancy, status=TermsProposalStatus.PENDING)
+        .order_by("-version")
+        .first()
+    )
+    if pending_terms:
+        pending_terms.transition_status(
+            TermsProposalStatus.ACCEPTED,
+            responded_at=now,
+        )
+
+    # Pause listing once tenancy is confirmed by tenant
+    _pause_published_listing(
+        property=property,
+        owner=property.owner,
+    )
+
+    create_notification(
+        user=property.owner,
+        notification_type=NotificationType.TENANCY_CONFIRMED,
+        title="Tenancy proposal accepted",
+        message=f"Tenant {tenancy.tenant.first_name or tenancy.tenant.email} has accepted the tenancy terms for '{property.title}'.",
+        related_object_type=RelatedObjectType.TENANCY,
+        related_object_id=tenancy.id,
+    )
+
+    return tenancy
+
+
+@transaction.atomic
+def reject_tenancy_proposal(*, tenant, tenancy_id, reason=None):
+    """
+    Allow the tenant to reject the proposed tenancy terms.
+    Transitions tenancy from PENDING -> REJECTED and records rejection reason.
+    """
+    property, tenancy = _get_locked_property_and_tenancy(tenancy_id=tenancy_id)
+
+    if not _matches_user(tenancy.tenant, tenant):
+        raise TenancyOwnershipError(
+            "Only the tenant associated with this proposal can reject it."
+        )
+
+    if tenancy.status != TenancyStatus.PENDING:
+        raise TenancyStateError(
+            {"status": f"Cannot reject a tenancy proposal in '{tenancy.status}' status."}
+        )
+
+    now = timezone.now()
+    tenancy.status = TenancyStatus.REJECTED
+    tenancy.tenant_responded_at = now
+    clean_reason = str(reason).strip() if reason else None
+    tenancy.rejection_reason = clean_reason
+    _save_tenancy(tenancy=tenancy)
+
+    pending_terms = (
+        TenancyTermsHistory.objects
+        .filter(tenancy=tenancy, status=TermsProposalStatus.PENDING)
+        .order_by("-version")
+        .first()
+    )
+    if pending_terms:
+        pending_terms.transition_status(
+            TermsProposalStatus.REJECTED,
+            responded_at=now,
+            rejection_reason=clean_reason,
+        )
+
+    reason_msg = f" Reason: {clean_reason}" if clean_reason else ""
+    create_notification(
+        user=property.owner,
+        notification_type=NotificationType.TENANCY_REJECTED,
+        title="Tenancy proposal rejected",
+        message=f"Tenant {tenancy.tenant.first_name or tenancy.tenant.email} has rejected the tenancy terms for '{property.title}'.{reason_msg}",
+        related_object_type=RelatedObjectType.TENANCY,
+        related_object_id=tenancy.id,
+    )
+
+    return tenancy
+
+
+@transaction.atomic
+def update_tenancy_proposal(
+    *,
+    owner,
+    tenancy_id,
+    start_date=None,
+    end_date=None,
+    monthly_rent=None,
+    security_deposit=None,
+    rent_due_day=None,
+    notes=None,
+):
+    """
+    Allow the owner to update proposed terms for a tenancy that is pending, confirmed, or rejected.
+    Updating the terms resets the proposal to PENDING status, requiring renewed tenant approval.
+    """
+    property, tenancy = _get_locked_property_and_tenancy(tenancy_id=tenancy_id)
+    _verify_property_owner(property=property, owner=owner)
+
+    allowed_update_statuses = [
+        TenancyStatus.PENDING,
+        TenancyStatus.CONFIRMED,
+        TenancyStatus.REJECTED,
+    ]
+    if tenancy.status not in allowed_update_statuses:
+        raise TenancyStateError(
+            {"status": f"Cannot update proposed terms for a tenancy in '{tenancy.status}' status."}
+        )
+
+    if start_date is not None:
+        tenancy.start_date = start_date
+    if end_date is not None:
+        tenancy.end_date = end_date
+    if monthly_rent is not None:
+        tenancy.monthly_rent = monthly_rent
+    if security_deposit is not None:
+        tenancy.security_deposit = security_deposit
+    if rent_due_day is not None:
+        tenancy.rent_due_day = rent_due_day
+    if notes is not None:
+        tenancy.notes = notes
+
+    _check_overlapping_tenancies(
+        property=property,
+        start_date=tenancy.start_date,
+        end_date=tenancy.end_date,
+        exclude_tenancy_id=tenancy.pk,
+    )
+
+    now = timezone.now()
+    tenancy.status = TenancyStatus.PENDING
+    tenancy.proposed_at = now
+    tenancy.proposed_by = owner
+    tenancy.tenant_responded_at = None
+    tenancy.rejection_reason = None
+
+    _save_tenancy(tenancy=tenancy)
+
+    # If the previous version is still PENDING, mark it SUPERSEDED.
+    # Preserve ACCEPTED or REJECTED versions unchanged.
+    latest_terms = (
+        TenancyTermsHistory.objects
+        .filter(tenancy=tenancy)
+        .order_by("-version")
+        .first()
+    )
+    if latest_terms and latest_terms.status == TermsProposalStatus.PENDING:
+        latest_terms.transition_status(
+            TermsProposalStatus.SUPERSEDED,
+            responded_at=now,
+        )
+
+    latest_version = latest_terms.version if latest_terms else 0
+    next_version = latest_version + 1
+
+    TenancyTermsHistory.objects.create(
+        tenancy=tenancy,
+        version=next_version,
+        proposed_by=owner,
+        monthly_rent=tenancy.monthly_rent,
+        security_deposit=tenancy.security_deposit,
+        start_date=tenancy.start_date,
+        end_date=tenancy.end_date,
+        rent_due_day=tenancy.rent_due_day,
+        notes=tenancy.notes,
+        status=TermsProposalStatus.PENDING,
+    )
+
+    create_notification(
+        user=tenancy.tenant,
+        notification_type=NotificationType.TENANCY_PROPOSED,
+        title="Tenancy proposal terms updated",
+        message=f"The owner has updated the tenancy proposal terms for '{property.title}'. Please review and approve the new terms.",
         related_object_type=RelatedObjectType.TENANCY,
         related_object_id=tenancy.id,
     )
@@ -322,6 +575,14 @@ def activate_tenancy(
     _verify_property_owner(property=property, owner=owner)
 
     if tenancy.status != TenancyStatus.CONFIRMED:
+        if tenancy.status == TenancyStatus.PENDING:
+            raise TenancyStateError(
+                {"status": "Cannot activate tenancy. The tenant has not yet accepted the proposed terms."}
+            )
+        if tenancy.status == TenancyStatus.REJECTED:
+            raise TenancyStateError(
+                {"status": "Rejected tenancy proposals cannot be activated."}
+            )
         raise TenancyStateError(
             {"status": "Only confirmed tenancies can be activated."}
         )
@@ -381,9 +642,10 @@ def cancel_tenancy(*, owner, tenancy_id):
     if tenancy.status not in (
         TenancyStatus.PENDING,
         TenancyStatus.CONFIRMED,
+        TenancyStatus.REJECTED,
     ):
         raise TenancyStateError(
-            {"status": "Only pending or confirmed tenancies can be cancelled."}
+            {"status": "Only pending, confirmed, or rejected tenancies can be cancelled."}
         )
 
     tenancy.status = TenancyStatus.CANCELLED

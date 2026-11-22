@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
+  useAcceptTenancyProposal,
   useDocuments,
+  useRejectTenancyProposal,
   useTenancyDetail,
   useTenantPayments,
   useTenantRentCharges,
@@ -10,9 +12,12 @@ import {
 import documentService from '../../services/document.service'
 import {
   Alert,
+  Badge,
   Button,
   EmptyState,
+  Modal,
   Skeleton,
+  Textarea,
   useToast,
 } from '../../components/ui'
 import {
@@ -191,6 +196,13 @@ export const TenantTenancyDetailPage: React.FC = () => {
 
   const [activeFilter, setActiveFilter] = useState<LedgerFilter>('all')
   const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null)
+  const [isAcceptModalOpen, setIsAcceptModalOpen] = useState(false)
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const acceptMutation = useAcceptTenancyProposal()
+  const rejectMutation = useRejectTenancyProposal()
 
   // 1. Core Tenancy Detail
   const {
@@ -322,6 +334,49 @@ export const TenantTenancyDetailPage: React.FC = () => {
     }
   }
 
+  const handleAcceptProposal = async () => {
+    if (!tenancy) return
+    setActionError(null)
+    try {
+      await acceptMutation.mutateAsync(tenancy.id)
+      addToast({
+        title: 'Tenancy Terms Accepted',
+        description:
+          'You have confirmed the tenancy agreement. The owner will activate it upon your move-in.',
+        variant: 'success',
+      })
+      setIsAcceptModalOpen(false)
+      void refetchTenancy()
+    } catch (err: unknown) {
+      setActionError(
+        extractApiErrorMessage(err, 'Unable to accept proposal. Please try again.')
+      )
+    }
+  }
+
+  const handleRejectProposal = async () => {
+    if (!tenancy) return
+    setActionError(null)
+    try {
+      await rejectMutation.mutateAsync({
+        tenancyId: tenancy.id,
+        payload: { reason: rejectionReason.trim() || undefined },
+      })
+      addToast({
+        title: 'Tenancy Proposal Declined',
+        description: 'You have declined this tenancy proposal. The owner has been notified.',
+        variant: 'success',
+      })
+      setIsRejectModalOpen(false)
+      setRejectionReason('')
+      void refetchTenancy()
+    } catch (err: unknown) {
+      setActionError(
+        extractApiErrorMessage(err, 'Unable to decline proposal. Please try again.')
+      )
+    }
+  }
+
   if (isLoadingTenancy) {
     return (
       <div className="max-w-[1200px] mx-auto space-y-5 pb-10">
@@ -413,15 +468,15 @@ export const TenantTenancyDetailPage: React.FC = () => {
             )}
           </div>
 
-          {/* Middle: property name + "Active tenancy" status pill, address below, moved-in line */}
+          {/* Middle: property name + status pill, address below, date line */}
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl font-medium tracking-tight text-[#111827] mb-0">
                 {tenancy.property_title || 'Property Tenancy'}
               </h1>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#ECF5F2] text-[#408A71]">
+              <Badge variant={statusMeta.variant} size="sm">
                 {statusMeta.label === 'Active' ? 'Active tenancy' : statusMeta.label}
-              </span>
+              </Badge>
             </div>
             {tenancy.property_address && (
               <p className="text-xs font-normal text-[#6B7280] truncate">
@@ -429,13 +484,36 @@ export const TenantTenancyDetailPage: React.FC = () => {
               </p>
             )}
             <p className="text-xs font-normal text-[#6B7280]">
-              Moved in {moveInDateStr} · {endDateStr}
+              {tenancy.status === 'pending'
+                ? `Proposed start: ${formatDate(tenancy.start_date)} · ${endDateStr}`
+                : tenancy.status === 'confirmed'
+                ? `Starts: ${formatDate(tenancy.start_date)} · ${endDateStr}`
+                : `Moved in ${moveInDateStr} · ${endDateStr}`}
             </p>
           </div>
         </div>
 
-        {/* Right: two outline buttons, "All documents" and "Source application" */}
+        {/* Right: action buttons */}
         <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+          {tenancy.status === 'pending' && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRejectModalOpen(true)}
+                className="border-rose-300 text-rose-700 hover:bg-rose-50"
+              >
+                Reject proposal
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsAcceptModalOpen(true)}
+              >
+                Accept terms
+              </Button>
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -456,6 +534,127 @@ export const TenantTenancyDetailPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* 2b. Pending Proposal Review Panel */}
+      {tenancy.status === 'pending' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                  Action Required
+                </span>
+                <h2 className="text-base font-medium text-amber-950">
+                  Tenancy Agreement Proposal
+                </h2>
+              </div>
+              <p className="text-xs sm:text-sm text-amber-800 leading-relaxed">
+                The property owner has submitted the following tenancy terms for your review. Please examine the details below. Once you accept, the tenancy will be confirmed and can be activated upon move-in.
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRejectModalOpen(true)}
+                className="border-rose-300 text-rose-700 hover:bg-rose-50"
+              >
+                Reject Proposal
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => setIsAcceptModalOpen(true)}
+              >
+                Accept Terms & Confirm
+              </Button>
+            </div>
+          </div>
+
+          {/* Proposal Terms Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-amber-200/60">
+            <div className="rounded-lg bg-white/80 p-3 border border-amber-200/50">
+              <span className="text-xs text-[#6B7280]">Monthly Rent</span>
+              <p className="text-lg font-medium text-[#111827] tabular-nums mt-0.5">
+                {formatINR(tenancy.monthly_rent)}
+              </p>
+              <p className="text-[11px] text-[#6B7280]">Due day {tenancy.rent_due_day || 1} of each month</p>
+            </div>
+            <div className="rounded-lg bg-white/80 p-3 border border-amber-200/50">
+              <span className="text-xs text-[#6B7280]">Security Deposit</span>
+              <p className="text-lg font-medium text-[#111827] tabular-nums mt-0.5">
+                {formatINR(tenancy.security_deposit)}
+              </p>
+              <p className="text-[11px] text-[#6B7280]">Refundable upon move-out</p>
+            </div>
+            <div className="rounded-lg bg-white/80 p-3 border border-amber-200/50">
+              <span className="text-xs text-[#6B7280]">Proposed Start Date</span>
+              <p className="text-base font-medium text-[#111827] mt-0.5">
+                {formatDate(tenancy.start_date)}
+              </p>
+              <p className="text-[11px] text-[#6B7280]">Agreement effective date</p>
+            </div>
+            <div className="rounded-lg bg-white/80 p-3 border border-amber-200/50">
+              <span className="text-xs text-[#6B7280]">Proposed End Date</span>
+              <p className="text-base font-medium text-[#111827] mt-0.5">
+                {tenancy.end_date ? formatDate(tenancy.end_date) : 'Open-ended'}
+              </p>
+              <p className="text-[11px] text-[#6B7280]">{tenancy.end_date ? 'Fixed duration' : 'No fixed end date'}</p>
+            </div>
+          </div>
+
+          {tenancy.notes && (
+            <div className="rounded-lg bg-white/80 p-3.5 border border-amber-200/50 text-xs">
+              <span className="font-medium text-[#111827] block mb-1">Agreement Notes & Conditions:</span>
+              <p className="text-[#4B5563] whitespace-pre-wrap leading-relaxed">{tenancy.notes}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2c. Rejected Proposal Banner */}
+      {tenancy.status === 'rejected' && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-5 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-800 border border-rose-200">
+              Proposal Declined
+            </span>
+            <h2 className="text-sm font-medium text-rose-950">
+              You declined this tenancy agreement proposal
+            </h2>
+          </div>
+          <p className="text-xs text-rose-800 leading-relaxed">
+            You declined the proposed terms on{' '}
+            {formatDateTime(tenancy.tenant_responded_at || tenancy.updated_at)}. The property owner has been notified. If the owner updates the agreement terms, you will be invited to review them again.
+          </p>
+          {tenancy.rejection_reason && (
+            <p className="text-xs text-rose-900 bg-white/80 p-2.5 rounded-lg border border-rose-200/60 mt-1 italic">
+              Reason provided: &ldquo;{tenancy.rejection_reason}&rdquo;
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 2d. Confirmed Agreement Banner */}
+      {tenancy.status === 'confirmed' && (
+        <div className="rounded-xl border border-emerald-200 bg-[#F4FAF7] p-5 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+              Confirmed
+            </span>
+            <h2 className="text-sm font-medium text-emerald-950">
+              Tenancy Agreement Confirmed
+            </h2>
+          </div>
+          <p className="text-xs text-[#285747] leading-relaxed">
+            You accepted the proposed terms on{' '}
+            {formatDateTime(tenancy.tenant_responded_at || tenancy.updated_at)}. Your tenancy is scheduled to begin on{' '}
+            <span className="font-medium">{formatDate(tenancy.start_date)}</span>. The owner will activate your tenancy upon move-in.
+          </p>
+        </div>
+      )}
 
       {/* 3. Summary strip: ONE card with 4 equal columns separated by thin dividers */}
       <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#E5E7EB]">
@@ -832,6 +1031,143 @@ export const TenantTenancyDetailPage: React.FC = () => {
           </section>
         </div>
       </div>
+
+      {/* Accept Terms Modal */}
+      <Modal
+        open={isAcceptModalOpen}
+        onClose={() => {
+          if (!acceptMutation.isPending) {
+            setIsAcceptModalOpen(false)
+            setActionError(null)
+          }
+        }}
+        closeOnBackdropClick={!acceptMutation.isPending}
+        closeOnEscape={!acceptMutation.isPending}
+        title="Accept Tenancy Terms"
+        description="Please confirm your acceptance of the proposed tenancy agreement."
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsAcceptModalOpen(false)
+                setActionError(null)
+              }}
+              disabled={acceptMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              isLoading={acceptMutation.isPending}
+              loadingText="Accepting..."
+              onClick={() => void handleAcceptProposal()}
+            >
+              Confirm Acceptance
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {actionError && (
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700">
+              {actionError}
+            </div>
+          )}
+          <p className="text-xs text-[#4B5563] leading-relaxed">
+            By accepting, you agree to the following terms for{' '}
+            <span className="font-medium text-[#111827]">{tenancy.property_title || 'this property'}</span>:
+          </p>
+          <div className="rounded-lg bg-[#F9FAFB] border border-[#E5E7EB] p-3 space-y-1.5 text-xs">
+            <div className="flex justify-between">
+              <span className="text-[#6B7280]">Monthly Rent:</span>
+              <span className="font-medium text-[#111827]">{formatINR(tenancy.monthly_rent)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#6B7280]">Security Deposit:</span>
+              <span className="font-medium text-[#111827]">{formatINR(tenancy.security_deposit)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#6B7280]">Start Date:</span>
+              <span className="font-medium text-[#111827]">{formatDate(tenancy.start_date)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#6B7280]">Rent Due Day:</span>
+              <span className="font-medium text-[#111827]">Day {tenancy.rent_due_day || 1} of month</span>
+            </div>
+          </div>
+          <p className="text-[11px] text-[#6B7280]">
+            The owner will be notified of your acceptance and will activate the tenancy upon your move-in.
+          </p>
+        </div>
+      </Modal>
+
+      {/* Reject Proposal Modal */}
+      <Modal
+        open={isRejectModalOpen}
+        onClose={() => {
+          if (!rejectMutation.isPending) {
+            setIsRejectModalOpen(false)
+            setActionError(null)
+          }
+        }}
+        closeOnBackdropClick={!rejectMutation.isPending}
+        closeOnEscape={!rejectMutation.isPending}
+        title="Decline Tenancy Proposal"
+        description="Decline the terms proposed by the property owner."
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsRejectModalOpen(false)
+                setActionError(null)
+              }}
+              disabled={rejectMutation.isPending}
+            >
+              Keep Proposal
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              isLoading={rejectMutation.isPending}
+              loadingText="Declining..."
+              onClick={() => void handleRejectProposal()}
+            >
+              Decline Proposal
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {actionError && (
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700">
+              {actionError}
+            </div>
+          )}
+          <p className="text-xs text-[#4B5563] leading-relaxed">
+            Are you sure you want to decline this agreement proposal? You can provide a reason below to explain what terms do not work for you.
+          </p>
+          <Textarea
+            label="Reason for declining (Optional)"
+            placeholder="e.g. The proposed start date is too early, or rent amount differs from listing..."
+            rows={3}
+            maxLength={1000}
+            value={rejectionReason}
+            onChange={(e) => setRejectionReason(e.target.value)}
+            disabled={rejectMutation.isPending}
+          />
+        </div>
+      </Modal>
     </div>
   )
 }

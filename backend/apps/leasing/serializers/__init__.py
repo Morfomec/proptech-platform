@@ -15,6 +15,9 @@ from .tenancy import (
     TenancyActivateSerializer,
     TenancyEndSerializer,
     TenancySettlementPreviewSerializer,
+    TenancyProposalResponseSerializer,
+    TenancyTermsHistorySerializer,
+    TenancyUpdateTermsSerializer,
 )
 
 __all__ = [
@@ -30,4 +33,7 @@ __all__ = [
     "TenancyActivateSerializer",
     "TenancyEndSerializer",
     "TenancySettlementPreviewSerializer",
+    "TenancyProposalResponseSerializer",
+    "TenancyTermsHistorySerializer",
+    "TenancyUpdateTermsSerializer",
 ]

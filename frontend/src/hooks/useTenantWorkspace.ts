@@ -100,6 +100,46 @@ export function useTenancyDetail(tenancyId?: string) {
   })
 }
 
+export function useAcceptTenancyProposal() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (tenancyId: string) => tenancyService.acceptProposal(tenancyId),
+    onSuccess: (_data, tenancyId) => {
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.myTenancies })
+      queryClient.invalidateQueries({
+        queryKey: TENANT_QUERY_KEYS.tenancyDetail(tenancyId),
+      })
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.myApplications })
+      queryClient.invalidateQueries({ queryKey: ['owner', 'tenancies'] })
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.notifications })
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.unreadCount })
+    },
+  })
+}
+
+export function useRejectTenancyProposal() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      tenancyId,
+      payload,
+    }: {
+      tenancyId: string
+      payload?: { reason?: string }
+    }) => tenancyService.rejectProposal(tenancyId, payload),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.myTenancies })
+      queryClient.invalidateQueries({
+        queryKey: TENANT_QUERY_KEYS.tenancyDetail(variables.tenancyId),
+      })
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.myApplications })
+      queryClient.invalidateQueries({ queryKey: ['owner', 'tenancies'] })
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.notifications })
+      queryClient.invalidateQueries({ queryKey: TENANT_QUERY_KEYS.unreadCount })
+    },
+  })
+}
+
 export function useDocuments(params?: PaginationParams) {
   const { isAuthenticated } = useAuth()
   return useQuery({

@@ -13,8 +13,10 @@ from apps.leasing.models import (
     ApplicationStatusHistory,
     Tenancy,
     TenancyStatus,
+    TenancyTermsHistory,
 )
 from apps.leasing.services import (
+    accept_tenancy_proposal,
     activate_tenancy,
     cancel_tenancy,
     create_tenancy,
@@ -22,8 +24,10 @@ from apps.leasing.services import (
     get_applicant_applications,
     get_application_by_id,
     get_received_applications,
+    reject_tenancy_proposal,
     review_application,
     submit_application,
+    update_tenancy_proposal,
     withdraw_application,
 )
 from apps.leasing.services.exceptions import (
@@ -580,16 +584,20 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
             security_deposit=Decimal("100000.00"),
         )
 
-        self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
+        self.assertEqual(tenancy.status, TenancyStatus.PENDING)
         self.assertEqual(tenancy.application, self.approved_application)
-        self.listing.refresh_from_db()
-        self.assertEqual(self.listing.status, ListingStatus.PAUSED)
         notif = Notification.objects.get(
             user=self.tenant,
-            notification_type=NotificationType.TENANCY_CREATED,
+            notification_type=NotificationType.TENANCY_PROPOSED,
         )
         self.assertEqual(notif.related_object_type, RelatedObjectType.TENANCY)
         self.assertEqual(notif.related_object_id, tenancy.id)
+
+        # Tenant accepts proposal -> moves to CONFIRMED and pauses listing
+        accepted = accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
+        self.assertEqual(accepted.status, TenancyStatus.CONFIRMED)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, ListingStatus.PAUSED)
 
         # Overlapping confirmed tenancy cannot be created.
         with self.assertRaises(TenancyOverlapError):
@@ -652,6 +660,18 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
         )
         Notification.objects.all().delete()
 
+        # Activating while pending approval fails
+        with self.assertRaises(TenancyStateError):
+            activate_tenancy(
+                owner=self.owner,
+                tenancy_id=tenancy.id,
+                move_in_date=date(2026, 8, 2),
+            )
+
+        # Tenant accepts proposal
+        accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
+        Notification.objects.all().delete()
+
         activated = activate_tenancy(
             owner=self.owner,
             tenancy_id=tenancy.id,
@@ -701,6 +721,7 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
             end_date=date(2027, 7, 31),
             monthly_rent=Decimal("28000.00"),
         )
+        accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
         activate_tenancy(owner=self.owner, tenancy_id=tenancy.id)
 
         self.property.status = PropertyStatus.MAINTENANCE
@@ -719,6 +740,7 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
             end_date=date(2027, 7, 31),
             monthly_rent=Decimal("28000.00"),
         )
+        accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
         Notification.objects.all().delete()
 
         # Verify rollback of activate_tenancy (tenancy + property status) on error.
@@ -763,6 +785,7 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
                     end_date=date(2028 + idx, 12, 31),
                     monthly_rent=Decimal("30000.00"),
                 )
+                accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
 
                 Property.objects.filter(pk=self.property.pk).update(status=disallowed_status)
                 with self.assertRaises(TenancyStateError):
@@ -770,6 +793,7 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
 
                 tenancy.refresh_from_db()
                 self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
+                TenancyTermsHistory.objects.filter(tenancy=tenancy).delete()
                 tenancy.delete()
 
     def test_cancel_tenancy_transitions_linked_application_and_allows_reapply(self):
@@ -793,6 +817,8 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
             end_date=date(2027, 8, 31),
             monthly_rent=Decimal("28000.00"),
         )
+        accept_tenancy_proposal(tenant=self.other_tenant, tenancy_id=tenancy.id)
+        tenancy.refresh_from_db()
         self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
 
         # Confirmed tenancy blocks reapplication.
@@ -852,6 +878,7 @@ class TenancyServiceTests(LeasingServiceTestMixin, TestCase):
             end_date=date(2027, 12, 31),
             monthly_rent=Decimal("30000.00"),
         )
+        accept_tenancy_proposal(tenant=self.other_tenant, tenancy_id=active_tenancy.id)
         activate_tenancy(
             owner=self.owner,
             tenancy_id=active_tenancy.id,

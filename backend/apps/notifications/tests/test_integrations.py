@@ -20,6 +20,7 @@ from apps.leasing.models import (
     TenancyStatus,
 )
 from apps.leasing.services import (
+    accept_tenancy_proposal,
     activate_tenancy,
     cancel_tenancy,
     create_tenancy,
@@ -183,14 +184,28 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
             monthly_rent=Decimal("42000.00"),
             security_deposit=Decimal("150000.00"),
         )
-        # 5. Tenancy created as confirmed -> listing paused, tenant notified.
+        # 5. Tenancy created as proposal in pending status -> listing remains published, tenant notified of proposal.
+        self.assertEqual(tenancy.status, TenancyStatus.PENDING)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, ListingStatus.PUBLISHED)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.tenant,
+                notification_type=NotificationType.TENANCY_PROPOSED,
+                related_object_type=RelatedObjectType.TENANCY,
+                related_object_id=tenancy.id,
+            ).exists()
+        )
+
+        # 5b. Tenant accepts proposed terms -> tenancy confirmed & listing paused.
+        tenancy = accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy.id)
         self.assertEqual(tenancy.status, TenancyStatus.CONFIRMED)
         self.listing.refresh_from_db()
         self.assertEqual(self.listing.status, ListingStatus.PAUSED)
         self.assertTrue(
             Notification.objects.filter(
-                user=self.tenant,
-                notification_type=NotificationType.TENANCY_CREATED,
+                user=self.owner,
+                notification_type=NotificationType.TENANCY_CONFIRMED,
                 related_object_type=RelatedObjectType.TENANCY,
                 related_object_id=tenancy.id,
             ).exists()
@@ -283,6 +298,7 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
             end_date=date(2026, 6, 30),
             monthly_rent=Decimal("40000.00"),
         )
+        accept_tenancy_proposal(tenant=self.tenant, tenancy_id=tenancy_1.id)
         activate_tenancy(owner=self.owner, tenancy_id=tenancy_1.id)
 
         # Second non-overlapping active tenancy starting later.
@@ -294,6 +310,7 @@ class PlatformNotificationsAndLifecycleIntegrationTests(TestCase):
             end_date=date(2027, 6, 30),
             monthly_rent=Decimal("42000.00"),
         )
+        accept_tenancy_proposal(tenant=self.second_tenant, tenancy_id=tenancy_2.id)
         activate_tenancy(owner=self.owner, tenancy_id=tenancy_2.id)
 
         end_tenancy(owner=self.owner, tenancy_id=tenancy_1.id)
@@ -659,7 +676,7 @@ class EndToEndRentalLifecycleHTTPTests(APITestCase):
             format="json",
         )
         self.assertEqual(tenancy_res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(tenancy_res.data["data"]["status"], TenancyStatus.CONFIRMED)
+        self.assertEqual(tenancy_res.data["data"]["status"], TenancyStatus.PENDING)
         tenancy_id = tenancy_res.data["data"]["id"]
 
         dup_tenancy = self.client.post(
@@ -674,6 +691,16 @@ class EndToEndRentalLifecycleHTTPTests(APITestCase):
             format="json",
         )
         self.assertEqual(dup_tenancy.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Tenant reviews and accepts the proposal
+        self.client.force_authenticate(user=self.tenant)
+        accept_res = self.client.post(
+            reverse("leasing:tenancy-accept", kwargs={"pk": tenancy_id}),
+            format="json",
+        )
+        self.assertEqual(accept_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(accept_res.data["data"]["status"], TenancyStatus.CONFIRMED)
+        self.client.force_authenticate(user=self.owner_user)
 
         # 9. Creating tenancy paused the listing -> no longer publicly listed; owner activates -> invalid transition check -> end
         self.assertEqual(

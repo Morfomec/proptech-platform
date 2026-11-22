@@ -24,6 +24,8 @@ type StatusFilter = 'all' | TenancyStatus
 
 const STATUS_TABS: { id: StatusFilter; label: string }[] = [
   { id: 'active', label: 'Active' },
+  { id: 'pending', label: 'Proposals' },
+  { id: 'confirmed', label: 'Upcoming' },
   { id: 'ended', label: 'Completed' },
   { id: 'cancelled', label: 'Cancelled' },
   { id: 'all', label: 'All' },
@@ -55,6 +57,7 @@ export const OwnerTenanciesPage: React.FC = () => {
   // Accurate server-side global counts per status
   const { data: totalAllCount = 0, isLoading: isLoadingAllCount } =
     useManagedTenanciesCount()
+  const { data: pendingCount = 0 } = useManagedTenanciesCount('pending')
   const { data: confirmedCount = 0, isLoading: isLoadingConfirmedCount } =
     useManagedTenanciesCount('confirmed')
   const { data: activeCount = 0, isLoading: isLoadingActiveCount } =
@@ -62,13 +65,16 @@ export const OwnerTenanciesPage: React.FC = () => {
   const { data: endedCount = 0, isLoading: isLoadingEndedCount } =
     useManagedTenanciesCount('ended')
   const { data: cancelledCount = 0 } = useManagedTenanciesCount('cancelled')
+  const { data: rejectedCount = 0 } = useManagedTenanciesCount('rejected')
 
   const tabCounts: Partial<Record<StatusFilter, number>> = {
     all: totalAllCount,
+    pending: pendingCount,
     confirmed: confirmedCount,
     active: activeCount,
     ended: endedCount,
     cancelled: cancelledCount,
+    rejected: rejectedCount,
   }
 
   const tenancies = useMemo(() => tenanciesData?.results ?? [], [tenanciesData])

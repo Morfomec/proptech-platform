@@ -59,20 +59,26 @@ class PropertyServiceTests(TestCase):
             is_owner=False,
         )
 
-        self.active_amenity_1 = Amenity.objects.create(
+        self.active_amenity_1, _ = Amenity.objects.get_or_create(
             name="Swimming Pool",
-            category=AmenityCategory.RECREATION,
-            is_active=True,
+            defaults={
+                "category": AmenityCategory.BUILDING,
+                "is_active": True,
+            },
         )
-        self.active_amenity_2 = Amenity.objects.create(
+        self.active_amenity_2, _ = Amenity.objects.get_or_create(
             name="24x7 Security",
-            category=AmenityCategory.SAFETY,
-            is_active=True,
+            defaults={
+                "category": AmenityCategory.SAFETY,
+                "is_active": True,
+            },
         )
-        self.inactive_amenity = Amenity.objects.create(
+        self.inactive_amenity, _ = Amenity.objects.get_or_create(
             name="Sauna",
-            category=AmenityCategory.RECREATION,
-            is_active=False,
+            defaults={
+                "category": AmenityCategory.RECREATION,
+                "is_active": False,
+            },
         )
 
         self.valid_property_data = {

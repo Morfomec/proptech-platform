@@ -92,11 +92,15 @@ const TENANCY_STATUS_STYLES: Record<
     label: 'Cancelled',
     badgeClass: 'bg-red-50 text-red-700 border-red-200',
   },
+  rejected: {
+    label: 'Declined',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
 }
 
 function pickPrimaryTenancy(tenancies: TenancyListItem[]): TenancyListItem | null {
   if (tenancies.length === 0) return null
-  const priority: TenancyStatus[] = ['active', 'confirmed', 'pending', 'ended', 'cancelled']
+  const priority: TenancyStatus[] = ['active', 'confirmed', 'pending', 'ended', 'cancelled', 'rejected']
   for (const status of priority) {
     const match = tenancies.find((t) => t.status === status)
     if (match) return match

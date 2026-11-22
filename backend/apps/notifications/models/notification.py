@@ -13,8 +13,10 @@ class NotificationType(models.TextChoices):
     APPLICATION_WITHDRAWN = "application_withdrawn", "Application Withdrawn"
 
     TENANCY_CREATED = "tenancy_created", "Tenancy Created"
+    TENANCY_PROPOSED = "tenancy_proposed", "Tenancy Proposed"
     TENANCY_CONFIRMED = "tenancy_confirmed", "Tenancy Confirmed"
     TENANCY_ACTIVATED = "tenancy_activated", "Tenancy Activated"
+    TENANCY_REJECTED = "tenancy_rejected", "Tenancy Rejected"
     TENANCY_CANCELLED = "tenancy_cancelled", "Tenancy Cancelled"
     TENANCY_ENDED = "tenancy_ended", "Tenancy Ended"
 
