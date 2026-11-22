@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { FormSection } from './FormSection'
+import { getMediaUrl } from '../../../utils/imageUrl'
 
 export interface ImageEntry {
   id?: string
@@ -127,7 +128,7 @@ export const PropertyPhotosSection: React.FC<PropertyPhotosSectionProps> = ({
                 }`}
               >
                 <img
-                  src={img.image_url}
+                  src={getMediaUrl(img.image_url)}
                   alt={img.caption || `Property photo ${idx + 1}`}
                   className="w-full h-full object-cover"
                 />
