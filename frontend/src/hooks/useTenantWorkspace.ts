@@ -210,7 +210,9 @@ export function useNotifications(params?: NotificationListParams) {
     queryKey: [...TENANT_QUERY_KEYS.notifications, params],
     queryFn: () => notificationService.getNotifications(params),
     enabled: isAuthenticated,
-    staleTime: 15_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000, // Background sync recent notification items every 15 seconds
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -220,7 +222,9 @@ export function useUnreadNotificationCount() {
     queryKey: TENANT_QUERY_KEYS.unreadCount,
     queryFn: () => notificationService.getUnreadCount(),
     enabled: isAuthenticated,
-    staleTime: 15_000,
+    staleTime: 5_000,
+    refetchInterval: 10_000, // Poll for incoming unread notifications every 10 seconds
+    refetchIntervalInBackground: false,
   })
 }
 
