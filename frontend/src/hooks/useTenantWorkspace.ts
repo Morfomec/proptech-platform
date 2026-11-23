@@ -31,7 +31,9 @@ export function useMyApplications(params?: PaginationParams) {
     queryKey: [...TENANT_QUERY_KEYS.myApplications, params],
     queryFn: () => applicationService.getMyApplications(params),
     enabled: isAuthenticated && Boolean(user?.is_tenant),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 12_000, // Silently check application status transitions every 12s
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -41,7 +43,9 @@ export function useApplicationDetail(applicationId?: string) {
     queryKey: TENANT_QUERY_KEYS.applicationDetail(applicationId ?? ''),
     queryFn: () => applicationService.getApplicationDetail(applicationId!),
     enabled: isAuthenticated && Boolean(user?.is_tenant) && Boolean(applicationId),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 10_000, // Check for approval/rejection decision every 10s
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -86,7 +90,9 @@ export function useMyTenancies(params?: PaginationParams) {
     queryKey: [...TENANT_QUERY_KEYS.myTenancies, params],
     queryFn: () => tenancyService.getMyTenancies(params),
     enabled: isAuthenticated && Boolean(user?.is_tenant),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -96,7 +102,9 @@ export function useTenancyDetail(tenancyId?: string) {
     queryKey: TENANT_QUERY_KEYS.tenancyDetail(tenancyId ?? ''),
     queryFn: () => tenancyService.getTenancyDetail(tenancyId!),
     enabled: isAuthenticated && Boolean(user?.is_tenant) && Boolean(tenancyId),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 10_000, // Check for terms changes or mutual confirmation
+    refetchIntervalInBackground: false,
   })
 }
 
