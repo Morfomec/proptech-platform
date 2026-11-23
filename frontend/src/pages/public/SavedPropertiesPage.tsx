@@ -53,7 +53,7 @@ export const SavedPropertiesPage: React.FC<SavedPropertiesPageProps> = ({
     queryKey: ['saved-properties', currentPage],
     queryFn: () => listingService.getSavedProperties({ page: currentPage }),
     enabled: isAuthenticated,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 5_000,
   })
 
   // Append items on page load

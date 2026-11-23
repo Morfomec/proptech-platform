@@ -17,7 +17,9 @@ export function useReceivedApplications(params?: ReceivedApplicationsParams) {
     queryKey: [...OWNER_APPLICATIONS_QUERY_KEYS.received, params],
     queryFn: () => applicationService.getReceivedApplications(params),
     enabled: isAuthenticated && Boolean(user?.is_owner),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 12_000, // Background poll incoming applications every 12s
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -33,7 +35,9 @@ export function useReceivedApplicationsCount(status?: string) {
       }),
     select: (data) => data.count,
     enabled: isAuthenticated && Boolean(user?.is_owner),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -43,7 +47,9 @@ export function useOwnerApplicationDetail(applicationId?: string) {
     queryKey: OWNER_APPLICATIONS_QUERY_KEYS.detail(applicationId ?? ''),
     queryFn: () => applicationService.getApplicationDetail(applicationId!),
     enabled: isAuthenticated && Boolean(user?.is_owner) && Boolean(applicationId),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   })
 }
 

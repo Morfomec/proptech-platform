@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
 import LandingHeader from './components/LandingHeader'
@@ -15,6 +16,28 @@ export interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = () => {
   const { isAuthenticated } = useAuth()
+  const location = useLocation()
+
+  useEffect(() => {
+    const state = location.state as { scrollTo?: string } | null
+    if (state?.scrollTo) {
+      const el = document.getElementById(state.scrollTo)
+      if (el) {
+        // Small delay to allow initial layout to paint cleanly
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth' })
+        }, 50)
+      }
+    } else if (location.hash) {
+      const id = location.hash.replace('#', '')
+      const el = document.getElementById(id)
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth' })
+        }, 50)
+      }
+    }
+  }, [location])
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-[#111827] antialiased">

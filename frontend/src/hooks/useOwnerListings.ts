@@ -23,7 +23,7 @@ export function useOwnerListings(
         page_size: pageSize,
         ...(status ? { status } : {}),
       }),
-    staleTime: 1000 * 60 * 3, // 3 minutes stale cache
+    staleTime: 5_000,
   })
 }
 

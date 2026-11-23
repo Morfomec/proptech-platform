@@ -16,7 +16,7 @@ export const FeaturedRentals: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['public-featured-listings'],
     queryFn: () => listingService.getPublicListings({ page: 1, page_size: 6, sort: 'newest' }),
-    staleTime: 1000 * 60 * 2,
+    staleTime: 5_000,
   })
 
   const listings = (data?.results || []).slice(0, 6)

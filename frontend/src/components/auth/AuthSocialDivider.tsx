@@ -48,6 +48,12 @@ export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
 }) => {
   const googleBtnContainerRef = useRef<HTMLDivElement>(null)
   const [gisReady, setGisReady] = useState(false)
+  const onGoogleSuccessRef = useRef(onGoogleSuccess)
+  const hasRenderedGisRef = useRef(false)
+
+  useEffect(() => {
+    onGoogleSuccessRef.current = onGoogleSuccess
+  }, [onGoogleSuccess])
 
   useEffect(() => {
     const clientId = envConfig.googleClientId
@@ -63,12 +69,16 @@ export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
         return
       }
 
+      if (hasRenderedGisRef.current && googleBtnContainerRef.current.hasChildNodes()) {
+        return
+      }
+
       try {
         window.google.accounts.id.initialize({
           client_id: clientId,
           callback: (response: { credential: string }) => {
-            if (response?.credential && onGoogleSuccess) {
-              onGoogleSuccess(response.credential)
+            if (response?.credential && onGoogleSuccessRef.current) {
+              onGoogleSuccessRef.current(response.credential)
             }
           },
           cancel_on_tap_outside: true,
@@ -85,6 +95,7 @@ export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
           width: googleBtnContainerRef.current.offsetWidth || 340,
         })
 
+        hasRenderedGisRef.current = true
         setGisReady(true)
       } catch {
         // Fallback gracefully to default button if GIS initialization encounters an issue
@@ -109,7 +120,7 @@ export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
         window.clearInterval(intervalId)
       }
     }
-  }, [buttonText, onGoogleSuccess])
+  }, [buttonText])
 
   const handleFallbackClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()

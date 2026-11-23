@@ -14,7 +14,7 @@ export function useOwnerProperties(params: FetchPropertiesParams = {}) {
   return useQuery<PaginatedPropertiesResponse, Error>({
     queryKey: [OWNER_PROPERTIES_QUERY_KEY, page, pageSize],
     queryFn: () => propertyService.getMyProperties({ page, page_size: pageSize }),
-    staleTime: 1000 * 60 * 3, // 3 minutes stale cache
+    staleTime: 5_000,
   })
 }
 

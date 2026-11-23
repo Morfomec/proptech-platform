@@ -17,7 +17,7 @@ export function useOwnedPropertyIds(): Set<string> {
     queryKey: [OWNER_PROPERTIES_QUERY_KEY, 1, 100],
     queryFn: () => propertyService.getMyProperties({ page: 1, page_size: 100 }),
     enabled: isOwner,
-    staleTime: 1000 * 60 * 3,
+    staleTime: 5_000,
   })
 
   return useMemo(() => {

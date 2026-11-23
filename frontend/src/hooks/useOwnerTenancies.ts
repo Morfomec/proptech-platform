@@ -22,7 +22,9 @@ export function useManagedTenancies(params?: ManagedTenanciesParams) {
     queryKey: [...OWNER_TENANCIES_QUERY_KEY, params],
     queryFn: () => tenancyService.getManagedTenancies(params),
     enabled: isAuthenticated && Boolean(user?.is_owner),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -38,7 +40,9 @@ export function useManagedTenanciesCount(status?: TenancyStatus) {
       }),
     select: (data) => data.count,
     enabled: isAuthenticated && Boolean(user?.is_owner),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -48,7 +52,9 @@ export function useOwnerTenancyDetail(tenancyId?: string) {
     queryKey: [...OWNER_TENANCY_DETAIL_QUERY_KEY, tenancyId ?? ''],
     queryFn: () => tenancyService.getTenancyDetail(tenancyId!),
     enabled: isAuthenticated && Boolean(user?.is_owner) && Boolean(tenancyId),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   })
 }
 
