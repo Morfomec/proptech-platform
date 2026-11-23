@@ -12,9 +12,11 @@ import { QueryClient } from '@tanstack/react-query'
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000,
+      staleTime: 5 * 1000, // 5 seconds: instant cache hit + immediate background revalidation
+      gcTime: 10 * 60 * 1000, // 10 minutes cache retention in memory
       retry: 1,
-      refetchOnWindowFocus: false,
+      refetchOnMount: true, // Always revalidate data whenever a component/page mounts
+      refetchOnWindowFocus: true, // Auto-sync when switching back to the app tab
     },
     mutations: {
       retry: 0,

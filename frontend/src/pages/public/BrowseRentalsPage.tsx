@@ -157,7 +157,7 @@ export const BrowseRentalsPage: React.FC<BrowseRentalsPageProps> = ({
   const { data: listingsData, isLoading, isError, error } = useQuery({
     queryKey: ['public-listings', filterParams],
     queryFn: () => listingService.getPublicListings(filterParams),
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 5_000,
   })
 
   const handleSearchSubmit = (e: React.FormEvent) => {
