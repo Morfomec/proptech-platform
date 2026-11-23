@@ -173,6 +173,18 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
   const dynamicNavLabel = isPropertiesPage ? 'Home' : 'Browse Rentals'
   const dynamicNavDestination = isPropertiesPage ? '/' : '/properties'
 
+  const handleHowItWorksClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (location.pathname === '/') {
+      const el = document.getElementById('how-it-works')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' })
+      }
+    } else {
+      navigate('/', { state: { scrollTo: 'how-it-works' } })
+    }
+  }
+
   return (
     <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs transition-all duration-300">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -213,6 +225,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
           </Link>
           <a
             href="/#how-it-works"
+            onClick={handleHowItWorksClick}
             className="text-sm font-medium text-[#111827] hover:text-[#408A71] transition-colors"
           >
             How It Works
@@ -592,7 +605,10 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
             </Link>
             <a
               href="/#how-it-works"
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={(e) => {
+                setMobileMenuOpen(false)
+                handleHowItWorksClick(e)
+              }}
               className="text-base font-medium text-[#111827] hover:text-[#408A71] py-2 transition-colors"
             >
               How It Works
