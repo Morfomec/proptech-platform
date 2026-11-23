@@ -1,8 +1,20 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 import { Avatar } from '../../../components/ui/avatar'
 import { Dropdown, type DropdownMenuItem } from '../../../components/ui/dropdown'
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+  useUnreadNotificationCount,
+} from '../../../hooks/useTenantWorkspace'
+import {
+  formatNotificationDate,
+  getOwnerNotificationTarget,
+  getTenantNotificationTarget,
+} from '../../../utils/notification'
+import type { NotificationItem } from '../../../types/notification'
 
 export interface LandingHeaderProps {
   activeNav?: string
@@ -10,9 +22,63 @@ export interface LandingHeaderProps {
 
 export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isNotifOpen, setIsNotifOpen] = useState(false)
+  const notifDropdownRef = useRef<HTMLDivElement>(null)
   const { isAuthenticated, isInitializing, user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+
+  const { data: unreadData } = useUnreadNotificationCount()
+  const {
+    data: recentNotificationsData,
+    isLoading: isNotifLoading,
+    isError: isNotifError,
+    refetch: refetchNotifs,
+  } = useNotifications({ page: 1, page_size: 5 })
+  const markNotificationRead = useMarkNotificationRead()
+  const markAllNotificationsRead = useMarkAllNotificationsRead()
+
+  const unreadCount = unreadData?.data?.unread_count ?? 0
+  const recentNotifications = recentNotificationsData?.results ?? []
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(event.target as Node)) {
+        setIsNotifOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsNotifOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  const handleNotificationClick = async (item: NotificationItem) => {
+    setIsNotifOpen(false)
+    if (!item.is_read) {
+      try {
+        await markNotificationRead.mutateAsync(item.id)
+      } catch {
+        // Continue navigation even if read sync fails
+      }
+    }
+    const target = user?.is_owner
+      ? getOwnerNotificationTarget(item)
+      : getTenantNotificationTarget(item)
+
+    if (target) {
+      navigate(target.path)
+    } else {
+      navigate(user?.is_owner ? '/app/owner/notifications' : '/app/tenant/notifications')
+    }
+  }
 
   const firstName = typeof user?.first_name === 'string' ? user.first_name.trim() : ''
   const lastName = typeof user?.last_name === 'string' ? user.last_name.trim() : ''
@@ -151,18 +217,16 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
           >
             How It Works
           </a>
-          <a
-            href="/#pricing"
-            className="text-sm font-medium text-[#111827] hover:text-[#408A71] transition-colors"
+          <Link
+            to="/pricing"
+            className={`text-sm font-medium transition-colors ${
+              location.pathname === '/pricing' || activeNav === 'pricing'
+                ? 'text-[#408A71] font-semibold'
+                : 'text-[#111827] hover:text-[#408A71]'
+            }`}
           >
             Pricing
-          </a>
-          <a
-            href="/#about"
-            className="text-sm font-medium text-[#111827] hover:text-[#408A71] transition-colors"
-          >
-            About
-          </a>
+          </Link>
           {isAuthenticated && (
             <Link
               to="/saved-properties"
@@ -185,6 +249,145 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
           )}
 
           <div className="h-4 w-[1px] bg-gray-200 mx-1" aria-hidden="true" />
+
+          {/* Notification Bell (Desktop Authenticated) */}
+          {!isInitializing && isAuthenticated && (
+            <div className="relative" ref={notifDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsNotifOpen((prev) => !prev)}
+                aria-expanded={isNotifOpen}
+                aria-haspopup="true"
+                className="relative p-2 text-[#6B7280] hover:text-[#111827] hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+                title="Notifications"
+                aria-label={
+                  unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'
+                }
+              >
+                <svg
+                  className="w-5.5 h-5.5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  />
+                </svg>
+                {unreadCount > 0 && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[10px] font-medium flex items-center justify-center ring-2 ring-white tabular-nums"
+                    aria-hidden="true"
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {isNotifOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white shadow-xl border border-[#E5E7EB] overflow-hidden z-50">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-[#F3F4F6]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[#111827]">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#ECF5F2] text-[#408A71] tabular-nums">
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        disabled={markAllNotificationsRead.isPending}
+                        onClick={() => markAllNotificationsRead.mutate()}
+                        className="text-xs font-medium text-[#408A71] hover:text-[#34745C] disabled:opacity-50 cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-[#F3F4F6]">
+                    {isNotifLoading ? (
+                      <div className="p-4 space-y-2.5">
+                        {[1, 2, 3].map((idx) => (
+                          <div key={idx} className="h-12 rounded-xl bg-gray-100 animate-pulse" />
+                        ))}
+                      </div>
+                    ) : isNotifError ? (
+                      <div className="p-5 text-center space-y-2">
+                        <p className="text-xs text-red-600 font-medium">Unable to load notifications.</p>
+                        <button
+                          type="button"
+                          onClick={() => void refetchNotifs()}
+                          className="text-xs font-medium text-[#408A71] hover:underline cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : recentNotifications.length === 0 ? (
+                      <div className="p-6 text-center">
+                        <p className="text-xs font-medium text-[#111827]">You&apos;re all caught up</p>
+                        <p className="mt-1 text-[11px] font-normal text-[#6B7280]">No notifications yet.</p>
+                      </div>
+                    ) : (
+                      recentNotifications.map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => void handleNotificationClick(item)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              void handleNotificationClick(item)
+                            }
+                          }}
+                          className={`px-4 py-3 flex items-start justify-between gap-2.5 cursor-pointer transition-colors ${
+                            item.is_read
+                              ? 'bg-white hover:bg-gray-50'
+                              : 'bg-[#F4FAF7]/70 hover:bg-[#ECF5F2]/80'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <span
+                              className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                                item.is_read ? 'bg-transparent' : 'bg-[#408A71]'
+                              }`}
+                              aria-hidden="true"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-[#111827] truncate">{item.title}</p>
+                              <p className="mt-0.5 text-[11px] font-normal text-[#4B5563] line-clamp-2">
+                                {item.message}
+                              </p>
+                              <span className="mt-1 text-[10px] font-normal text-[#9CA3AF] block">
+                                {formatNotificationDate(item.created_at)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="p-2.5 border-t border-[#F3F4F6] bg-gray-50 text-center">
+                    <Link
+                      to={user?.is_owner ? '/app/owner/notifications' : '/app/tenant/notifications'}
+                      onClick={() => setIsNotifOpen(false)}
+                      className="text-xs font-medium text-[#408A71] hover:text-[#34745C] transition-colors inline-block"
+                    >
+                      View all notifications &rarr;
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Auth-Aware Section */}
           {isInitializing ? (
@@ -255,8 +458,41 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
           )}
         </div>
 
-        {/* Mobile Right Controls (Account Icon + Hamburger) */}
+        {/* Mobile Right Controls (Notification + Account Icon + Hamburger) */}
         <div className="flex md:hidden items-center gap-2">
+          {!isInitializing && isAuthenticated && (
+            <Link
+              to={user?.is_owner ? '/app/owner/notifications' : '/app/tenant/notifications'}
+              className="relative p-2 text-[#6B7280] hover:text-[#111827] hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              title="Notifications"
+              aria-label={
+                unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'
+              }
+            >
+              <svg
+                className="w-5.5 h-5.5"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+              {unreadCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[10px] font-medium flex items-center justify-center ring-2 ring-white tabular-nums"
+                  aria-hidden="true"
+                >
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+          )}
           {!isInitializing && isAuthenticated && (
             <Dropdown
               placement="bottom-right"
@@ -361,20 +597,17 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ activeNav }) => {
             >
               How It Works
             </a>
-            <a
-              href="/#pricing"
+            <Link
+              to="/pricing"
               onClick={() => setMobileMenuOpen(false)}
-              className="text-base font-medium text-[#111827] hover:text-[#408A71] py-2 transition-colors"
+              className={`text-base font-medium py-2 transition-colors ${
+                location.pathname === '/pricing' || activeNav === 'pricing'
+                  ? 'text-[#408A71] font-semibold'
+                  : 'text-[#111827] hover:text-[#408A71]'
+              }`}
             >
               Pricing
-            </a>
-            <a
-              href="/#about"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-base font-medium text-[#111827] hover:text-[#408A71] py-2 transition-colors"
-            >
-              About
-            </a>
+            </Link>
             {isAuthenticated && (
               <Link
                 to="/saved-properties"

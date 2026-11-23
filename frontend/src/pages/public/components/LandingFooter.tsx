@@ -111,12 +111,12 @@ export const LandingFooter: React.FC<LandingFooterProps> = () => {
                 </a>
               </li>
               <li>
-                <a
-                  href="#pricing"
+                <Link
+                  to="/pricing"
                   className="hover:text-[#408A71] transition-colors"
                 >
                   Pricing Plans
-                </a>
+                </Link>
               </li>
               <li>
                 <a

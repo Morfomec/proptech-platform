@@ -82,7 +82,7 @@ export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
           text: buttonText,
           shape: 'rectangular',
           logo_alignment: 'left',
-          width: 320,
+          width: googleBtnContainerRef.current.offsetWidth || 340,
         })
 
         setGisReady(true)
@@ -177,7 +177,7 @@ export const AuthSocialDivider: React.FC<AuthSocialDividerProps> = ({
           {/* Official Google Identity Services Container */}
           <div
             ref={googleBtnContainerRef}
-            className={`w-full flex justify-center items-center ${
+            className={`w-full flex justify-center items-center overflow-visible [&>div]:!mx-auto [&>iframe]:!mx-auto ${
               gisReady && !disabled ? 'block' : 'hidden'
             }`}
           />

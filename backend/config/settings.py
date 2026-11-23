@@ -486,7 +486,7 @@ UNFOLD = {
     "SITE_HEADER": "PropTech Platform",
     "SITE_SUBHEADER": "Property Management & Leasing Platform",
     "SITE_SYMBOL": "apartment",
-    "SITE_URL": "/",
+    "SITE_URL": None,
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": True,
     "DASHBOARD_CALLBACK": "config.admin_dashboard.dashboard_callback",

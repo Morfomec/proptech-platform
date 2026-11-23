@@ -39,6 +39,7 @@ import BrowseRentalsPage from '../pages/public/BrowseRentalsPage'
 import PublicPropertyDetailPage from '../pages/public/PublicPropertyDetailPage'
 import SavedPropertiesPage from '../pages/public/SavedPropertiesPage'
 import OwnerGetStartedPage from '../pages/public/OwnerGetStartedPage'
+import PricingPage from '../pages/public/PricingPage'
 import NotFoundPage from '../pages/public/NotFoundPage'
 import GuestRoute from './GuestRoute'
 import ProtectedRoute from './ProtectedRoute'
@@ -91,6 +92,10 @@ export const router = createBrowserRouter([
       {
         path: '/owner/get-started',
         element: <OwnerGetStartedPage />,
+      },
+      {
+        path: '/pricing',
+        element: <PricingPage />,
       },
     ],
   },

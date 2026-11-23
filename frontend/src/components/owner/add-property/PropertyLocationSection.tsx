@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { FormSection } from './FormSection'
 import { FormField } from './FormField'
 import { PropertyMapPreview } from '../PropertyMapPreview'
@@ -50,6 +50,7 @@ export const PropertyLocationSection: React.FC<PropertyLocationSectionProps> = (
   fullAddressSummary,
   fieldErrors,
 }) => {
+  const [isMapExpanded, setIsMapExpanded] = useState(false)
   return (
     <FormSection
       title="Property Location"
@@ -192,22 +193,53 @@ export const PropertyLocationSection: React.FC<PropertyLocationSectionProps> = (
           </FormField>
         </div>
 
-        {/* Embedded Interactive Vector Map Preview */}
-        <div className="pt-2 space-y-2">
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <span className="font-medium text-gray-700">Map Pin</span>
-            <span>
-              {latitude && longitude ? `${latitude}, ${longitude}` : 'Click map to set location'}
-            </span>
+        {/* Collapsible Embedded Map Pin Preview */}
+        <div className="pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-700">Map Pin</span>
+              <span className="text-[11px] text-gray-400">
+                {latitude && longitude ? `${latitude}, ${longitude}` : '(Optional)'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMapExpanded((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#408A71] hover:text-[#326e5a] transition-colors py-1 px-2.5 rounded-md hover:bg-[#ECF5F2] cursor-pointer"
+            >
+              <span>{isMapExpanded ? 'Hide Map' : 'Set on Map'}</span>
+              <svg
+                className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                  isMapExpanded ? 'rotate-180' : ''
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
-          <div className="rounded-lg overflow-hidden border border-gray-200">
-            <PropertyMapPreview
-              latitude={latitude}
-              longitude={longitude}
-              addressSummary={fullAddressSummary}
-              onCoordinateChange={onCoordinateChange}
-            />
-          </div>
+
+          {isMapExpanded && (
+            <div className="mt-2.5 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                <span>Click anywhere on the map to pin property coordinates</span>
+                <span>
+                  {latitude && longitude ? `${latitude}, ${longitude}` : 'No coordinates selected'}
+                </span>
+              </div>
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <PropertyMapPreview
+                  latitude={latitude}
+                  longitude={longitude}
+                  addressSummary={fullAddressSummary}
+                  onCoordinateChange={onCoordinateChange}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </FormSection>
