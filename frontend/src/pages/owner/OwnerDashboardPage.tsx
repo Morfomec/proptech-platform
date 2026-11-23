@@ -101,7 +101,11 @@ export const OwnerDashboardPage: React.FC = () => {
     const map = new Map<string, PublicListingItem>()
     for (const listing of listings) {
       const existing = map.get(listing.property_id)
-      if (!existing || listing.status === 'published') {
+      if (
+        !existing ||
+        listing.status === 'published' ||
+        listing.review_status === 'pending'
+      ) {
         map.set(listing.property_id, listing)
       }
     }
@@ -560,12 +564,21 @@ export const OwnerDashboardPage: React.FC = () => {
             <div className="space-y-2">
               {properties.slice(0, 4).map((prop) => {
                 const matchedListing = listingByPropertyId.get(prop.id)
-                const listingBadge = matchedListing
-                  ? LISTING_STATUS_META[matchedListing.status] ?? {
+                let listingBadge: { label: string; variant: BadgeVariant }
+                if (matchedListing) {
+                  if (matchedListing.review_status === 'pending') {
+                    listingBadge = { label: 'Pending Approval', variant: 'warning' }
+                  } else if (matchedListing.review_status === 'rejected') {
+                    listingBadge = { label: 'Rejected', variant: 'danger' }
+                  } else {
+                    listingBadge = LISTING_STATUS_META[matchedListing.status] ?? {
                       label: matchedListing.status,
                       variant: 'neutral' as BadgeVariant,
                     }
-                  : { label: 'No Listing', variant: 'neutral' as BadgeVariant }
+                  }
+                } else {
+                  listingBadge = { label: 'No Listing', variant: 'neutral' as BadgeVariant }
+                }
                 const locationText =
                   [prop.locality, prop.city].filter(Boolean).join(', ') ||
                   prop.address_line_1 ||

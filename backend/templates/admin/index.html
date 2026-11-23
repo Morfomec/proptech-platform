@@ -157,8 +157,12 @@
                         {{ item.label }}
                     </span>
                 </div>
-                <div class="flex items-center gap-2 shrink-0 pl-3">
-                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800 tabular-nums">
+                <div class="flex items-center gap-2.5 shrink-0 pl-3">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800 tabular-nums shadow-2xs">
+                        <span class="relative flex h-1.5 w-1.5">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-600"></span>
+                        </span>
                         {{ item.count }}
                     </span>
                     <span class="material-symbols-outlined text-base text-[#64748B] group-hover:text-[#408A71] group-hover:translate-x-0.5 transition-all">
